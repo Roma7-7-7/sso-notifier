@@ -108,12 +108,6 @@ func refreshImage() error {
 	return nil
 }
 
-func downloadImage(url string) error {
-	// Lock is already acquired in refreshImage method
-
-	return nil
-}
-
 func syncAndSendImageTask(b *tele.Bot) {
 	for true {
 		sendImageIfUpdated(b)
