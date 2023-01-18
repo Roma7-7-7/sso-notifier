@@ -15,13 +15,13 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const imageFile = "img.png"
+const imageFile = "data/img.png"
 const imageURL = "https://oblenergo.cv.ua/shutdowns/GPV.png"
 const imageSyncInterval = 5 * time.Minute
 
 var imageSHA = ""
 
-var store = NewBoltDBStore("app.db")
+var store = NewBoltDBStore("data/app.db")
 
 var mx sync.Mutex
 
