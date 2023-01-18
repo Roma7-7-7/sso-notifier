@@ -19,10 +19,9 @@ const imageFile = "img.png"
 const imageURL = "https://oblenergo.cv.ua/shutdowns/GPV.png"
 const imageSyncInterval = 5 * time.Minute
 
-var latestSentImageSHA = ""
-var currentImageSHA = ""
+var imageSHA = ""
 
-var subscribers = make(map[tele.ChatID]bool)
+var store = NewStore()
 
 var mx sync.Mutex
 
@@ -53,13 +52,17 @@ func main() {
 	b.Handle(&subscribeBtn, func(c tele.Context) error {
 		mx.Lock()
 		defer mx.Unlock()
-		if len(subscribers) >= 10 {
+		if store.Size() >= 10 {
 			return c.Send("Too many subscribers. Please contact administrator")
 		}
-		subscribers[tele.ChatID(c.Chat().ID)] = true
-		s := c.Sender()
-		log.Printf("User subscribed: %s %s %s", s.Username, s.FirstName, s.LastName)
-		return c.Send("Subscribed!")
+		if store.AddSubscriber(c) {
+			chat := c.Chat()
+			s := c.Sender()
+			log.Printf("New subscriber: chat=\"%s %s %d\", byUser=\"%s %s\"",
+				chat.FirstName, chat.LastName, chat.ID, s.FirstName, s.LastName)
+			return c.Send("Subscribed!")
+		}
+		return c.Send("You are already subscribed")
 	})
 
 	go refreshImageTask()
@@ -88,6 +91,10 @@ func refreshImage() error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download image: status=%d", resp.StatusCode)
+	}
+
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, resp.Body)
 	if err != nil {
@@ -99,11 +106,8 @@ func refreshImage() error {
 	if err != nil {
 		return fmt.Errorf("failed to calculate hash: %w", err)
 	}
-	hash := hex.EncodeToString(hasher.Sum(nil))
-
-	if currentImageSHA == hash {
-		return nil
-	}
+	originalSHA := imageSHA
+	imageSHA = hex.EncodeToString(hasher.Sum(nil))
 
 	out, err := os.Create(imageFile)
 	if err != nil {
@@ -112,9 +116,10 @@ func refreshImage() error {
 	defer out.Close()
 
 	_, err = io.Copy(out, &buf)
-	currentImageSHA = hash
 
-	log.Printf("image updated: %s", hash)
+	if originalSHA != imageSHA {
+		log.Printf("image updated: %s", imageSHA)
+	}
 	return nil
 }
 
@@ -128,15 +133,13 @@ func syncAndSendImageTask(b *tele.Bot) {
 func sendImageIfUpdated(b *tele.Bot) {
 	mx.Lock()
 	defer mx.Unlock()
-	if currentImageSHA == latestSentImageSHA || len(subscribers) == 0 {
-		return
-	}
 
-	for id := range subscribers {
+	for _, id := range store.GetWithDifferentHash(imageSHA) {
 		f := &tele.Photo{File: tele.FromDisk(imageFile)}
 		if _, err := b.Send(id, f); err != nil {
 			log.Printf("failed to send image to %d: %v", id, err)
+			continue
 		}
+		store.UpdateHash(id, imageSHA)
 	}
-	latestSentImageSHA = currentImageSHA
 }
