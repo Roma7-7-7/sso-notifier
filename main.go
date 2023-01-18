@@ -21,7 +21,7 @@ const imageSyncInterval = 5 * time.Minute
 
 var imageSHA = ""
 
-var store = NewStore()
+var store = NewBoltDBStore("app.db")
 
 var mx sync.Mutex
 
@@ -133,6 +133,9 @@ func syncAndSendImageTask(b *tele.Bot) {
 func sendImageIfUpdated(b *tele.Bot) {
 	mx.Lock()
 	defer mx.Unlock()
+	if imageSHA == "" {
+		return
+	}
 
 	for _, id := range store.GetWithDifferentHash(imageSHA) {
 		f := &tele.Photo{File: tele.FromDisk(imageFile)}
