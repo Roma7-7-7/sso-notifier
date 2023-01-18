@@ -32,6 +32,10 @@ func main() {
 		Poller: &tele.LongPoller{Timeout: 5 & time.Second},
 	}
 
+	if pref.Token == "" {
+		log.Fatal("TOKEN environment variable is missing")
+	}
+
 	b, err := tele.NewBot(pref)
 	if err != nil {
 		log.Fatal(err)
@@ -48,14 +52,20 @@ func main() {
 
 	b.Handle(&subscribeBtn, func(c tele.Context) error {
 		mx.Lock()
+		defer mx.Unlock()
+		if len(subscribers) >= 10 {
+			return c.Send("Too many subscribers. Please contact administrator")
+		}
 		subscribers[tele.ChatID(c.Chat().ID)] = true
-		mx.Unlock()
+		s := c.Sender()
+		log.Printf("User subscribed: %s %s %s", s.Username, s.FirstName, s.LastName)
 		return c.Send("Subscribed!")
 	})
 
 	go refreshImageTask()
 	go syncAndSendImageTask(b)
 
+	log.Println("Starting app")
 	b.Start()
 }
 
