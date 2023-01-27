@@ -52,7 +52,7 @@ func main() {
 	b.Handle(&subscribeBtn, func(c tele.Context) error {
 		mx.Lock()
 		defer mx.Unlock()
-		if store.Size() >= 10 {
+		if store.Size() >= 50 {
 			return c.Send("Too many subscribers. Please contact administrator")
 		}
 		if store.AddSubscriber(c) {
