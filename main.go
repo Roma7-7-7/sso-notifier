@@ -156,6 +156,9 @@ func sendImageIfUpdated(b *tele.Bot) {
 		f := &tele.Photo{File: tele.FromDisk(imageFile)}
 		if _, err := b.Send(id, f); err == tele.ErrBlockedByUser {
 			log.Printf("bot is blocked by user, removing subscription %d", id)
+			if err = store.DeleteByChatID(id); err != nil {
+				log.Printf("failed to delete subscription %d: %v", id, err)
+			}
 			continue
 		} else if err != nil {
 			log.Printf("failed to send image to %d: %v", id, err)
