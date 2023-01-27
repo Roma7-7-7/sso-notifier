@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strconv"
-	"sync"
-
 	"go.etcd.io/bbolt"
 	tele "gopkg.in/telebot.v3"
+	"log"
+	"strconv"
 )
 
 const subscribersBucket = "subscribers"
@@ -16,9 +14,8 @@ type BoltDBStore struct {
 	db *bbolt.DB
 }
 
-func (s *BoltDBStore) AddSubscriber(c tele.Context) bool {
+func (s *BoltDBStore) AddSubscriber(c tele.Context) (bool, error) {
 	res := false
-
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
 		id := idToBytes(c.Chat().ID)
@@ -33,17 +30,11 @@ func (s *BoltDBStore) AddSubscriber(c tele.Context) bool {
 		res = true
 		return nil
 	})
-	if err != nil {
-		log.Printf("failed to add subscriber: %v", err)
-		return false
-	}
-
-	return res
+	return res, err
 }
 
-func (s *BoltDBStore) GetWithDifferentHash(hash string) []tele.ChatID {
+func (s *BoltDBStore) GetWithDifferentHash(hash string) ([]tele.ChatID, error) {
 	res := make([]tele.ChatID, 0)
-
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
 		c := b.Cursor()
@@ -54,38 +45,31 @@ func (s *BoltDBStore) GetWithDifferentHash(hash string) []tele.ChatID {
 		}
 		return nil
 	})
-	if err != nil {
-		log.Printf("failed to get subscribers: %v", err)
-		return nil
-	}
-
-	return res
+	return res, err
 }
 
-func (s *BoltDBStore) UpdateHash(id tele.ChatID, hash string) {
-	err := s.db.Update(func(tx *bbolt.Tx) error {
+func (s *BoltDBStore) DeleteByChatID(id tele.ChatID) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(subscribersBucket))
+		return b.Delete(idToBytes(int64(id)))
+	})
+}
+
+func (s *BoltDBStore) UpdateHash(id tele.ChatID, hash string) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
 		return b.Put(idToBytes(int64(id)), []byte(hash))
 	})
-	if err != nil {
-		log.Printf("failed to update hash: %v", err)
-	}
 }
 
-func (s *BoltDBStore) Size() int {
+func (s *BoltDBStore) Size() (int, error) {
 	var res int
-
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
 		res = b.Stats().KeyN
 		return nil
 	})
-	if err != nil {
-		log.Printf("failed to get number subscribers: %v", err)
-		return 0
-	}
-
-	return res
+	return res, err
 }
 
 func idToBytes(id int64) []byte {
@@ -109,52 +93,4 @@ func NewBoltDBStore(path string) *BoltDBStore {
 		log.Fatalf("failed to create subscribers bucket: %v", err)
 	}
 	return &BoltDBStore{db: db}
-}
-
-type InMemoryStore struct {
-	subscribers map[tele.ChatID]string
-
-	mx sync.Mutex
-}
-
-func (s *InMemoryStore) AddSubscriber(c tele.Context) bool {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-	if _, ok := s.subscribers[tele.ChatID(c.Chat().ID)]; ok {
-		return false
-	}
-
-	s.subscribers[tele.ChatID(c.Chat().ID)] = ""
-	return true
-}
-
-func (s *InMemoryStore) GetWithDifferentHash(hash string) []tele.ChatID {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	res := make([]tele.ChatID, 0)
-	for k, v := range s.subscribers {
-		if v != hash {
-			res = append(res, k)
-		}
-	}
-	return res
-}
-
-func (s *InMemoryStore) UpdateHash(id tele.ChatID, hash string) {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-	s.subscribers[id] = hash
-}
-
-func (s *InMemoryStore) Size() int {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-	return len(s.subscribers)
-}
-
-func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{
-		subscribers: make(map[tele.ChatID]string),
-	}
 }

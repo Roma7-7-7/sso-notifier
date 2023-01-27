@@ -1,4 +1,4 @@
-module sso-notifier
+module github.com/Roma7-7-7/sso-notifier
 
 go 1.19
 

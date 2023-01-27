@@ -52,10 +52,20 @@ func main() {
 	b.Handle(&subscribeBtn, func(c tele.Context) error {
 		mx.Lock()
 		defer mx.Unlock()
-		if store.Size() >= 50 {
+		var sErr error
+		size, sErr := store.Size()
+		if sErr != nil {
+			log.Printf("failed to get size of subscribers: %v", sErr)
+			return c.Send("Failed to subscribe. Please contact administrator or try again later")
+		}
+		if size >= 100 {
+			log.Printf("too many subscribers: %d", size)
 			return c.Send("Too many subscribers. Please contact administrator")
 		}
-		if store.AddSubscriber(c) {
+		if added, sErr := store.AddSubscriber(c); sErr != nil {
+			log.Printf("failed to add subscriber: %v", sErr)
+			return c.Send("Failed to subscribe. Please contact administrator or try again later")
+		} else if added {
 			chat := c.Chat()
 			s := c.Sender()
 			log.Printf("New subscriber: chat=\"%s %s %d\", byUser=\"%s %s\"",
@@ -137,12 +147,22 @@ func sendImageIfUpdated(b *tele.Bot) {
 		return
 	}
 
-	for _, id := range store.GetWithDifferentHash(imageSHA) {
+	chats, err := store.GetWithDifferentHash(imageSHA)
+	if err != nil {
+		log.Printf("failed to get chats with different hash: %v", err)
+		return
+	}
+	for _, id := range chats {
 		f := &tele.Photo{File: tele.FromDisk(imageFile)}
-		if _, err := b.Send(id, f); err != nil {
+		if _, err := b.Send(id, f); err == tele.ErrBlockedByUser {
+			log.Printf("bot is blocked by user, removing subscription %d", id)
+			continue
+		} else if err != nil {
 			log.Printf("failed to send image to %d: %v", id, err)
 			continue
 		}
-		store.UpdateHash(id, imageSHA)
+		if err = store.UpdateHash(id, imageSHA); err != nil {
+			log.Printf("failed to update hash for %d: %v", id, err)
+		}
 	}
 }
