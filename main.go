@@ -42,11 +42,11 @@ func main() {
 	}
 
 	subscribeMarkup := &tele.ReplyMarkup{}
-	subscribeBtn := subscribeMarkup.Data("Subscribe", "subscribe")
+	subscribeBtn := subscribeMarkup.Data("Підписатись на оновлення", "subscribe")
 	subscribeMarkup.Inline(subscribeMarkup.Row(subscribeBtn))
 
 	b.Handle("/start", func(c tele.Context) error {
-		return c.Send("Hello! Do you want to subscribe?", subscribeMarkup)
+		return c.Send("Привіт! Бажаєте підписатись на оновлення графіку відключень?", subscribeMarkup)
 	})
 
 	b.Handle(&subscribeBtn, func(c tele.Context) error {
@@ -56,23 +56,23 @@ func main() {
 		size, sErr := store.Size()
 		if sErr != nil {
 			log.Printf("failed to get size of subscribers: %v", sErr)
-			return c.Send("Failed to subscribe. Please contact administrator or try again later")
+			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше")
 		}
 		if size >= 100 {
 			log.Printf("too many subscribers: %d", size)
-			return c.Send("Too many subscribers. Please contact administrator")
+			return c.Send("Надто багато підписників. Зверніться до адміністратора, або спробуйте пізніше")
 		}
 		if added, sErr := store.AddSubscriber(c); sErr != nil {
 			log.Printf("failed to add subscriber: %v", sErr)
-			return c.Send("Failed to subscribe. Please contact administrator or try again later")
+			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше")
 		} else if added {
 			chat := c.Chat()
 			s := c.Sender()
 			log.Printf("New subscriber: chat=\"%s %s %d\", byUser=\"%s %s\"",
 				chat.FirstName, chat.LastName, chat.ID, s.FirstName, s.LastName)
-			return c.Send("Subscribed!")
+			return c.Send("Ви підписались!")
 		}
-		return c.Send("You are already subscribed")
+		return c.Send("Ви вже підписані =)")
 	})
 
 	go refreshImageTask()
