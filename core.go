@@ -13,9 +13,14 @@ var ErrSubscribersLimitReached = errors.New("subscribers limit reached")
 
 type Store interface {
 	IsSubscribed(chatID int64) (bool, error)
+	GetSubscriptions() ([]Subscription, error)
 	SetSubscription(chatID int64, groupNum string) (Subscription, error)
 	NumSubscribers() (int, error)
+	UpdateSubscription(sub Subscription) error
 	PurgeSubscriptions(chatID int64) error
+
+	UpdateShutdownsTable(st ShutdownsTable) error
+	GetShutdownsTable() (ShutdownsTable, error)
 
 	QueueNotification(chatID int64, msg string) (Notification, error)
 	GetQueuedNotifications() ([]Notification, error)
@@ -35,7 +40,11 @@ func (cs *CoreService) IsSubscribed(chatID int64) (bool, error) {
 	return cs.db.IsSubscribed(chatID)
 }
 
-func (cs *CoreService) SetGroup(chatID int64, groupNum string) (Subscription, error) {
+func (cs *CoreService) GetSubscriptions() ([]Subscription, error) {
+	return cs.db.GetSubscriptions()
+}
+
+func (cs *CoreService) SubscribeToGroup(chatID int64, groupNum string) (Subscription, error) {
 	numSubscribers, err := cs.db.NumSubscribers()
 	if err != nil {
 		return Subscription{}, fmt.Errorf("failed to get number of subscribers: %w", err)
@@ -55,8 +64,28 @@ func (cs *CoreService) SetGroup(chatID int64, groupNum string) (Subscription, er
 	return cs.db.SetSubscription(chatID, groupNum)
 }
 
+func (cs *CoreService) UpdateSubscription(sub Subscription) error {
+	return cs.db.UpdateSubscription(sub)
+}
+
 func (cs *CoreService) Unsubscribe(chatID int64) error {
 	return cs.db.PurgeSubscriptions(chatID)
+}
+
+func (cs *CoreService) UpdateShutdownsTable(st ShutdownsTable) error {
+	return cs.db.UpdateShutdownsTable(st)
+}
+
+func (cs *CoreService) GetShutdownsTable() (ShutdownsTable, bool, error) {
+	table, err := cs.db.GetShutdownsTable()
+
+	if errors.Is(err, ErrNotFound) {
+		return table, false, nil
+	} else if err != nil {
+		return table, false, fmt.Errorf("failed to get shutdowns table: %w", err)
+	}
+
+	return table, true, nil
 }
 
 func (cs *CoreService) SendQueuedNotifications() {

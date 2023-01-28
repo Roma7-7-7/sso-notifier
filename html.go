@@ -11,9 +11,9 @@ import (
 )
 
 type ShutdownsTable struct {
-	Date    string
-	Periods []Period
-	Groups  []ShutdownGroup
+	Date    string                   `json:"date"`
+	Periods []Period                 `json:"periods"`
+	Groups  map[string]ShutdownGroup `json:"groups"`
 }
 
 func (s ShutdownsTable) Validate() error {
@@ -43,6 +43,14 @@ type ShutdownGroup struct {
 	Items  []Status
 }
 
+func (g ShutdownGroup) Hash() string {
+	var buf bytes.Buffer
+	for _, i := range g.Items {
+		buf.WriteString(fmt.Sprintf("%t", i))
+	}
+	return buf.String()
+}
+
 func (s ShutdownGroup) Validate(expectedItemsNum int) error {
 	if s.Number < 1 {
 		return fmt.Errorf("invalid shutdown group number=%d", s.Number)
@@ -54,8 +62,8 @@ func (s ShutdownGroup) Validate(expectedItemsNum int) error {
 }
 
 type Period struct {
-	From string
-	To   string
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 func loadPage(url string) ([]byte, error) {
@@ -108,9 +116,9 @@ func parseShutdownsPage(html []byte) (ShutdownsTable, error) {
 		items[i] = parseItems(gsv, g.Number)
 	}
 
-	res.Groups = make([]ShutdownGroup, len(groups), len(groups))
+	res.Groups = make(map[string]ShutdownGroup, len(groups))
 	for i, g := range groups {
-		res.Groups[i] = ShutdownGroup{
+		res.Groups[strconv.Itoa(g.Number)] = ShutdownGroup{
 			Number: g.Number,
 			Items:  items[i],
 		}

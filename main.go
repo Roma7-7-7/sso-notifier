@@ -1,17 +1,20 @@
 package main
 
 import (
-	"time"
-
 	"go.uber.org/zap"
 )
 
-const notificationInterval = 5 * time.Minute
-
 type Service interface {
 	IsSubscribed(chatID int64) (bool, error)
-	SetGroup(chatID int64, groupNum string) (Subscription, error)
+	GetSubscriptions() ([]Subscription, error)
+	SubscribeToGroup(chatID int64, groupNum string) (Subscription, error)
+	UpdateSubscription(sub Subscription) error
 	Unsubscribe(chatID int64) error
+
+	UpdateShutdownsTable(st ShutdownsTable) error
+	GetShutdownsTable() (ShutdownsTable, bool, error)
+
+	SendQueuedNotifications()
 }
 
 func main() {
@@ -24,12 +27,10 @@ func main() {
 	sender := &tBotSender{tbot}
 	service := NewCoreService(store, sender)
 
-	go func() {
-		for {
-			service.SendQueuedNotifications()
-			time.Sleep(notificationInterval)
-		}
-	}()
+	scheduler := NewScheduler(service, sender)
+	go scheduler.SendNotificationsTask()
+	go scheduler.RefreshTable()
+	go scheduler.SendUpdates()
 
 	zap.L().Info("Starting bot")
 	NewBot(service, tbot).Start()

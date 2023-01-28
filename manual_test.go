@@ -18,5 +18,6 @@ func Test(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Print(table)
+	group, err := renderGroup("1", table.Periods, table.Groups["1"].Items)
+	fmt.Print(group)
 }

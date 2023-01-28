@@ -60,7 +60,7 @@ func (b *SSOBot) ChooseGroupHandler(c tb.Context) error {
 
 func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
-		if _, err := b.service.SetGroup(c.Sender().ID, groupNumber); errors.Is(err, ErrSubscribersLimitReached) {
+		if _, err := b.service.SubscribeToGroup(c.Sender().ID, groupNumber); errors.Is(err, ErrSubscribersLimitReached) {
 			zap.L().Warn("failed to subscribe", zap.Error(err), zap.String("groupNum", groupNumber))
 			return c.Send("Кількість підписок досягла межі. Будь ласка, спробуйте пізніше.")
 		} else if err != nil {

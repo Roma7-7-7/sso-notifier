@@ -10,8 +10,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const shutdownsTableKey = "table"
+const shutdownsBucket = "shutdowns"
 const subscriptionsBucket = "subscriptions"
 const notificationsBucket = "notifications"
+
+var ErrNotFound = fmt.Errorf("not found")
 
 type BoltDBStore struct {
 	db *bbolt.DB
@@ -25,6 +29,27 @@ func (s *BoltDBStore) IsSubscribed(chatID int64) (bool, error) {
 		if b.Get(i64tob(chatID)) != nil {
 			res = true
 		}
+		return nil
+	})
+
+	return res, err
+}
+
+func (s *BoltDBStore) GetSubscriptions() ([]Subscription, error) {
+	var res []Subscription
+
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(subscriptionsBucket))
+		c := b.Cursor()
+
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var sub Subscription
+			if err := json.Unmarshal(v, &sub); err != nil {
+				return fmt.Errorf("failed to unmarshal subscription: %w", err)
+			}
+			res = append(res, sub)
+		}
+
 		return nil
 	})
 
@@ -56,6 +81,23 @@ func (s *BoltDBStore) SetSubscription(chatID int64, groupNum string) (Subscripti
 	})
 
 	return res, err
+}
+
+func (s *BoltDBStore) UpdateSubscription(sub Subscription) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(subscriptionsBucket))
+
+		id := i64tob(sub.ChatID)
+		data, err := json.Marshal(&sub)
+		if err != nil {
+			return fmt.Errorf("failed to marshal subscription for chatID=%d: %w", sub.ChatID, err)
+		}
+		if err := b.Put(id, data); err != nil {
+			return fmt.Errorf("failed to put subscription for chatID=%d: %w", sub.ChatID, err)
+		}
+
+		return nil
+	})
 }
 
 func (s *BoltDBStore) PurgeSubscriptions(chatID int64) error {
@@ -106,6 +148,33 @@ func (s *BoltDBStore) NumSubscribers() (int, error) {
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscriptionsBucket))
 		res = b.Stats().KeyN
+		return nil
+	})
+	return res, err
+}
+
+func (s *BoltDBStore) UpdateShutdownsTable(t ShutdownsTable) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		data, err := json.Marshal(t)
+		if err != nil {
+			return fmt.Errorf("failed to marshal shutdowns table: %w", err)
+		}
+		return tx.Bucket([]byte(shutdownsBucket)).Put([]byte(shutdownsTableKey), data)
+	})
+}
+
+func (s *BoltDBStore) GetShutdownsTable() (ShutdownsTable, error) {
+	var res ShutdownsTable
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		data := tx.Bucket([]byte(shutdownsBucket)).Get([]byte(shutdownsTableKey))
+		if data == nil {
+			return ErrNotFound
+		}
+
+		if err := json.Unmarshal(data, &res); err != nil {
+			return fmt.Errorf("failed to unmarshal shutdowns table: %w", err)
+		}
+
 		return nil
 	})
 	return res, err
@@ -180,6 +249,7 @@ func NewBoltDBStore(path string) *BoltDBStore {
 		zap.L().Fatal("failed to open bolt db", zap.Error(err))
 	}
 
+	mustBucket(db, shutdownsBucket)
 	mustBucket(db, subscriptionsBucket)
 	mustBucket(db, notificationsBucket)
 
