@@ -122,7 +122,7 @@ func (s *BoltDBStore) Close() error {
 }
 
 func itob(v int) []byte {
-	b := make([]byte, 8)
+	b := make([]byte, 8) //nolint:gomnd
 	binary.BigEndian.PutUint64(b, uint64(v))
 	return b
 }
@@ -132,7 +132,7 @@ func i64tob(id int64) []byte {
 }
 
 func NewBoltDBStore(path string) *BoltDBStore {
-	db, err := bbolt.Open(path, 0600, nil)
+	db, err := bbolt.Open(path, 0600, nil) //nolint:gomnd
 	if err != nil {
 		zap.L().Fatal("failed to open bolt db", zap.Error(err))
 	}

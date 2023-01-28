@@ -31,7 +31,7 @@ func main() {
 	cs := NewCoreService(store, sender)
 
 	go func() {
-		for true {
+		for {
 			cs.SendQueuedNotifications()
 			time.Sleep(notificationInterval)
 		}

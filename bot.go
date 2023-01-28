@@ -9,6 +9,8 @@ import (
 	tb "gopkg.in/telebot.v3"
 )
 
+const subscribersLimit = 200
+
 type SSOBot struct {
 	bot    *tb.Bot
 	store  SubscriberStore
@@ -38,7 +40,7 @@ func (b *SSOBot) SubscribeHandler(c tb.Context) error {
 		zap.L().Error("failed to get size of subscribers", zap.Error(err))
 		return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше")
 	}
-	if size >= 100 {
+	if size >= subscribersLimit {
 		zap.L().Warn("too many subscribers", zap.Int("size", size))
 		return c.Send("Надто багато підписників. Зверніться до адміністратора, або спробуйте пізніше")
 	}
@@ -73,7 +75,7 @@ func mustTBot() *tb.Bot {
 
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  token,
-		Poller: &tb.LongPoller{Timeout: 5 * time.Second},
+		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:gomnd
 	})
 	if err != nil {
 		zap.L().Fatal("failed to create bot", zap.Error(err))
