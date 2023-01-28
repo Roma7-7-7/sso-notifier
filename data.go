@@ -10,48 +10,70 @@ import (
 	"go.uber.org/zap"
 )
 
-const subscribersBucket = "subscribers"
+const subscriptionsBucket = "subscriptions"
 const notificationsBucket = "notifications"
 
 type BoltDBStore struct {
 	db *bbolt.DB
 }
 
-func (s *BoltDBStore) AddSubscriber(sub Subscriber) (bool, error) {
+func (s *BoltDBStore) IsSubscribed(chatID int64) (bool, error) {
 	res := false
-	err := s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscribersBucket))
-		id := i64tob(sub.ChatID)
-		if b.Get(id) != nil {
-			return nil
-		}
 
-		if err := b.Put(id, []byte("")); err != nil {
-			return err
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(subscriptionsBucket))
+		if b.Get(i64tob(chatID)) != nil {
+			res = true
 		}
-
-		res = true
 		return nil
 	})
+
 	return res, err
 }
 
-func (s *BoltDBStore) PurgeSubscriber(sub Subscriber) error {
+func (s *BoltDBStore) SetSubscription(chatID int64, groupNum string) (Subscription, error) {
+	res := Subscription{
+		ChatID: chatID,
+		Groups: map[string]string{
+			groupNum: "",
+		},
+	}
+
+	err := s.db.Update(func(tx *bbolt.Tx) error {
+		var err error
+		b := tx.Bucket([]byte(subscriptionsBucket))
+
+		id := i64tob(chatID)
+		var data []byte
+		if data, err = json.Marshal(&res); err != nil {
+			return fmt.Errorf("failed to marshal subscription for chatID=%d: %w", chatID, err)
+		}
+		if err := b.Put(id, data); err != nil {
+			return fmt.Errorf("failed to put subscription for chatID=%d: %w", chatID, err)
+		}
+
+		return nil
+	})
+
+	return res, err
+}
+
+func (s *BoltDBStore) PurgeSubscriptions(chatID int64) error {
 	ns, err := s.GetQueuedNotifications()
 	if err != nil {
 		return fmt.Errorf("failed to get queued notifications: %w", err)
 	}
 
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscribersBucket))
+		b := tx.Bucket([]byte(subscriptionsBucket))
 
-		if err := b.Delete(i64tob(sub.ChatID)); err != nil {
-			return fmt.Errorf("failed to delete subscriber with id=%d: %w", sub.ChatID, err)
+		if err := b.Delete(i64tob(chatID)); err != nil {
+			return fmt.Errorf("failed to delete subscriber with id=%d: %w", chatID, err)
 		}
 
 		b = tx.Bucket([]byte(notificationsBucket))
 		for _, n := range ns {
-			if n.Target.ChatID != sub.ChatID {
+			if n.Target != chatID {
 				continue
 			}
 
@@ -64,12 +86,12 @@ func (s *BoltDBStore) PurgeSubscriber(sub Subscriber) error {
 	})
 }
 
-func (s *BoltDBStore) GetSubscribers() ([]Subscriber, error) {
-	res := make([]Subscriber, 0)
+func (s *BoltDBStore) GetSubscribers() ([]Subscription, error) {
+	res := make([]Subscription, 0)
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		c := tx.Bucket([]byte(subscribersBucket)).Cursor()
+		c := tx.Bucket([]byte(subscriptionsBucket)).Cursor()
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			res = append(res, Subscriber{
+			res = append(res, Subscription{
 				ChatID: btoi64(k),
 			})
 		}
@@ -82,14 +104,14 @@ func (s *BoltDBStore) GetSubscribers() ([]Subscriber, error) {
 func (s *BoltDBStore) NumSubscribers() (int, error) {
 	var res int
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscribersBucket))
+		b := tx.Bucket([]byte(subscriptionsBucket))
 		res = b.Stats().KeyN
 		return nil
 	})
 	return res, err
 }
 
-func (s *BoltDBStore) QueueNotification(target Subscriber, msg string) (Notification, error) {
+func (s *BoltDBStore) QueueNotification(target int64, msg string) (Notification, error) {
 	var res Notification
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(notificationsBucket))
@@ -158,7 +180,7 @@ func NewBoltDBStore(path string) *BoltDBStore {
 		zap.L().Fatal("failed to open bolt db", zap.Error(err))
 	}
 
-	mustBucket(db, subscribersBucket)
+	mustBucket(db, subscriptionsBucket)
 	mustBucket(db, notificationsBucket)
 
 	return &BoltDBStore{db: db}

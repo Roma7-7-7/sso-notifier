@@ -8,35 +8,39 @@ import (
 
 const notificationInterval = 5 * time.Minute
 
-type Store interface {
-	AddSubscriber(subscriber Subscriber) (bool, error)
-	NumSubscribers() (int, error)
-	PurgeSubscriber(s Subscriber) error
-
-	QueueNotification(target Subscriber, msg string) (Notification, error)
-	GetQueuedNotifications() ([]Notification, error)
-	DeleteNotification(id int) error
-}
-
-type Sender interface {
-	Send(s Subscriber, msg string) error
+type Service interface {
+	IsSubscribed(chatID int64) (bool, error)
+	SetGroup(chatID int64, groupNum string) (Subscription, error)
+	Unsubscribe(chatID int64) error
 }
 
 func main() {
+	initLogger()
+
 	store := NewBoltDBStore("data/app.db")
 	defer store.Close()
 	tbot := mustTBot()
 	defer tbot.Close()
 	sender := &tBotSender{tbot}
-	cs := NewCoreService(store, sender)
+	service := NewCoreService(store, sender)
 
 	go func() {
 		for {
-			cs.SendQueuedNotifications()
+			service.SendQueuedNotifications()
 			time.Sleep(notificationInterval)
 		}
 	}()
 
 	zap.L().Info("Starting bot")
-	NewBot(store, sender, tbot).Start()
+	NewBot(service, tbot).Start()
+}
+
+func initLogger() {
+	zapCfg := zap.NewDevelopmentConfig()
+	zapCfg.Level.SetLevel(zap.DebugLevel)
+	logger, err := zapCfg.Build()
+	if err != nil {
+		panic(err)
+	}
+	zap.ReplaceGlobals(logger)
 }
