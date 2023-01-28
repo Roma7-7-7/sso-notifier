@@ -1,24 +1,26 @@
 package main
 
 import (
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+
 	"go.etcd.io/bbolt"
-	tele "gopkg.in/telebot.v3"
-	"log"
-	"strconv"
+	"go.uber.org/zap"
 )
 
 const subscribersBucket = "subscribers"
+const notificationsBucket = "notifications"
 
 type BoltDBStore struct {
 	db *bbolt.DB
 }
 
-func (s *BoltDBStore) AddSubscriber(c tele.Context) (bool, error) {
+func (s *BoltDBStore) AddSubscriber(sub Subscriber) (bool, error) {
 	res := false
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
-		id := idToBytes(c.Chat().ID)
+		id := i64tob(sub.ChatID)
 		if b.Get(id) != nil {
 			return nil
 		}
@@ -33,36 +35,35 @@ func (s *BoltDBStore) AddSubscriber(c tele.Context) (bool, error) {
 	return res, err
 }
 
-func (s *BoltDBStore) GetWithDifferentHash(hash string) ([]tele.ChatID, error) {
-	res := make([]tele.ChatID, 0)
-	err := s.db.View(func(tx *bbolt.Tx) error {
+func (s *BoltDBStore) PurgeSubscriber(sub Subscriber) error {
+	ns, err := s.GetQueuedNotifications()
+	if err != nil {
+		return fmt.Errorf("failed to get queued notifications: %w", err)
+	}
+
+	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			if string(v) != hash {
-				res = append(res, bytesToID(k))
+
+		if err := b.Delete(i64tob(sub.ChatID)); err != nil {
+			return fmt.Errorf("failed to delete subscriber with id=%d: %w", sub.ChatID, err)
+		}
+
+		b = tx.Bucket([]byte(notificationsBucket))
+		for _, n := range ns {
+			if n.Target.ChatID != sub.ChatID {
+				continue
+			}
+
+			if err := b.Delete(itob(n.ID)); err != nil {
+				return fmt.Errorf("failed to delete notification with id=%d: %w", n.ID, err)
 			}
 		}
+
 		return nil
 	})
-	return res, err
 }
 
-func (s *BoltDBStore) DeleteByChatID(id tele.ChatID) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscribersBucket))
-		return b.Delete(idToBytes(int64(id)))
-	})
-}
-
-func (s *BoltDBStore) UpdateHash(id tele.ChatID, hash string) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscribersBucket))
-		return b.Put(idToBytes(int64(id)), []byte(hash))
-	})
-}
-
-func (s *BoltDBStore) Size() (int, error) {
+func (s *BoltDBStore) NumSubscribers() (int, error) {
 	var res int
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscribersBucket))
@@ -72,25 +73,81 @@ func (s *BoltDBStore) Size() (int, error) {
 	return res, err
 }
 
-func idToBytes(id int64) []byte {
-	return []byte(fmt.Sprintf("%d", id))
+func (s *BoltDBStore) QueueNotification(target Subscriber, msg string) (Notification, error) {
+	var res Notification
+	err := s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(notificationsBucket))
+		id, _ := b.NextSequence() //nolint:errcheck
+		res = Notification{
+			ID:     int(id),
+			Target: target,
+			Msg:    msg,
+		}
+		bytes, err := json.Marshal(res)
+		if err != nil {
+			return fmt.Errorf("failed to marshal notification: %w", err)
+		}
+
+		return b.Put(itob(res.ID), bytes)
+	})
+	return res, err
 }
 
-func bytesToID(b []byte) tele.ChatID {
-	id, _ := strconv.ParseInt(string(b), 10, 64) //nolint:errcheck
-	return tele.ChatID(id)
+func (s *BoltDBStore) GetQueuedNotifications() ([]Notification, error) {
+	res := make([]Notification, 0)
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		c := tx.Bucket([]byte(notificationsBucket)).Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var n Notification
+			if err := json.Unmarshal(v, &n); err != nil {
+				return fmt.Errorf("failed to unmarshal notification: %w", err)
+			}
+			res = append(res, n)
+		}
+		return nil
+
+	})
+	return res, err
+}
+
+func (s *BoltDBStore) DeleteNotification(id int) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(notificationsBucket))
+		return b.Delete(itob(id))
+	})
+}
+
+func (s *BoltDBStore) Close() error {
+	return s.db.Close()
+}
+
+func itob(v int) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
+}
+
+func i64tob(id int64) []byte {
+	return []byte(fmt.Sprintf("%d", id))
 }
 
 func NewBoltDBStore(path string) *BoltDBStore {
 	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
-		log.Fatalf("failed to open bolt db: %v", err)
+		zap.L().Fatal("failed to open bolt db", zap.Error(err))
 	}
-	if err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(subscribersBucket))
+
+	mustBucket(db, subscribersBucket)
+	mustBucket(db, notificationsBucket)
+
+	return &BoltDBStore{db: db}
+}
+
+func mustBucket(db *bbolt.DB, name string) {
+	if err := db.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(name))
 		return err
 	}); err != nil {
-		log.Fatalf("failed to create subscribers bucket: %v", err)
+		zap.L().Fatal("failed to create bucket", zap.String("name", name), zap.Error(err))
 	}
-	return &BoltDBStore{db: db}
 }
