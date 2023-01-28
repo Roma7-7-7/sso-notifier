@@ -8,7 +8,7 @@ import (
 
 const notificationInterval = 5 * time.Minute
 
-type SubscriberStore interface {
+type Store interface {
 	AddSubscriber(subscriber Subscriber) (bool, error)
 	NumSubscribers() (int, error)
 	PurgeSubscriber(s Subscriber) error

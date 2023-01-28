@@ -13,7 +13,7 @@ const subscribersLimit = 200
 
 type SSOBot struct {
 	bot    *tb.Bot
-	store  SubscriberStore
+	store  Store
 	sender Sender
 
 	subscribeMarkup *tb.ReplyMarkup
@@ -84,7 +84,7 @@ func mustTBot() *tb.Bot {
 	return bot
 }
 
-func NewBot(store SubscriberStore, sender Sender, tbot *tb.Bot) *SSOBot {
+func NewBot(store Store, sender Sender, tbot *tb.Bot) *SSOBot {
 	subscribeMarkup := &tb.ReplyMarkup{}
 	subscribeBtn := subscribeMarkup.Data("Підписатись на оновлення", "subscribe")
 	subscribeMarkup.Inline(subscribeMarkup.Row(subscribeBtn))

@@ -7,7 +7,7 @@ import (
 )
 
 type CoreService struct {
-	db     SubscriberStore
+	db     Store
 	sender Sender
 }
 
@@ -39,6 +39,6 @@ func (cs *CoreService) SendQueuedNotifications() {
 	}
 }
 
-func NewCoreService(db SubscriberStore, sender Sender) *CoreService {
+func NewCoreService(db Store, sender Sender) *CoreService {
 	return &CoreService{db: db, sender: sender}
 }

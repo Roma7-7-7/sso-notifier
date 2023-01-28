@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"go.etcd.io/bbolt"
 	"go.uber.org/zap"
@@ -61,6 +62,21 @@ func (s *BoltDBStore) PurgeSubscriber(sub Subscriber) error {
 
 		return nil
 	})
+}
+
+func (s *BoltDBStore) GetSubscribers() ([]Subscriber, error) {
+	res := make([]Subscriber, 0)
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		c := tx.Bucket([]byte(subscribersBucket)).Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			res = append(res, Subscriber{
+				ChatID: btoi64(k),
+			})
+		}
+
+		return nil
+	})
+	return res, err
 }
 
 func (s *BoltDBStore) NumSubscribers() (int, error) {
@@ -129,6 +145,11 @@ func itob(v int) []byte {
 
 func i64tob(id int64) []byte {
 	return []byte(fmt.Sprintf("%d", id))
+}
+
+func btoi64(b []byte) int64 {
+	id, _ := strconv.ParseInt(string(b), 10, 64) //nolint:errcheck
+	return id
 }
 
 func NewBoltDBStore(path string) *BoltDBStore {
