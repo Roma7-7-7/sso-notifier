@@ -2,8 +2,7 @@
 // In most cases those will be one time actions
 package main
 
-//nolint:unused
-//func notifyAll() {
+// func notifyAll() {
 //	store := NewBoltDBStore("data/app.db")
 //	subs, err := store.GetSubscribers()
 //	if err != nil {
@@ -12,10 +11,10 @@ package main
 //
 //	for _, s := range subs {
 //		if _, err = store.QueueNotification(s, `У зв'язку зі зміннами на сайті Чернівціобленерго бот тимчасово не працює =(
-//Пробую вирішити проблему`); err != nil {
+// Пробую вирішити проблему`); err != nil {
 //			panic(err)
 //		}
 //	}
 //
 //	zap.L().Info("Done")
-//}
+// }

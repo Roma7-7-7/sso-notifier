@@ -2,13 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+const url = "https://oblenergo.cv.ua/shutdowns/"
 
 type ShutdownsTable struct {
 	Date    string                   `json:"date"`
@@ -51,12 +55,12 @@ func (g ShutdownGroup) Hash() string {
 	return buf.String()
 }
 
-func (s ShutdownGroup) Validate(expectedItemsNum int) error {
-	if s.Number < 1 {
-		return fmt.Errorf("invalid shutdown group number=%d", s.Number)
+func (g ShutdownGroup) Validate(expectedItemsNum int) error {
+	if g.Number < 1 {
+		return fmt.Errorf("invalid shutdown group number=%d", g.Number)
 	}
-	if len(s.Items) != expectedItemsNum {
-		return fmt.Errorf("invalid shutdown group items size; expected=%d but actual=%d", expectedItemsNum, len(s.Items))
+	if len(g.Items) != expectedItemsNum {
+		return fmt.Errorf("invalid shutdown group items size; expected=%d but actual=%d", expectedItemsNum, len(g.Items))
 	}
 	return nil
 }
@@ -66,20 +70,28 @@ type Period struct {
 	To   string `json:"to"`
 }
 
-func loadPage(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+func loadPage() ([]byte, error) {
+	// nolint:gomnd
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed o get shutdowns from page=%s: %w", url, err)
+		return nil, fmt.Errorf("failed to get shutdowns from page=%s: %w", url, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shutdowns from page=%s: %w", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed o get shutdowns from page=%s: status=%s", url, resp.Status)
+		return nil, fmt.Errorf("failed to get shutdowns from page=%s: status=%s", url, resp.Status)
 	}
 
 	var res bytes.Buffer
 	_, err = res.ReadFrom(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed o read shutdowns from page=%s: %w", url, err)
+		return nil, fmt.Errorf("failed to read shutdowns from page=%s: %w", url, err)
 	}
 
 	return res.Bytes(), nil
@@ -111,7 +123,7 @@ func parseShutdownsPage(html []byte) (ShutdownsTable, error) {
 	if err != nil || len(groups) == 0 {
 		return res, fmt.Errorf("failed o parse shutdowns groups: %w", err)
 	}
-	items := make([][]Status, len(groups), len(groups))
+	items := make([][]Status, len(groups))
 	for i, g := range groups {
 		items[i] = parseItems(gsv, g.Number)
 	}
@@ -164,12 +176,13 @@ func parsePeriods(s *goquery.Selection) ([]Period, error) {
 	row.Find("u").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		val := s.Text()
 		// HH:mm
+		// nolint:gomnd
 		if len(val) == 5 {
 			hours = append(hours, val)
 			return true
 		}
 
-		// 23:mm00:00
+		// 23:0000:00
 		if len(val) == 10 && strings.HasSuffix(val, "00:00") {
 			hours = append(hours, val[:5])
 			hours = append(hours, val[5:])

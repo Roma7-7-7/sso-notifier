@@ -1,14 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"testing"
 )
 
 func Test(t *testing.T) {
 	t.Skip()
 
-	page, err := loadPage("https://oblenergo.cv.ua/shutdowns/")
+	page, err := loadPage()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,5 +19,8 @@ func Test(t *testing.T) {
 	}
 
 	group, err := renderGroup("1", table.Periods, table.Groups["1"].Items)
-	fmt.Print(group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Println(group)
 }

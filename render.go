@@ -18,8 +18,8 @@ type message struct {
 }
 
 var groupMessageTemplate = template.Must(template.New("groupMessage").Parse(`Група {{.GroupNum}}:
-  Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
-  Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
+  🟢 Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
+  🔴 Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
 `))
 
 type groupMessage struct {

@@ -21,20 +21,24 @@ type SSOBot struct {
 func (b *SSOBot) Start() {
 	b.bot.Handle("/start", b.StartHandler)
 	for _, btn := range b.markups.backToMainBtns() {
+		btn := btn
 		b.bot.Handle(&btn, b.StartHandler)
 	}
 
 	b.bot.Handle("/subscribe", b.ChooseGroupHandler)
 	for _, btn := range b.markups.chooseGroupBtns() {
+		btn := btn
 		b.bot.Handle(&btn, b.ChooseGroupHandler)
 	}
 
 	for k, btn := range b.markups.subscribeToGroupBtns() {
+		btn := btn
 		b.bot.Handle(&btn, b.SetGroupHandler(k))
 	}
 
 	b.bot.Handle("/unsubscribe", b.UnsubscribeHandler)
 	for _, btn := range b.markups.unsubscribeBtns() {
+		btn := btn
 		b.bot.Handle(&btn, b.UnsubscribeHandler)
 	}
 

@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const url = "https://oblenergo.cv.ua/shutdowns/"
 const notificationInterval = 5 * time.Minute
 const refreshTableInterval = 15 * time.Minute
 const sendUpdatesInterval = 5 * time.Second
@@ -26,7 +25,7 @@ func (s *Scheduler) SendNotificationsTask() {
 
 func (s *Scheduler) RefreshTable() {
 	for {
-		page, err := loadPage(url)
+		page, err := loadPage()
 		if err != nil {
 			zap.L().Error("failed to load page", zap.Error(err))
 			time.Sleep(refreshTableInterval)
