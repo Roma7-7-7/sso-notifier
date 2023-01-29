@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"go.etcd.io/bbolt"
-	"go.uber.org/zap"
 	"log"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func Test_LoadTable(t *testing.T) {
@@ -27,47 +25,6 @@ func Test_LoadTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Println(group)
-}
-
-func Test_MigrateSubscriptions(t *testing.T) {
-	t.Skip()
-
-	db, err := bbolt.Open("data/app.db", 0600, nil)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	err = db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("subscribers"))
-		_, err := tx.CreateBucketIfNotExists([]byte("subscriptions"))
-		if err != nil {
-			return fmt.Errorf("failed to create bucket: %w", err)
-		}
-		target := tx.Bucket([]byte("subscriptions"))
-
-		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			sub := Subscription{
-				ChatID: btoi64(k),
-				Groups: make(map[string]string),
-			}
-			data, err := json.Marshal(&sub)
-			if err != nil {
-				return fmt.Errorf("failed to marshal subscription: %w", err)
-			}
-
-			if err := target.Put(i64tob(sub.ChatID), data); err != nil {
-				return fmt.Errorf("failed to put subscription: %w", err)
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		panic(err)
-	}
 }
 
 func Test_QueueNotifyAll(t *testing.T) {

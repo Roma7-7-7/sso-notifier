@@ -89,7 +89,10 @@ func (s *Scheduler) processSubscription(sub Subscription, table ShutdownsTable, 
 		if hash == newHash {
 			continue
 		}
-		msg, err := renderGroup(groupNum, table.Periods, grouped[groupNum].Items)
+
+		gropuedPeriod, groupedStatuses := join(table.Periods, grouped[groupNum].Items)
+		cutPeriod, cutStatuses := cutByKyivTime(gropuedPeriod, groupedStatuses)
+		msg, err := renderGroup(groupNum, cutPeriod, cutStatuses)
 		if err != nil {
 			zap.L().Error("failed to render group message", zap.Error(err), zapChatID, zap.String("group", groupNum))
 			return
