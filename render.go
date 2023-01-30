@@ -36,25 +36,10 @@ func renderMessage(date string, msgs []string) (string, error) {
 
 func renderGroup(num string, periods []Period, statuses []Status) (string, error) {
 	grouped := make(map[Status][]Period)
-	currentFrom := periods[0].From
-	currentTo := periods[0].To
-	status := statuses[0]
 
-	for i := 1; i < len(periods); i++ {
-		if statuses[i] == status {
-			currentTo = periods[i].To
-			continue
-		}
-		if _, ok := grouped[status]; !ok {
-			grouped[status] = make([]Period, 0)
-		}
-		grouped[status] = append(grouped[status], Period{From: currentFrom, To: currentTo})
-
-		currentFrom = periods[i].From
-		currentTo = periods[i].To
-		status = statuses[i]
+	for i := 0; i < len(periods); i++ {
+		grouped[statuses[i]] = append(grouped[statuses[i]], periods[i])
 	}
-	grouped[status] = append(grouped[status], Period{From: currentFrom, To: currentTo})
 
 	msg := groupMessage{
 		GroupNum: num,
