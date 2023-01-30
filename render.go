@@ -6,7 +6,7 @@ import (
 )
 
 var messageTemplate = template.Must(template.New("message").Parse(`
-Графік стабілізаційних відключинь на {{.Date}}:
+Графік стабілізаційних відключень на {{.Date}}:
 
 {{range .Msgs}} {{.}}
 {{end}}
