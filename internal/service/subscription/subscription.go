@@ -75,12 +75,10 @@ func (s *Service) SubscribeToGroup(chatID int64, groupNum string) (models.Subscr
 		}
 		sub = models.Subscription{
 			ChatID: chatID,
-			Groups: map[string]string{
-				groupNum: "",
-			},
 		}
 	}
 
+	sub.Groups[groupNum] = ""
 	sub, err = s.repo.Put(sub)
 	if err != nil {
 		return models.Subscription{}, fmt.Errorf("failed to put subscription: %w", err)
