@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const subscribersLimit = 200
+const subscribersLimit = 1000
 
 var ErrSubscribersLimitReached = errors.New("subscribers limit reached")
 
