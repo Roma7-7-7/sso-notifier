@@ -43,6 +43,10 @@ const (
 	MAYBE Status = "M"
 )
 
+func (s Status) Hash() string {
+	return string(s)
+}
+
 type ShutdownGroup struct {
 	Number int
 	Items  []Status
@@ -51,7 +55,7 @@ type ShutdownGroup struct {
 func (g ShutdownGroup) Hash() string {
 	var buf bytes.Buffer
 	for _, i := range g.Items {
-		buf.WriteString(fmt.Sprintf("%t", i))
+		buf.WriteString(i.Hash())
 	}
 	return buf.String()
 }
