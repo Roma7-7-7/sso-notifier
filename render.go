@@ -19,6 +19,7 @@ type message struct {
 
 var groupMessageTemplate = template.Must(template.New("groupMessage").Parse(`Група {{.GroupNum}}:
   🟢 Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
+  🟡 Можливо заживлено: {{range .Maybe}} {{.From}} - {{.To}}; {{end}}
   🔴 Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
 `))
 
@@ -26,6 +27,7 @@ type groupMessage struct {
 	GroupNum string
 	On       []Period
 	Off      []Period
+	Maybe    []Period
 }
 
 func renderMessage(date string, msgs []string) (string, error) {
@@ -45,6 +47,7 @@ func renderGroup(num string, periods []Period, statuses []Status) (string, error
 		GroupNum: num,
 		On:       grouped[ON],
 		Off:      grouped[OFF],
+		Maybe:    grouped[MAYBE],
 	}
 
 	var buf bytes.Buffer

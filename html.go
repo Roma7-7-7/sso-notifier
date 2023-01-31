@@ -35,11 +35,12 @@ func (s ShutdownsTable) Validate() error {
 	return nil
 }
 
-type Status bool
+type Status string
 
 const (
-	ON  Status = true
-	OFF Status = false
+	ON    Status = "Y"
+	OFF   Status = "N"
+	MAYBE Status = "M"
 )
 
 type ShutdownGroup struct {
@@ -209,11 +210,20 @@ func parseItems(gsv *goquery.Selection, groupNum int) []Status {
 
 	node := gsv.Find(fmt.Sprintf("div[data-id='%d']", groupNum)).First()
 	for _, sn := range node.Children().Nodes {
-		if sn.Data != "o" && sn.Data != "u" {
+		if sn.Data != "o" && sn.Data != "u" && sn.Data != "s" {
 			continue
 		}
 
-		items = append(items, strings.ToLower(goquery.NewDocumentFromNode(sn).Text()) == "з")
+		var status Status
+		switch strings.ToLower(goquery.NewDocumentFromNode(sn).Text()) {
+		case "в":
+			status = OFF
+		case "з":
+			status = ON
+		default:
+			status = MAYBE
+		}
+		items = append(items, status)
 	}
 
 	return items
