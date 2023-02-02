@@ -1,8 +1,10 @@
-package main
+package subscription
 
 import (
 	"bytes"
 	"text/template"
+
+	"github.com/Roma7-7-7/sso-notifier/models"
 )
 
 var messageTemplate = template.Must(template.New("message").Parse(`
@@ -25,9 +27,9 @@ var groupMessageTemplate = template.Must(template.New("groupMessage").Parse(`Ð“Ñ
 
 type groupMessage struct {
 	GroupNum string
-	On       []Period
-	Off      []Period
-	Maybe    []Period
+	On       []models.Period
+	Off      []models.Period
+	Maybe    []models.Period
 }
 
 func renderMessage(date string, msgs []string) (string, error) {
@@ -36,8 +38,8 @@ func renderMessage(date string, msgs []string) (string, error) {
 	return buf.String(), err
 }
 
-func renderGroup(num string, periods []Period, statuses []Status) (string, error) {
-	grouped := make(map[Status][]Period)
+func renderGroup(num string, periods []models.Period, statuses []models.Status) (string, error) {
+	grouped := make(map[models.Status][]models.Period)
 
 	for i := 0; i < len(periods); i++ {
 		grouped[statuses[i]] = append(grouped[statuses[i]], periods[i])
@@ -45,9 +47,9 @@ func renderGroup(num string, periods []Period, statuses []Status) (string, error
 
 	msg := groupMessage{
 		GroupNum: num,
-		On:       grouped[ON],
-		Off:      grouped[OFF],
-		Maybe:    grouped[MAYBE],
+		On:       grouped[models.ON],
+		Off:      grouped[models.OFF],
+		Maybe:    grouped[models.MAYBE],
 	}
 
 	var buf bytes.Buffer

@@ -1,4 +1,4 @@
-package main
+package providers
 
 import (
 	"bytes"
@@ -10,65 +10,24 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/Roma7-7-7/sso-notifier/models"
 )
 
 const url = "https://oblenergo.cv.ua/shutdowns/"
 
-type ShutdownsTable struct {
-	Date    string                   `json:"date"`
-	Periods []Period                 `json:"periods"`
-	Groups  map[string]ShutdownGroup `json:"groups"`
-}
-
-func (s ShutdownsTable) Validate() error {
-	if s.Date == "" {
-		return fmt.Errorf("invalid shutdowns table date=%s", s.Date)
+func ChernivtsiShutdowns() (models.ShutdownsTable, error) {
+	html, err := loadPage()
+	if err != nil {
+		return models.ShutdownsTable{}, fmt.Errorf("failed to load shutdowns page: %w", err)
 	}
-	if len(s.Periods) == 0 {
-		return fmt.Errorf("shutdowns table periods list is empty")
+
+	res, err := parseShutdownsPage(html)
+	if err != nil {
+		return models.ShutdownsTable{}, fmt.Errorf("failed to parse shutdowns page: %w", err)
 	}
-	for _, g := range s.Groups {
-		if err := g.Validate(len(s.Periods)); err != nil {
-			return fmt.Errorf("invalid shutdowns table group=%v: %w", g, err)
-		}
-	}
-	return nil
-}
 
-type Status string
-
-const (
-	ON    Status = "Y"
-	OFF   Status = "N"
-	MAYBE Status = "M"
-)
-
-type ShutdownGroup struct {
-	Number int
-	Items  []Status
-}
-
-func (g ShutdownGroup) Hash() string {
-	var buf bytes.Buffer
-	for _, i := range g.Items {
-		buf.WriteString(fmt.Sprintf("%t", i))
-	}
-	return buf.String()
-}
-
-func (g ShutdownGroup) Validate(expectedItemsNum int) error {
-	if g.Number < 1 {
-		return fmt.Errorf("invalid shutdown group number=%d", g.Number)
-	}
-	if len(g.Items) != expectedItemsNum {
-		return fmt.Errorf("invalid shutdown group items size; expected=%d but actual=%d", expectedItemsNum, len(g.Items))
-	}
-	return nil
-}
-
-type Period struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	return res, nil
 }
 
 func loadPage() ([]byte, error) {
@@ -98,8 +57,8 @@ func loadPage() ([]byte, error) {
 	return res.Bytes(), nil
 }
 
-func parseShutdownsPage(html []byte) (ShutdownsTable, error) {
-	var res ShutdownsTable
+func parseShutdownsPage(html []byte) (models.ShutdownsTable, error) {
+	var res models.ShutdownsTable
 	var err error
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(html))
@@ -124,14 +83,14 @@ func parseShutdownsPage(html []byte) (ShutdownsTable, error) {
 	if err != nil || len(groups) == 0 {
 		return res, fmt.Errorf("failed o parse shutdowns groups: %w", err)
 	}
-	items := make([][]Status, len(groups))
+	items := make([][]models.Status, len(groups))
 	for i, g := range groups {
 		items[i] = parseItems(gsv, g.Number)
 	}
 
-	res.Groups = make(map[string]ShutdownGroup, len(groups))
+	res.Groups = make(map[string]models.ShutdownGroup, len(groups))
 	for i, g := range groups {
-		res.Groups[strconv.Itoa(g.Number)] = ShutdownGroup{
+		res.Groups[strconv.Itoa(g.Number)] = models.ShutdownGroup{
 			Number: g.Number,
 			Items:  items[i],
 		}
@@ -140,9 +99,9 @@ func parseShutdownsPage(html []byte) (ShutdownsTable, error) {
 	return res, res.Validate()
 }
 
-func parseGroups(s *goquery.Selection) ([]ShutdownGroup, error) {
+func parseGroups(s *goquery.Selection) ([]models.ShutdownGroup, error) {
 	var err error
-	groups := make([]ShutdownGroup, 0)
+	groups := make([]models.ShutdownGroup, 0)
 
 	s.Find("ul > li").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		val, exists := s.Attr("data-id")
@@ -156,7 +115,7 @@ func parseGroups(s *goquery.Selection) ([]ShutdownGroup, error) {
 			err = fmt.Errorf("failed o parse shutdown group number=%s on li node=%d: %w", val, i, sErr)
 			return false
 		}
-		groups = append(groups, ShutdownGroup{
+		groups = append(groups, models.ShutdownGroup{
 			Number: groupNum,
 		})
 
@@ -166,7 +125,7 @@ func parseGroups(s *goquery.Selection) ([]ShutdownGroup, error) {
 	return groups, err
 }
 
-func parsePeriods(s *goquery.Selection) ([]Period, error) {
+func parsePeriods(s *goquery.Selection) ([]models.Period, error) {
 	var err error
 
 	row := s.Find("div > p").First()
@@ -194,9 +153,9 @@ func parsePeriods(s *goquery.Selection) ([]Period, error) {
 		return false
 	})
 
-	periods := make([]Period, len(hours)-1)
+	periods := make([]models.Period, len(hours)-1)
 	for i := 0; i < len(periods); i++ {
-		periods[i] = Period{
+		periods[i] = models.Period{
 			From: hours[i],
 			To:   hours[i+1],
 		}
@@ -205,8 +164,8 @@ func parsePeriods(s *goquery.Selection) ([]Period, error) {
 	return periods, err
 }
 
-func parseItems(gsv *goquery.Selection, groupNum int) []Status {
-	items := make([]Status, 0)
+func parseItems(gsv *goquery.Selection, groupNum int) []models.Status {
+	items := make([]models.Status, 0)
 
 	node := gsv.Find(fmt.Sprintf("div[data-id='%d']", groupNum)).First()
 	for _, sn := range node.Children().Nodes {
@@ -214,14 +173,14 @@ func parseItems(gsv *goquery.Selection, groupNum int) []Status {
 			continue
 		}
 
-		var status Status
+		var status models.Status
 		switch strings.ToLower(goquery.NewDocumentFromNode(sn).Text()) {
 		case "в":
-			status = OFF
+			status = models.OFF
 		case "з":
-			status = ON
+			status = models.ON
 		default:
-			status = MAYBE
+			status = models.MAYBE
 		}
 		items = append(items, status)
 	}

@@ -1,4 +1,4 @@
-package main
+package telegram
 
 import (
 	"errors"
@@ -8,14 +8,31 @@ import (
 
 	"go.uber.org/zap"
 	tb "gopkg.in/telebot.v3"
+
+	"github.com/Roma7-7-7/sso-notifier/models"
 )
 
-const groupsCount = 18
+type MessageSender interface {
+	Send(chatID int64, msg string) error
+}
+
+type MessageSenderSetter interface {
+	Set(MessageSender)
+}
+
+type SubscriptionService interface {
+	GroupsCount() int
+	IsSubscribed(chatID int64) (bool, error)
+	GetSubscriptions() ([]models.Subscription, error)
+	SubscribeToGroup(chatID int64, number string) (models.Subscription, error)
+	Unsubscribe(chatID int64) error
+}
 
 type SSOBot struct {
 	bot     *tb.Bot
-	service Service
 	markups *markups
+
+	subscriptionService SubscriptionService
 }
 
 func (b *SSOBot) Start() {
@@ -47,7 +64,7 @@ func (b *SSOBot) Start() {
 
 func (b *SSOBot) StartHandler(c tb.Context) error {
 	markup := b.markups.main.unsubscribed.ReplyMarkup
-	subscribed, err := b.service.IsSubscribed(c.Sender().ID)
+	subscribed, err := b.subscriptionService.IsSubscribed(c.Sender().ID)
 	if err != nil {
 		zap.L().Error("failed to check if user is subscribed", zap.Error(err))
 		return c.Send("Щось пішло не так. Будь ласка, спробуйте пізніше.")
@@ -64,7 +81,8 @@ func (b *SSOBot) ChooseGroupHandler(c tb.Context) error {
 
 func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
-		if _, err := b.service.SubscribeToGroup(c.Sender().ID, groupNumber); errors.Is(err, ErrSubscribersLimitReached) {
+		_, err := b.subscriptionService.SubscribeToGroup(c.Sender().ID, groupNumber)
+		if errors.Is(err, models.ErrSubscriptionsLimitReached) {
 			zap.L().Warn("failed to subscribe", zap.Error(err), zap.String("groupNum", groupNumber))
 			return c.Send("Кількість підписок досягла межі. Будь ласка, спробуйте пізніше.")
 		} else if err != nil {
@@ -77,23 +95,39 @@ func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 }
 
 func (b *SSOBot) UnsubscribeHandler(c tb.Context) error {
-	if err := b.service.Unsubscribe(c.Sender().ID); err != nil {
+	if err := b.subscriptionService.Unsubscribe(c.Sender().ID); err != nil {
 		zap.L().Error("failed to unsubscribe", zap.Error(err))
 		return c.Send("Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
 	}
 	return c.Send("Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
 }
 
-type tBotSender struct {
+type SSOBotBuilder struct {
 	bot *tb.Bot
 }
 
-func (s *tBotSender) Send(chatID int64, msg string) error {
-	_, err := s.bot.Send(tb.ChatID(chatID), msg)
-	if errors.Is(err, tb.ErrBlockedByUser) {
-		return ErrBlockedByUser // Return custom error to not depend on bot framework in other places
+func (bb *SSOBotBuilder) Sender(handler BlockedByUserHandler) MessageSender {
+	return &messageSender{
+		bot:            bb.bot,
+		blockedHandler: handler,
 	}
-	return err
+}
+
+func (bb *SSOBotBuilder) Build(subscriptionService SubscriptionService) *SSOBot {
+	return &SSOBot{
+		bot:     bb.bot,
+		markups: newMarkups(subscriptionService.GroupsCount()),
+
+		subscriptionService: subscriptionService,
+	}
+}
+
+type BlockedByUserHandler func(chatID int64)
+
+func NewBotBuilder() *SSOBotBuilder {
+	return &SSOBotBuilder{
+		bot: mustTBot(),
+	}
 }
 
 func mustTBot() *tb.Bot {
@@ -111,14 +145,6 @@ func mustTBot() *tb.Bot {
 	}
 
 	return bot
-}
-
-func NewBot(service Service, tbot *tb.Bot) *SSOBot {
-	return &SSOBot{
-		bot:     tbot,
-		service: service,
-		markups: newMarkups(),
-	}
 }
 
 type subscribedMarkup struct {
@@ -148,7 +174,7 @@ type markups struct {
 	groups groupsMarkup
 }
 
-func newMarkups() *markups {
+func newMarkups(subscriptionGroupsCount int) *markups {
 	mainSubscribed := &tb.ReplyMarkup{}
 	chooseOtherGroupBtn := mainSubscribed.Data("Обрати іншу групу", "choose_other_group")
 	unsubscribeBtn := mainSubscribed.Data("Відписатись", "unsubscribe")
@@ -163,9 +189,9 @@ func newMarkups() *markups {
 
 	gm := &tb.ReplyMarkup{}
 	const buttonsPerRow = 5
-	groupBtns := make(map[string]tb.Btn, groupsCount)
-	groupMarkupRows := make([]tb.Row, 0, groupsCount/buttonsPerRow+1)
-	for i := 0; i < groupsCount; i++ {
+	groupBtns := make(map[string]tb.Btn, subscriptionGroupsCount)
+	groupMarkupRows := make([]tb.Row, 0, subscriptionGroupsCount/buttonsPerRow+1)
+	for i := 0; i < subscriptionGroupsCount; i++ {
 		groupNum := strconv.Itoa(i + 1)
 		groupBtns[groupNum] = gm.Data(groupNum, "subscribe_group_"+groupNum)
 
@@ -218,4 +244,19 @@ func (m *markups) subscribeToGroupBtns() map[string]tb.Btn {
 
 func (m *markups) backToMainBtns() []tb.Btn {
 	return []tb.Btn{m.groups.backBtn}
+}
+
+type messageSender struct {
+	bot            *tb.Bot
+	blockedHandler BlockedByUserHandler
+}
+
+func (s *messageSender) Send(chatID int64, msg string) error {
+	_, err := s.bot.Send(tb.ChatID(chatID), msg)
+	if errors.Is(err, tb.ErrBlockedByUser) {
+		zap.L().Debug("bot is banned, removing subscriber and all related data", zap.Int64("chatID", chatID))
+		s.blockedHandler(chatID)
+		return nil
+	}
+	return err
 }
