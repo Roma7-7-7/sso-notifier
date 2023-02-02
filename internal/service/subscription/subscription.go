@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/models"
 	"go.uber.org/zap"
+
+	"github.com/Roma7-7-7/sso-notifier/models"
 )
 
 const GroupsCount = 18
@@ -132,7 +133,8 @@ func (s *Service) processSubscription(
 	chatID := sub.ChatID
 	zapChatID := zap.Int64("chatID", chatID)
 	for groupNum, hash := range sub.Groups {
-		newHash := grouped[groupNum].Hash()
+		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
+		newHash := grouped[groupNum].Hash(fmt.Sprintf("%s:", table.Date))
 		if hash == newHash {
 			continue
 		}
