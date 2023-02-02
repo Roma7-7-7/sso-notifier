@@ -35,8 +35,10 @@ type ShutdownGroup struct {
 	Items  []Status
 }
 
-func (g ShutdownGroup) Hash() string {
+func (g ShutdownGroup) Hash(prefix string) string {
 	var buf bytes.Buffer
+
+	buf.WriteString(prefix)
 	for _, i := range g.Items {
 		buf.WriteString(i.Hash())
 	}
