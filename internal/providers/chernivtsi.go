@@ -145,7 +145,7 @@ func parsePeriods(s *goquery.Selection) ([]models.Period, error) {
 		// 23:0000:00
 		if len(val) == 10 && strings.HasSuffix(val, "00:00") {
 			hours = append(hours, val[:5])
-			hours = append(hours, val[5:])
+			hours = append(hours, "24:00")
 			return true
 		}
 
