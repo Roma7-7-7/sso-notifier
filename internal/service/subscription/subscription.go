@@ -204,11 +204,7 @@ func cutByKyivTime(periods []models.Period, items []models.Status) ([]models.Per
 	cutPeriods := make([]models.Period, 0)
 	cutItems := make([]models.Status, 0)
 	for i := 0; i < len(periods); i++ {
-		to := periods[i].To
-		if to == "00:00" && i == len(periods)-1 { // yes, such a stupid hack
-			to = "24:00"
-		}
-		if to > currentKyivDateTime {
+		if periods[i].To > currentKyivDateTime {
 			cutPeriods = append(cutPeriods, periods[i])
 			cutItems = append(cutItems, items[i])
 		}
