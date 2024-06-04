@@ -1,21 +1,22 @@
-# Build
-FROM golang:1.19-alpine as build
+# build
+FROM golang:1.22.3-alpine3.20 AS build
 
-WORKDIR /app/src
+RUN apk add --no-cache make
 
-COPY go.mod ./
-COPY go.sum ./
-RUN go mod download
+COPY . /app
+WORKDIR /app
+RUN make build
 
-COPY . .
+# run
+FROM alpine:3.20
 
-RUN go build -o /app/bin/app
+ENV TOKEN=""
+VOLUME /app/data
 
-# Run
-FROM alpine:3.17
+RUN apk add --no-cache tzdata
 
-WORKDIR /
-VOLUME /data
+COPY --from=build /app/bin/sso-notifier /app/sso-notifier
 
-COPY --from=build /app/bin/app /
-CMD ["/app"]
+WORKDIR /app
+
+ENTRYPOINT ["/app/sso-notifier"]

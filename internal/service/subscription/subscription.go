@@ -2,10 +2,9 @@ package subscription
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
-
-	"go.uber.org/zap"
 
 	"github.com/Roma7-7-7/sso-notifier/models"
 )
@@ -88,7 +87,7 @@ func (s *Service) SubscribeToGroup(chatID int64, groupNum string) (models.Subscr
 	}
 
 	if !exists {
-		zap.L().Debug("new subscriber", zap.Int64("chatID", chatID))
+		slog.Debug("new subscriber", "chatID", chatID)
 	}
 
 	return sub, nil
@@ -104,7 +103,7 @@ func (s *Service) SendUpdates() {
 
 	table, ok, err := s.shutdownsService.GetShutdownsTable()
 	if err != nil {
-		zap.L().Error("failed to get shutdowns table", zap.Error(err))
+		slog.Error("failed to get shutdowns table", "error", err)
 		return
 	}
 	if !ok {
@@ -118,7 +117,7 @@ func (s *Service) SendUpdates() {
 
 	subs, err := s.repo.GetAll()
 	if err != nil {
-		zap.L().Error("failed to get subscriptions", zap.Error(err))
+		slog.Error("failed to get subscriptions", "error", err)
 		return
 	}
 
@@ -133,7 +132,7 @@ func (s *Service) processSubscription(
 	msgs := make([]string, 0)
 
 	chatID := sub.ChatID
-	zapChatID := zap.Int64("chatID", chatID)
+	slogChatID := slog.Int64("chatID", chatID)
 	for groupNum, hash := range sub.Groups {
 		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
 		newHash := grouped[groupNum].Hash(fmt.Sprintf("%s:", table.Date))
@@ -145,7 +144,7 @@ func (s *Service) processSubscription(
 		cutPeriod, cutStatuses := cutByKyivTime(gropuedPeriod, groupedStatuses)
 		msg, err := renderGroup(groupNum, cutPeriod, cutStatuses)
 		if err != nil {
-			zap.L().Error("failed to render group message", zap.Error(err), zapChatID, zap.String("group", groupNum))
+			slog.Error("failed to render group message", "error", err, slogChatID, "group", groupNum)
 			return
 		}
 		msgs = append(msgs, msg)
@@ -158,16 +157,16 @@ func (s *Service) processSubscription(
 
 	msg, err := renderMessage(table.Date, msgs)
 	if err != nil {
-		zap.L().Error("failed to render message", zap.Error(err), zapChatID)
+		slog.Error("failed to render message", "error", err, slogChatID)
 		return
 	}
 	if err := s.sender.Send(chatID, msg); err != nil {
-		zap.L().Error("failed to send message", zap.Error(err), zapChatID)
+		slog.Error("failed to send message", "error", err, slogChatID)
 		return
 	}
 
 	if _, err := s.repo.Put(sub); err != nil {
-		zap.L().Error("failed to update subscription", zap.Error(err), zapChatID)
+		slog.Error("failed to update subscription", "error", err, slogChatID)
 		return
 	}
 }
@@ -227,4 +226,5 @@ func init() {
 		panic(err)
 	}
 	kyivTime = loc
+	slog.Info("initialized kyiv time location", "current_time", time.Now().In(kyivTime).Format(time.RFC3339))
 }

@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"go.etcd.io/bbolt"
-	"go.uber.org/zap"
 
 	"github.com/Roma7-7-7/sso-notifier/models"
 )
@@ -211,7 +211,8 @@ func i64tob(id int64) []byte {
 func NewBoltDBStore(path string) *BoltDBStore {
 	db, err := bbolt.Open(path, 0600, nil) //nolint:gomnd
 	if err != nil {
-		zap.L().Fatal("failed to open bolt db", zap.Error(err))
+		slog.Error("failed to open bolt db", "error", err, "path", path)
+		panic(fmt.Errorf("open bolt db: %w", err))
 	}
 
 	mustBucket(db, shutdownsBucket)
@@ -226,7 +227,8 @@ func mustBucket(db *bbolt.DB, name string) {
 		_, err := tx.CreateBucketIfNotExists([]byte(name))
 		return err
 	}); err != nil {
-		zap.L().Fatal("failed to create bucket", zap.String("name", name), zap.Error(err))
+		slog.Error("failed to create bucket", "name", name, "error", err)
+		panic(fmt.Errorf("create bucket: %w", err))
 	}
 }
 

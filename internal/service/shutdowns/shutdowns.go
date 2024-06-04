@@ -1,10 +1,10 @@
 package shutdowns
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/Roma7-7-7/sso-notifier/models"
-	"go.uber.org/zap"
 )
 
 const shutdownsTableKey = "table"
@@ -33,12 +33,12 @@ func (s *Service) RefreshShutdownsTable() {
 
 	table, err := s.loader()
 	if err != nil {
-		zap.L().Error("failed to parse page", zap.Error(err))
+		slog.Error("failed to load shutdowns table", "error", err)
 		return
 	}
 	table.ID = shutdownsTableKey
 	if _, err = s.repo.Put(table); err != nil {
-		zap.L().Error("failed to update shutdowns table", zap.Error(err))
+		slog.Error("failed to update shutdowns table", "error", err)
 		return
 	}
 }

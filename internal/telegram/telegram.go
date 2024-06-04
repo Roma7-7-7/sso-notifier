@@ -2,11 +2,12 @@ package telegram
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
 	tb "gopkg.in/telebot.v3"
 
 	"github.com/Roma7-7-7/sso-notifier/models"
@@ -66,7 +67,7 @@ func (b *SSOBot) StartHandler(c tb.Context) error {
 	markup := b.markups.main.unsubscribed.ReplyMarkup
 	subscribed, err := b.subscriptionService.IsSubscribed(c.Sender().ID)
 	if err != nil {
-		zap.L().Error("failed to check if user is subscribed", zap.Error(err))
+		slog.Error("failed to check if user is subscribed", "error", err)
 		return c.Send("Щось пішло не так. Будь ласка, спробуйте пізніше.")
 	}
 	if subscribed {
@@ -83,10 +84,10 @@ func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		_, err := b.subscriptionService.SubscribeToGroup(c.Sender().ID, groupNumber)
 		if errors.Is(err, models.ErrSubscriptionsLimitReached) {
-			zap.L().Warn("failed to subscribe", zap.Error(err), zap.String("groupNum", groupNumber))
+			slog.Warn("failed to subscribe", "error", err, "groupNum", groupNumber)
 			return c.Send("Кількість підписок досягла межі. Будь ласка, спробуйте пізніше.")
 		} else if err != nil {
-			zap.L().Error("failed to subscribe", zap.Error(err), zap.String("groupNum", groupNumber))
+			slog.Error("failed to subscribe", "error", err, "groupNum", groupNumber)
 			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше.")
 		}
 
@@ -96,7 +97,7 @@ func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 
 func (b *SSOBot) UnsubscribeHandler(c tb.Context) error {
 	if err := b.subscriptionService.Unsubscribe(c.Sender().ID); err != nil {
-		zap.L().Error("failed to unsubscribe", zap.Error(err))
+		slog.Error("failed to unsubscribe", "error", err)
 		return c.Send("Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
 	}
 	return c.Send("Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
@@ -133,7 +134,8 @@ func NewBotBuilder() *SSOBotBuilder {
 func mustTBot() *tb.Bot {
 	token := os.Getenv("TOKEN")
 	if token == "" {
-		zap.L().Fatal("TOKEN environment variable is missing")
+		slog.Error("TOKEN environment variable is missing")
+		panic("TOKEN environment variable is missing")
 	}
 
 	bot, err := tb.NewBot(tb.Settings{
@@ -141,7 +143,8 @@ func mustTBot() *tb.Bot {
 		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:gomnd
 	})
 	if err != nil {
-		zap.L().Fatal("failed to create bot", zap.Error(err))
+		slog.Error("failed to create bot", "error", err)
+		panic(fmt.Errorf("create bot: %w", err))
 	}
 
 	return bot
@@ -254,7 +257,7 @@ type messageSender struct {
 func (s *messageSender) Send(chatID int64, msg string) error {
 	_, err := s.bot.Send(tb.ChatID(chatID), msg)
 	if errors.Is(err, tb.ErrBlockedByUser) {
-		zap.L().Debug("bot is banned, removing subscriber and all related data", zap.Int64("chatID", chatID))
+		slog.Debug("bot is banned, removing subscriber and all related data", "chatID", chatID)
 		s.blockedHandler(chatID)
 		return nil
 	}

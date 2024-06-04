@@ -1,9 +1,8 @@
 package communication
 
 import (
+	"log/slog"
 	"sync"
-
-	"go.uber.org/zap"
 
 	"github.com/Roma7-7-7/sso-notifier/models"
 )
@@ -34,22 +33,22 @@ func (s *Service) SendQueuedNotifications() {
 
 	ns, err := s.repo.GetAll()
 	if err != nil {
-		zap.L().Error("failed to get queued notifications", zap.Error(err))
+		slog.Error("failed to get queued notifications", "error", err)
 		return
 	}
 	for _, n := range ns {
-		subID := zap.Int64("subscriberID", n.Target)
-		notificationID := zap.Int("notificationID", n.ID)
+		subID := slog.Int64("subscriberID", n.Target)
+		notificationID := slog.Int("notificationID", n.ID)
 
 		if err = s.sender.Send(n.Target, n.Msg); err != nil {
-			zap.L().Error("failed to send notification", zap.Error(err), subID, notificationID)
+			slog.Error("failed to send notification", "error", err, subID, notificationID)
 			continue
 		}
 		if err = s.repo.Delete(n.ID); err != nil {
-			zap.L().Error("failed to delete notification from queue", zap.Error(err), subID, notificationID)
+			slog.Error("failed to delete notification from queue", "error", err, subID, notificationID)
 			continue
 		}
-		zap.L().Debug("notification sent", subID, notificationID)
+		slog.Debug("notification sent", subID, notificationID)
 	}
 }
 

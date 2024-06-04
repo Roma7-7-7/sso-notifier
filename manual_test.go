@@ -2,9 +2,8 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"testing"
-
-	"go.uber.org/zap"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
@@ -46,5 +45,5 @@ func Test_QueueNotifyAll(t *testing.T) {
 		}
 	}
 
-	zap.L().Info("Done")
+	slog.Info("Done")
 }

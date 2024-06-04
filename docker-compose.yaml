@@ -3,6 +3,7 @@ services:
   app:
     build: .
     volumes:
-      - ./data:/data
+      - ./data:/app/data
     env_file:
-      - data/.env
+      - .env
+    restart: always
