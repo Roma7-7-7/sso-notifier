@@ -172,7 +172,7 @@ func (s *Service) processSubscription(
 	}
 }
 
-var kyivTime = time.FixedZone("Kyiv", 2*60*60) //nolint:gomnd
+var kyivTime *time.Location
 
 func join(periods []models.Period, statuses []models.Status) ([]models.Period, []models.Status) {
 	groupedPeriod := make([]models.Period, 0)
@@ -219,4 +219,12 @@ func NewSubscriptionService(repo Repository, shutdownsService ShutdownsService, 
 		shutdownsService: shutdownsService,
 		sender:           sender,
 	}
+}
+
+func init() {
+	loc, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		panic(err)
+	}
+	kyivTime = loc
 }
