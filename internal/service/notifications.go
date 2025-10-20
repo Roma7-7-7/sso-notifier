@@ -41,7 +41,7 @@ func NewNotifications(shutdowns ShutdownsStore, subscriptions SubscriptionsStore
 
 		kyivLocation: loc,
 
-		log: log.With("service", "notifications"),
+		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
 	}
 }
@@ -81,7 +81,8 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 	msgs := make([]string, 0)
 
 	chatID := sub.ChatID
-	slogChatID := slog.Int64("chatID", chatID)
+	log := s.log.With("chatID", chatID)
+
 	for groupNum, hash := range sub.Groups {
 		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
 		newHash := shutdownGroupHash(grouped[groupNum], fmt.Sprintf("%s:", table.Date))
@@ -93,7 +94,7 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 		cutPeriod, cutStatuses := cutByKyivTime(s.kyivLocation, gropuedPeriod, groupedStatuses)
 		msg, err := renderGroup(groupNum, cutPeriod, cutStatuses)
 		if err != nil {
-			slog.Error("failed to render group message", "error", err, slogChatID, "group", groupNum)
+			log.ErrorContext(ctx, "failed to render group message", "group", groupNum, "error", err)
 			return
 		}
 		msgs = append(msgs, msg)
@@ -106,16 +107,16 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 
 	msg, err := renderMessage(table.Date, msgs)
 	if err != nil {
-		slog.Error("failed to render message", "error", err, slogChatID)
+		log.ErrorContext(ctx, "failed to render message", "error", err)
 		return
 	}
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), msg); err != nil {
-		slog.Error("failed to send message", "error", err, slogChatID)
+		log.ErrorContext(ctx, "failed to send message", "error", err)
 		return
 	}
 
 	if err := s.subscriptions.PutSubscription(sub); err != nil {
-		slog.Error("failed to update subscription", "error", err, slogChatID)
+		log.ErrorContext(ctx, "failed to update subscription", "error", err)
 		return
 	}
 }

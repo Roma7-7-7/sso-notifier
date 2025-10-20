@@ -26,7 +26,7 @@ type Subscriptions struct {
 func NewSubscription(store SubscriptionsStore, log *slog.Logger) *Subscriptions {
 	return &Subscriptions{
 		store: store,
-		log:   log.With("service", "subscriptions"),
+		log:   log.With("component", "service").With("service", "subscriptions"),
 		mx:    &sync.Mutex{},
 	}
 }
@@ -68,7 +68,7 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) (dal.Sub
 	}
 
 	if !exists {
-		slog.Debug("new subscriber", "chatID", chatID)
+		s.log.Debug("new subscriber", "chatID", chatID)
 	}
 
 	return sub, nil

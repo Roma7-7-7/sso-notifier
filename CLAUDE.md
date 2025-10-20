@@ -44,33 +44,50 @@ External Provider Layer (HTML Scraping)
 Three concurrent goroutines:
 
 1. **Main Thread**: Telegram bot event loop
-2. **Refresh Thread**: Fetches schedule every 5 minutes
-3. **Notification Thread**: Checks for updates every 5 seconds
+2. **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
+3. **Notification Thread**: Checks for updates (configurable, default: 5 minutes)
 
 ## Code Structure
 
 ### `/cmd/bot/main.go`
 
-Entry point with three main responsibilities:
+Entry point with configuration and lifecycle management:
 
-1. **Initialization** (lines 19-32)
-   - Creates BoltDB store at `data/app.db`
-   - Initializes logger (JSON for prod, text for dev)
-   - Creates Telegram bot builder
-   - Wires up services
+1. **Configuration** (lines 20-26)
+   - Uses `envconfig` to load environment variables into `Config` struct
+   - Supports development mode, custom intervals, group count, DB path
+   - All settings have sensible defaults
+   - `TELEGRAM_TOKEN` is the only required variable
 
-2. **Goroutine Management** (lines 34-44)
+2. **Initialization** (lines 38-64)
+   - Creates BoltDB store at configurable path (default: `data/sso-notifier.db`)
+   - Initializes logger (JSON for prod, text for dev based on `DEV` flag)
+   - Creates separate Telegram clients for bot UI and notifications
+   - Wires up services with dependency injection
+
+3. **Goroutine Management & Lifecycle** (lines 66-87)
    - Spawns refresh schedule goroutine
    - Spawns notification goroutine
-   - Both use sync.WaitGroup for graceful shutdown
+   - Uses context cancellation for graceful shutdown
+   - Listens for SIGINT/SIGTERM signals
+   - Waits for all goroutines to complete
 
-3. **Interval Functions**
-   - `refreshShutdowns()` (line 53): Fetches new schedule every 5 minutes
-   - `notifyShutdownUpdates()` (line 80): Checks and sends notifications every 5 seconds
+4. **Interval Functions**
+   - `refreshShutdowns()`: Fetches new schedule at configured interval
+   - `notifyShutdownUpdates()`: Checks and sends notifications at configured interval
+   - Both use configurable delays passed as parameters
 
-**Key Constants:**
-- `refreshTableInterval = 5 * time.Minute`
-- `notifyUpdatesInterval = 5 * time.Second`
+**Configuration Struct:**
+```go
+type Config struct {
+    Dev                      bool          // Development mode flag
+    GroupsCount              int           // Number of groups (default: 12)
+    DBPath                   string        // Database path
+    RefreshShutdownsInterval time.Duration // Schedule fetch interval
+    NotifyInterval           time.Duration // Notification check interval
+    TelegramToken            string        // Bot token (required)
+}
+```
 
 ### `/internal/dal/bolt.go`
 
@@ -247,43 +264,73 @@ Telegram bot integration using telebot.v3 library.
 **Bot Structure:**
 
 ```go
-type SSOBot struct {
-    bot     *tb.Bot
-    markups *markups  // Inline keyboard layouts
-    subscriptionService SubscriptionService
+type Bot struct {
+    svc     SubscriptionService  // Subscription management
+    bot     *tb.Bot             // Telegram bot instance
+    markups *markups            // Inline keyboard layouts
+    log     *slog.Logger        // Structured logger
 }
 ```
 
+**Constructor: `NewBot()`** (lines 33-50)
+- Takes token, subscription service, group count, and logger
+- Returns error instead of panicking (better error handling)
+- Creates bot instance with 5-second polling timeout
+- Initializes markups based on configurable group count
+- Adds "component: bot" to logger for context
+
+**Lifecycle: `Start(ctx context.Context)`** (lines 52-76)
+- Accepts context for graceful shutdown
+- Registers all command handlers (`/start`, `/subscribe`, `/unsubscribe`)
+- Uses helper method `registerButtonHandlers()` for cleaner code
+- Listens for context cancellation in goroutine
+- Stops bot gracefully on shutdown signal
+- Returns error for better error propagation
+
 **Handlers:**
 
-1. **StartHandler** (lines 62-73)
+1. **StartHandler** (lines 58-76)
+   - Extracts chatID for logging
    - Shows main menu
    - Different markup for subscribed/unsubscribed users
+   - Logs with chatID and subscription status
+   - Structured error handling with context
 
-2. **ChooseGroupHandler** (lines 75-77)
-   - Shows group selection (1-12 buttons)
+2. **ChooseGroupHandler** (lines 78-81)
+   - Shows group selection buttons
+   - Logs chatID for debugging
 
-3. **SetGroupHandler** (lines 79-89)
+3. **SetGroupHandler** (lines 83-101)
    - Subscribes user to selected group
-   - Returns success message
+   - Logs success at Info level with chatID and group
+   - Logs errors with full context
+   - Returns success message with dynamic group number
 
-4. **UnsubscribeHandler** (lines 91-97)
+4. **UnsubscribeHandler** (lines 103-114)
    - Removes all subscriptions
-   - Shows unsubscribed state
+   - Logs unsubscribe events at Info level
+   - Returns appropriate markup based on state
 
-**Markup Generation** (lines 173-222):
+**Helper Method: `registerButtonHandlers()`** (lines 116-120)
+- Registers same handler for multiple buttons
+- Cleaner than manual iteration
+- Avoids variable capture issues
 
-Creates inline keyboards:
+**Markup Generation** (lines 214-261):
+
+Creates inline keyboards with configurable group count:
 - Main menu: Subscribe/Unsubscribe buttons
-- Group selection: 12 numbered buttons (5 per row)
+- Group selection: Dynamic number of buttons (default 12, 5 per row)
 - Navigation: Back button
+- All button text and callbacks in one place
 
-**Message Sender** (lines 245-263):
-
-Handles Telegram API errors:
-- Catches `ErrBlockedByUser`
-- Calls `blockedHandler` to purge user data
-- Prevents errors for blocked users
+**Key Improvements in Refactor:**
+- Context-aware shutdown instead of blocking `Start()`
+- Structured logging with chatID throughout
+- Error propagation instead of panics
+- Configurable group count (not hardcoded constant)
+- Cleaner handler registration pattern
+- Better separation of concerns (no MessageSender in this file)
 
 ## Data Flow Examples
 
@@ -299,24 +346,23 @@ Handles Telegram API errors:
 
 ### Schedule Update Notification
 
-1. `refreshShutdowns()` runs every 5 minutes
+1. `refreshShutdowns()` runs at configured interval (default: 5 minutes)
 2. Fetches HTML from oblenergo.cv.ua
 3. Parses and stores in BoltDB
-4. `notifyShutdownUpdates()` runs every 5 seconds
+4. `notifyShutdownUpdates()` runs at configured interval (default: 5 minutes)
 5. Detects hash change for group 5
 6. Finds all subscriptions with group 5
 7. Renders message with emoji indicators
-8. Sends to each subscriber
+8. Sends via separate Telegram client to each subscriber
 9. Updates subscription hashes
 
 ### User Blocks Bot
 
-1. Bot tries to send message
-2. Telegram API returns `ErrBlockedByUser`
-3. `messageSender.SendMessage()` catches error
-4. Calls `blockedHandler(chatID)`
-5. `PurgeSubscriptions()` removes all user data
-6. No error logged (graceful handling)
+1. External Telegram client tries to send notification
+2. Telegram API returns "Forbidden: bot was blocked by the user"
+3. Client handles error and purges subscription
+4. User data removed from database
+5. No further messages sent to that user
 
 ## Key Design Patterns
 
@@ -343,14 +389,14 @@ func NewNotifications(
 ) *Notifications
 ```
 
-### 3. Builder Pattern
+### 3. Constructor Pattern
 
-Telegram bot uses builder for configuration:
+Telegram bot and services use simple constructor functions:
 ```go
-bb := telegram.NewBotBuilder()
-sender := bb.Sender(purgeSubscriber(store))
-bot := bb.Build(subscriptionsSvc)
+bot, err := telegram.NewBot(token, subscriptionsSvc, groupCount, log)
+shutdownsSvc := service.NewShutdowns(store, log)
 ```
+Returns errors instead of panicking for better error handling.
 
 ### 4. Mutex for Thread Safety
 
@@ -365,20 +411,24 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 
 ## Configuration
 
-### Environment Variables
+All configuration via environment variables using `envconfig`:
 
-- `TOKEN` (required): Telegram bot token
-- `ENV` (optional): Set to "dev" for text logging
+### Required Variables
+
+- `TELEGRAM_TOKEN`: Telegram bot token from @BotFather
+
+### Optional Variables (with defaults)
+
+- `DEV` (default: false): Set to "true" for text logging instead of JSON
+- `GROUPS_COUNT` (default: 12): Number of power outage groups
+- `DB_PATH` (default: "data/sso-notifier.db"): Database file path
+- `REFRESH_SHUTDOWNS_INTERVAL` (default: 5m): Schedule fetch frequency
+- `NOTIFY_INTERVAL` (default: 5m): Notification check frequency
 
 ### Timeouts
 
 - HTTP request: 1 minute (line 39, shutdowns.go)
-- Refresh interval: 5 minutes (line 16, main.go)
-- Notification check: 5 seconds (line 17, main.go)
-
-### Telegram Constants
-
-- `GroupsCount = 12` (line 16, telegram.go)
+- Telegram polling: 5 seconds (telegram.go:65)
 
 ## Potential Issues & TODOs
 

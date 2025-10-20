@@ -46,11 +46,11 @@ internal/
 
 ### Data Flow
 
-1. **Schedule Refresh** (every 5 minutes)
+1. **Schedule Refresh** (configurable, default: 5 minutes)
    - `providers.ChernivtsiShutdowns()` fetches and parses HTML
    - Stores schedule in BoltDB via `service.Shutdowns`
 
-2. **Notification Check** (every 5 seconds)
+2. **Notification Check** (configurable, default: 5 minutes)
    - `service.Notifications` compares current schedule with stored hashes
    - Generates messages for changed groups
    - Sends via Telegram to affected subscribers
@@ -81,9 +81,10 @@ cd sso-notifier
 cp .env.dist .env
 ```
 
-3. Edit `.env` and add your bot token:
+3. Edit `.env` and configure:
 ```bash
-TOKEN=your_telegram_bot_token_here
+DEV=true                                    # Enable development mode (optional)
+TELEGRAM_TOKEN=your_telegram_bot_token_here # Required
 ```
 
 4. Build the application:
@@ -101,9 +102,9 @@ source .env
 ./bin/sso-notifier
 ```
 
-Or set ENV=dev for development mode with verbose logging:
+Or set environment variables directly:
 ```bash
-ENV=dev ./bin/sso-notifier
+TELEGRAM_TOKEN=your_token DEV=true ./bin/sso-notifier
 ```
 
 ## Bot Commands
@@ -116,19 +117,18 @@ The bot also provides inline buttons for easy navigation.
 
 ## Configuration
 
-Environment variables:
+All configuration is done via environment variables:
 
-- `TOKEN` (required) - Telegram bot token
-- `ENV` (optional) - Set to `dev` for development mode (text logging instead of JSON)
-
-Configuration constants in `cmd/bot/main.go`:
-
-- `refreshTableInterval` - How often to fetch new schedule (default: 5 minutes)
-- `notifyUpdatesInterval` - How often to check for notifications (default: 5 seconds)
+- `TELEGRAM_TOKEN` (required) - Telegram bot token from @BotFather
+- `DEV` (optional) - Set to `true` for development mode (text logging instead of JSON, default: false)
+- `GROUPS_COUNT` (optional) - Number of power outage groups (default: 12)
+- `DB_PATH` (optional) - Database file path (default: `data/sso-notifier.db`)
+- `REFRESH_SHUTDOWNS_INTERVAL` (optional) - How often to fetch schedule (default: 5m)
+- `NOTIFY_INTERVAL` (optional) - How often to check for notifications (default: 5m)
 
 ## Data Storage
 
-The bot uses BoltDB for persistent storage in `data/app.db` with two buckets:
+The bot uses BoltDB for persistent storage in `data/sso-notifier.db` (configurable via `DB_PATH`) with two buckets:
 
 - `shutdowns` - Current power outage schedule
 - `subscriptions` - User subscriptions with group hashes
@@ -170,6 +170,8 @@ This produces a static binary at `./bin/sso-notifier` (CGO_ENABLED=0 for portabi
 - [goquery](https://github.com/PuerkitoBio/goquery) - HTML parsing
 - [bbolt](https://github.com/etcd-io/bbolt) - Embedded key-value database
 - [telebot](https://gopkg.in/telebot.v3) - Telegram bot framework
+- [telegram](https://github.com/Roma7-7-7/telegram) - Telegram client for notifications
+- [envconfig](https://github.com/kelseyhightower/envconfig) - Environment variable configuration
 
 ## How It Works
 
@@ -227,7 +229,8 @@ After=network.target
 Type=simple
 User=ssobot
 WorkingDirectory=/opt/sso-notifier
-Environment="TOKEN=your_token_here"
+Environment="TELEGRAM_TOKEN=your_token_here"
+Environment="DEV=false"
 ExecStart=/opt/sso-notifier/bin/sso-notifier
 Restart=on-failure
 

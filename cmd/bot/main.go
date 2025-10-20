@@ -4,53 +4,94 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/kelseyhightower/envconfig"
+
+	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
 
-const refreshTableInterval = 5 * time.Minute
-const notifyUpdatesInterval = 5 * time.Second
+type Config struct {
+	Dev                      bool          `envconfig:"DEV" default:"false"`
+	GroupsCount              int           `envconfig:"GROUPS_COUNT" default:"12"`
+	DBPath                   string        `envconfig:"DB_PATH" default:"data/sso-notifier.db"`
+	RefreshShutdownsInterval time.Duration `envconfig:"REFRESH_SHUTDOWNS_INTERVAL" default:"5m"`
+	NotifyInterval           time.Duration `envconfig:"NOTIFY_INTERVAL" default:"5m"`
+	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN" required:"true"`
+}
 
 func main() {
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	if status := run(ctx); status > 0 {
+		cancel()
+		os.Exit(status)
+	}
+	cancel()
+}
 
-	store := dal.NewBoltDB("data/app.db")
+func run(ctx context.Context) int {
+	conf := &Config{}
+	err := envconfig.Process("", conf)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to process env vars", "error", err) //nolint:sloglint // not initialized yet
+		return 1
+	}
+
+	log := mustLogger(conf.Dev)
+
+	store, err := dal.NewBoltDB(conf.DBPath)
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to open database", "error", err)
+		return 1
+	}
 	defer store.Close()
 
-	log := mustLogger(os.Getenv("ENV") == "dev")
-
-	bb := telegram.NewBotBuilder()
-
-	sender := bb.Sender(purgeSubscriber(store)) // todo use my own lib
+	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	shutdownsSvc := service.NewShutdowns(store, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, sender, log)
+
+	bot, err := telegram.NewBot(conf.TelegramToken, subscriptionsSvc, conf.GroupsCount, log)
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to create telegram bot", "error", err)
+		return 1
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		refreshShutdowns(ctx, shutdownsSvc, log)
+		refreshShutdowns(ctx, shutdownsSvc, conf.RefreshShutdownsInterval, log.With("component", "schedule").With("action", "refresh"))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		notifyShutdownUpdates(ctx, notificationsSvc, log)
+		notifyShutdownUpdates(ctx, notificationsSvc, conf.NotifyInterval, log.With("component", "schedule").With("action", "notify"))
 	}()
 
-	slog.Info("Starting bot")
-	bb.Build(subscriptionsSvc).Start()
+	log.InfoContext(ctx, "Starting bot")
+	err = bot.Start(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.ErrorContext(ctx, "Failed to start bot", "error", err)
+		}
+	}
 
 	wg.Wait()
-	slog.Info("Stopped bot")
+	log.InfoContext(ctx, "Stopped bot")
+	return 0
 }
 
-func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Logger) {
+func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, delay time.Duration, log *slog.Logger) {
 	defer func() {
 		log.InfoContext(ctx, "Stopped refresh shutdowns schedule")
 	}()
@@ -60,7 +101,7 @@ func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Log
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(refreshTableInterval):
+		case <-time.After(delay):
 			err := svc.Refresh(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
@@ -77,7 +118,7 @@ func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Log
 	}
 }
 
-func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log *slog.Logger) {
+func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, delay time.Duration, log *slog.Logger) {
 	defer func() {
 		log.InfoContext(ctx, "Stopped notify shutdown updates schedule")
 	}()
@@ -87,7 +128,7 @@ func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log 
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(notifyUpdatesInterval):
+		case <-time.After(delay):
 			err := svc.NotifyShutdownUpdates(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
@@ -100,14 +141,6 @@ func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log 
 
 				log.ErrorContext(ctx, "Error notifying shutdowns schedule", "error", err)
 			}
-		}
-	}
-}
-
-func purgeSubscriber(store *dal.BoltDB) func(chatID int64) {
-	return func(chatID int64) {
-		if err := store.PurgeSubscriptions(chatID); err != nil {
-			slog.Error("failed to purge subscription", "chatID", chatID, "error", err)
 		}
 	}
 }
