@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
+
+	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
@@ -14,22 +19,31 @@ import (
 )
 
 const refreshTableInterval = 5 * time.Minute
-const notifyUpdatesInterval = 5 * time.Second
+const notifyUpdatesInterval = time.Minute
 
 func main() {
-	ctx := context.Background()
-
-	store := dal.NewBoltDB("data/app.db")
-	defer store.Close()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
 	log := mustLogger(os.Getenv("ENV") == "dev")
 
-	bb := telegram.NewBotBuilder()
+	store, err := dal.NewBoltDB("data/app.db")
+	if err != nil {
+		log.Error("Failed to open database", err)
+		os.Exit(1)
+	}
+	defer store.Close()
 
-	sender := bb.Sender(purgeSubscriber(store)) // todo use my own lib
+	sender := tc.NewClient(http.DefaultClient, os.Getenv("TOKEN"))
 	shutdownsSvc := service.NewShutdowns(store, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, sender, log)
+
+	bot, err := telegram.NewBot(os.Getenv("TOKEN"), subscriptionsSvc, log)
+	if err != nil {
+		log.Error("Failed to create telegram bot", err)
+		os.Exit(1)
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -43,11 +57,16 @@ func main() {
 		notifyShutdownUpdates(ctx, notificationsSvc, log)
 	}()
 
-	slog.Info("Starting bot")
-	bb.Build(subscriptionsSvc).Start()
+	log.Info("Starting bot")
+	err = bot.Start(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Error("Failed to start bot", err)
+		}
+	}
 
 	wg.Wait()
-	slog.Info("Stopped bot")
+	log.Info("Stopped bot")
 }
 
 func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Logger) {
@@ -100,14 +119,6 @@ func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log 
 
 				log.ErrorContext(ctx, "Error notifying shutdowns schedule", "error", err)
 			}
-		}
-	}
-}
-
-func purgeSubscriber(store *dal.BoltDB) func(chatID int64) {
-	return func(chatID int64) {
-		if err := store.PurgeSubscriptions(chatID); err != nil {
-			slog.Error("failed to purge subscription", "chatID", chatID, "error", err)
 		}
 	}
 }

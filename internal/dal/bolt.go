@@ -3,7 +3,6 @@ package dal
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"go.etcd.io/bbolt"
 )
@@ -48,17 +47,16 @@ const (
 	MAYBE Status = "M"
 )
 
-func NewBoltDB(path string) *BoltDB {
+func NewBoltDB(path string) (*BoltDB, error) {
 	db, err := bbolt.Open(path, 0600, nil) //nolint:gomnd
 	if err != nil {
-		slog.Error("failed to open bolt db", "error", err, "path", path)
-		panic(fmt.Errorf("open bolt db: %w", err))
+		return nil, fmt.Errorf("open bolt db: %w", err)
 	}
 
 	mustBucket(db, shutdownsBucket)
 	mustBucket(db, subscriptionsBucket)
 
-	return &BoltDB{db: db}
+	return &BoltDB{db: db}, nil
 }
 
 func (s *BoltDB) GetShutdowns() (Shutdowns, bool, error) {
@@ -192,7 +190,6 @@ func mustBucket(db *bbolt.DB, name string) {
 		_, err := tx.CreateBucketIfNotExists([]byte(name))
 		return err
 	}); err != nil {
-		slog.Error("failed to create bucket", "name", name, "error", err)
 		panic(fmt.Errorf("create bucket: %w", err))
 	}
 }

@@ -68,7 +68,7 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) (dal.Sub
 	}
 
 	if !exists {
-		slog.Debug("new subscriber", "chatID", chatID)
+		s.log.Debug("new subscriber", "chatID", chatID)
 	}
 
 	return sub, nil

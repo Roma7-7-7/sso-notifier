@@ -2,10 +2,8 @@ package telegram
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"time"
 
@@ -13,14 +11,27 @@ import (
 	tb "gopkg.in/telebot.v3"
 )
 
-const GroupsCount = 12
+const (
+	groupsCount = 12
+
+	// Button text constants
+	btnTextChooseOtherGroup = "Обрати іншу групу"
+	btnTextUnsubscribe      = "Відписатись"
+	btnTextSubscribe        = "Підписатись на оновлення"
+	btnTextBack             = "Назад"
+
+	// Message text constants
+	msgWelcome          = "Привіт! Бажаєте підписатись на оновлення графіку відключень?"
+	msgChooseGroup      = "Оберіть групу"
+	msgSubscribed       = "Ви підписались на групу "
+	msgUnsubscribed     = "Ви відписані"
+	msgErrorGeneric     = "Щось пішло не так. Будь ласка, спробуйте пізніше."
+	msgErrorSubscribe   = "Не вдалось підписатись. Будь ласка, спробуйте пізніше."
+	msgErrorUnsubscribe = "Не вдалось відписатись. Будь ласка, спробуйте пізніше."
+)
 
 type MessageSender interface {
 	SendMessage(ctx context.Context, chatID, msg string) error
-}
-
-type MessageSenderSetter interface {
-	Set(MessageSender)
 }
 
 type SubscriptionService interface {
@@ -30,123 +41,132 @@ type SubscriptionService interface {
 	Unsubscribe(chatID int64) error
 }
 
-type SSOBot struct {
+type Bot struct {
+	svc SubscriptionService
+
 	bot     *tb.Bot
 	markups *markups
 
-	subscriptionService SubscriptionService
+	log *slog.Logger
 }
 
-func (b *SSOBot) Start() {
+func NewBot(token string, svc SubscriptionService, log *slog.Logger) (*Bot, error) {
+	bot, err := tb.NewBot(tb.Settings{
+		Token:  token,
+		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create telegram bot: %w", err)
+	}
+
+	return &Bot{
+		bot: bot,
+
+		svc:     svc,
+		markups: newMarkups(groupsCount),
+
+		log: log.With("component", "bot"),
+	}, nil
+}
+
+func (b *Bot) Start(ctx context.Context) error {
+	// Register command handlers
 	b.bot.Handle("/start", b.StartHandler)
-	for _, btn := range b.markups.backToMainBtns() {
-		btn := btn
-		b.bot.Handle(&btn, b.StartHandler)
-	}
-
 	b.bot.Handle("/subscribe", b.ChooseGroupHandler)
-	for _, btn := range b.markups.chooseGroupBtns() {
-		btn := btn
-		b.bot.Handle(&btn, b.ChooseGroupHandler)
-	}
-
-	for k, btn := range b.markups.subscribeToGroupBtns() {
-		btn := btn
-		b.bot.Handle(&btn, b.SetGroupHandler(k))
-	}
-
 	b.bot.Handle("/unsubscribe", b.UnsubscribeHandler)
-	for _, btn := range b.markups.unsubscribeBtns() {
-		btn := btn
-		b.bot.Handle(&btn, b.UnsubscribeHandler)
+
+	// Register button handlers
+	b.registerButtonHandlers(b.markups.backToMainBtns(), b.StartHandler)
+	b.registerButtonHandlers(b.markups.chooseGroupBtns(), b.ChooseGroupHandler)
+	b.registerButtonHandlers(b.markups.unsubscribeBtns(), b.UnsubscribeHandler)
+
+	// Register group subscription button handlers
+	for groupNum, btn := range b.markups.subscribeToGroupBtns() {
+		b.bot.Handle(&btn, b.SetGroupHandler(groupNum))
 	}
+
+	go func() {
+		<-ctx.Done()
+		_, err := b.bot.Close()
+		if err != nil {
+			b.log.Error("Failed to close telegram bot", "error", err)
+		}
+	}()
 
 	b.bot.Start()
+
+	return nil
 }
 
-func (b *SSOBot) StartHandler(c tb.Context) error {
+func (b *Bot) StartHandler(c tb.Context) error {
+	chatID := c.Sender().ID
 	markup := b.markups.main.unsubscribed.ReplyMarkup
-	subscribed, err := b.subscriptionService.IsSubscribed(c.Sender().ID)
+
+	subscribed, err := b.svc.IsSubscribed(chatID)
 	if err != nil {
-		slog.Error("failed to check if user is subscribed", "error", err)
-		return c.Send("Щось пішло не так. Будь ласка, спробуйте пізніше.")
+		b.log.Error("failed to check if user is subscribed",
+			"error", err,
+			"chatID", chatID)
+		return c.Send(msgErrorGeneric)
 	}
+
 	if subscribed {
 		markup = b.markups.main.subscribed.ReplyMarkup
 	}
-	return c.Send("Привіт! Бажаєте підписатись на оновлення графіку відключень?", markup)
+
+	b.log.Debug("start handler called",
+		"chatID", chatID,
+		"subscribed", subscribed)
+	return c.Send(msgWelcome, markup)
 }
 
-func (b *SSOBot) ChooseGroupHandler(c tb.Context) error {
-	return c.Send("Оберіть групу", b.markups.groups.ReplyMarkup)
+func (b *Bot) ChooseGroupHandler(c tb.Context) error {
+	b.log.Debug("choose group handler called", "chatID", c.Sender().ID)
+	return c.Send(msgChooseGroup, b.markups.groups.ReplyMarkup)
 }
 
-func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
+func (b *Bot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
-		_, err := b.subscriptionService.SubscribeToGroup(c.Sender().ID, groupNumber)
+		chatID := c.Sender().ID
+
+		_, err := b.svc.SubscribeToGroup(chatID, groupNumber)
 		if err != nil {
-			slog.Error("failed to subscribe", "error", err, "groupNum", groupNumber)
-			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше.")
+			b.log.Error("failed to subscribe",
+				"error", err,
+				"chatID", chatID,
+				"groupNum", groupNumber)
+			return c.Send(msgErrorSubscribe)
 		}
 
-		return c.Send("Ви підписались на групу "+groupNumber, b.markups.main.subscribed.ReplyMarkup)
+		b.log.Info("user subscribed to group",
+			"chatID", chatID,
+			"groupNum", groupNumber)
+		return c.Send(msgSubscribed+groupNumber, b.markups.main.subscribed.ReplyMarkup)
 	}
 }
 
-func (b *SSOBot) UnsubscribeHandler(c tb.Context) error {
-	if err := b.subscriptionService.Unsubscribe(c.Sender().ID); err != nil {
-		slog.Error("failed to unsubscribe", "error", err)
-		return c.Send("Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
+func (b *Bot) UnsubscribeHandler(c tb.Context) error {
+	chatID := c.Sender().ID
+
+	if err := b.svc.Unsubscribe(chatID); err != nil {
+		b.log.Error("failed to unsubscribe",
+			"error", err,
+			"chatID", chatID)
+		return c.Send(msgErrorUnsubscribe, b.markups.main.subscribed.ReplyMarkup)
 	}
-	return c.Send("Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
+
+	b.log.Info("user unsubscribed", "chatID", chatID)
+	return c.Send(msgUnsubscribed, b.markups.main.unsubscribed.ReplyMarkup)
 }
 
-type SSOBotBuilder struct {
-	bot *tb.Bot
-}
-
-func (bb *SSOBotBuilder) Sender(handler BlockedByUserHandler) MessageSender {
-	return &messageSender{
-		bot:            bb.bot,
-		blockedHandler: handler,
-	}
-}
-
-func (bb *SSOBotBuilder) Build(subscriptionService SubscriptionService) *SSOBot {
-	return &SSOBot{
-		bot:     bb.bot,
-		markups: newMarkups(GroupsCount),
-
-		subscriptionService: subscriptionService,
+// registerButtonHandlers registers the same handler for multiple buttons
+func (b *Bot) registerButtonHandlers(buttons []tb.Btn, handler tb.HandlerFunc) {
+	for i := range buttons {
+		b.bot.Handle(&buttons[i], handler)
 	}
 }
 
 type BlockedByUserHandler func(chatID int64)
-
-func NewBotBuilder() *SSOBotBuilder {
-	return &SSOBotBuilder{
-		bot: mustTBot(),
-	}
-}
-
-func mustTBot() *tb.Bot {
-	token := os.Getenv("TOKEN")
-	if token == "" {
-		slog.Error("TOKEN environment variable is missing")
-		panic("TOKEN environment variable is missing")
-	}
-
-	bot, err := tb.NewBot(tb.Settings{
-		Token:  token,
-		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:gomnd
-	})
-	if err != nil {
-		slog.Error("failed to create bot", "error", err)
-		panic(fmt.Errorf("create bot: %w", err))
-	}
-
-	return bot
-}
 
 type subscribedMarkup struct {
 	*tb.ReplyMarkup
@@ -177,15 +197,15 @@ type markups struct {
 
 func newMarkups(subscriptionGroupsCount int) *markups {
 	mainSubscribed := &tb.ReplyMarkup{}
-	chooseOtherGroupBtn := mainSubscribed.Data("Обрати іншу групу", "choose_other_group")
-	unsubscribeBtn := mainSubscribed.Data("Відписатись", "unsubscribe")
+	chooseOtherGroupBtn := mainSubscribed.Data(btnTextChooseOtherGroup, "choose_other_group")
+	unsubscribeBtn := mainSubscribed.Data(btnTextUnsubscribe, "unsubscribe")
 	mainSubscribed.Inline(
 		mainSubscribed.Row(chooseOtherGroupBtn),
 		mainSubscribed.Row(unsubscribeBtn),
 	)
 
 	mainUnsubscribed := &tb.ReplyMarkup{}
-	subscribeBtn := mainUnsubscribed.Data("Підписатись на оновлення", "subscribe")
+	subscribeBtn := mainUnsubscribed.Data(btnTextSubscribe, "subscribe")
 	mainUnsubscribed.Inline(mainUnsubscribed.Row(subscribeBtn))
 
 	gm := &tb.ReplyMarkup{}
@@ -202,7 +222,7 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 		}
 		groupMarkupRows[rowIndex] = append(groupMarkupRows[rowIndex], groupBtns[groupNum])
 	}
-	back := gm.Data("Назад", "back")
+	back := gm.Data(btnTextBack, "back")
 	groupMarkupRows = append(groupMarkupRows, tb.Row{back})
 	gm.Inline(groupMarkupRows...)
 
@@ -245,24 +265,4 @@ func (m *markups) subscribeToGroupBtns() map[string]tb.Btn {
 
 func (m *markups) backToMainBtns() []tb.Btn {
 	return []tb.Btn{m.groups.backBtn}
-}
-
-type messageSender struct {
-	bot            *tb.Bot
-	blockedHandler BlockedByUserHandler
-}
-
-func (s *messageSender) SendMessage(_ context.Context, chatIDStr string, msg string) error {
-	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid chat ID: %s", chatIDStr)
-	}
-
-	_, err = s.bot.Send(tb.ChatID(chatID), msg)
-	if errors.Is(err, tb.ErrBlockedByUser) {
-		slog.Debug("bot is banned, removing subscriber and all related data", "chatID", chatID)
-		s.blockedHandler(chatID)
-		return nil
-	}
-	return err
 }

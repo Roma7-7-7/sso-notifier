@@ -93,7 +93,7 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 		cutPeriod, cutStatuses := cutByKyivTime(s.kyivLocation, gropuedPeriod, groupedStatuses)
 		msg, err := renderGroup(groupNum, cutPeriod, cutStatuses)
 		if err != nil {
-			slog.Error("failed to render group message", "error", err, slogChatID, "group", groupNum)
+			s.log.Error("failed to render group message", "error", err, slogChatID, "group", groupNum)
 			return
 		}
 		msgs = append(msgs, msg)
@@ -106,16 +106,16 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 
 	msg, err := renderMessage(table.Date, msgs)
 	if err != nil {
-		slog.Error("failed to render message", "error", err, slogChatID)
+		s.log.Error("failed to render message", "error", err, slogChatID)
 		return
 	}
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), msg); err != nil {
-		slog.Error("failed to send message", "error", err, slogChatID)
+		s.log.Error("failed to send message", "error", err, slogChatID)
 		return
 	}
 
 	if err := s.subscriptions.PutSubscription(sub); err != nil {
-		slog.Error("failed to update subscription", "error", err, slogChatID)
+		s.log.Error("failed to update subscription", "error", err, slogChatID)
 		return
 	}
 }
