@@ -41,7 +41,7 @@ func NewNotifications(shutdowns ShutdownsStore, subscriptions SubscriptionsStore
 
 		kyivLocation: loc,
 
-		log: log.With("service", "notifications"),
+		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
 	}
 }

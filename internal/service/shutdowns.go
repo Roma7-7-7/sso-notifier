@@ -26,7 +26,7 @@ type Shutdowns struct {
 func NewShutdowns(store ShutdownsStore, log *slog.Logger) *Shutdowns {
 	return &Shutdowns{
 		store: store,
-		log:   log.With("service", "shutdowns"),
+		log:   log.With("component", "service").With("service", "shutdowns"),
 		mx:    &sync.Mutex{},
 	}
 }

@@ -49,12 +49,12 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		refreshShutdowns(ctx, shutdownsSvc, log)
+		refreshShutdowns(ctx, shutdownsSvc, log.With("component", "schedule").With("action", "refresh"))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		notifyShutdownUpdates(ctx, notificationsSvc, log)
+		notifyShutdownUpdates(ctx, notificationsSvc, log.With("component", "schedule").With("action", "notify"))
 	}()
 
 	log.Info("Starting bot")

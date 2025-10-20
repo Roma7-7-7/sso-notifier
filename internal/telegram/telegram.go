@@ -87,10 +87,8 @@ func (b *Bot) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		_, err := b.bot.Close()
-		if err != nil {
-			b.log.Error("Failed to close telegram bot", "error", err)
-		}
+		b.log.Info("Stopping bot")
+		b.bot.Stop()
 	}()
 
 	b.bot.Start()
