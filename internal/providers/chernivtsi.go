@@ -7,34 +7,28 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
-
-	"github.com/Roma7-7-7/sso-notifier/models"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
 const url = "https://oblenergo.cv.ua/shutdowns/"
 
-func ChernivtsiShutdowns() (models.ShutdownsTable, error) {
-	html, err := loadPage()
+func ChernivtsiShutdowns(ctx context.Context) (dal.Shutdowns, error) {
+	html, err := loadPage(ctx)
 	if err != nil {
-		return models.ShutdownsTable{}, fmt.Errorf("failed to load shutdowns page: %w", err)
+		return dal.Shutdowns{}, fmt.Errorf("failed to load shutdowns page: %w", err)
 	}
 
 	res, err := parseShutdownsPage(html)
 	if err != nil {
-		return models.ShutdownsTable{}, fmt.Errorf("failed to parse shutdowns page: %w", err)
+		return dal.Shutdowns{}, fmt.Errorf("failed to parse shutdowns page: %w", err)
 	}
 
 	return res, nil
 }
 
-func loadPage() ([]byte, error) {
-	// nolint:gomnd
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
+func loadPage(ctx context.Context) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shutdowns from page=%s: %w", url, err)
@@ -57,8 +51,8 @@ func loadPage() ([]byte, error) {
 	return res.Bytes(), nil
 }
 
-func parseShutdownsPage(html []byte) (models.ShutdownsTable, error) {
-	var res models.ShutdownsTable
+func parseShutdownsPage(html []byte) (dal.Shutdowns, error) {
+	var res dal.Shutdowns
 	var err error
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(html))
@@ -83,25 +77,50 @@ func parseShutdownsPage(html []byte) (models.ShutdownsTable, error) {
 	if err != nil || len(groups) == 0 {
 		return res, fmt.Errorf("failed o parse shutdowns groups: %w", err)
 	}
-	items := make([][]models.Status, len(groups))
+	items := make([][]dal.Status, len(groups))
 	for i, g := range groups {
 		items[i] = parseItems(gsv, g.Number)
 	}
 
-	res.Groups = make(map[string]models.ShutdownGroup, len(groups))
+	res.Groups = make(map[string]dal.ShutdownGroup, len(groups))
 	for i, g := range groups {
-		res.Groups[strconv.Itoa(g.Number)] = models.ShutdownGroup{
+		res.Groups[strconv.Itoa(g.Number)] = dal.ShutdownGroup{
 			Number: g.Number,
 			Items:  items[i],
 		}
 	}
 
-	return res, res.Validate()
+	return res, validateShutdowns(res)
 }
 
-func parseGroups(s *goquery.Selection) ([]models.ShutdownGroup, error) {
+func validateShutdowns(s dal.Shutdowns) error {
+	if s.Date == "" {
+		return fmt.Errorf("invalid shutdowns table date=%s", s.Date)
+	}
+	if len(s.Periods) == 0 {
+		return fmt.Errorf("shutdowns table periods list is empty")
+	}
+	for _, g := range s.Groups {
+		if err := validateShutdownGroup(g, len(s.Periods)); err != nil {
+			return fmt.Errorf("invalid shutdowns table group=%v: %w", g, err)
+		}
+	}
+	return nil
+}
+
+func validateShutdownGroup(g dal.ShutdownGroup, expectedItemsNum int) error {
+	if g.Number < 1 {
+		return fmt.Errorf("invalid shutdown group number=%d", g.Number)
+	}
+	if len(g.Items) != expectedItemsNum {
+		return fmt.Errorf("invalid shutdown group items size; expected=%d but actual=%d", expectedItemsNum, len(g.Items))
+	}
+	return nil
+}
+
+func parseGroups(s *goquery.Selection) ([]dal.ShutdownGroup, error) {
 	var err error
-	groups := make([]models.ShutdownGroup, 0)
+	groups := make([]dal.ShutdownGroup, 0)
 
 	s.Find("ul > li").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		val, exists := s.Attr("data-id")
@@ -115,7 +134,7 @@ func parseGroups(s *goquery.Selection) ([]models.ShutdownGroup, error) {
 			err = fmt.Errorf("failed o parse shutdown group number=%s on li node=%d: %w", val, i, sErr)
 			return false
 		}
-		groups = append(groups, models.ShutdownGroup{
+		groups = append(groups, dal.ShutdownGroup{
 			Number: groupNum,
 		})
 
@@ -125,7 +144,7 @@ func parseGroups(s *goquery.Selection) ([]models.ShutdownGroup, error) {
 	return groups, err
 }
 
-func parsePeriods(s *goquery.Selection) ([]models.Period, error) {
+func parsePeriods(s *goquery.Selection) ([]dal.Period, error) {
 	var err error
 
 	row := s.Find("div > p").First()
@@ -153,9 +172,9 @@ func parsePeriods(s *goquery.Selection) ([]models.Period, error) {
 		return false
 	})
 
-	periods := make([]models.Period, len(hours)-1)
+	periods := make([]dal.Period, len(hours)-1)
 	for i := 0; i < len(periods); i++ {
-		periods[i] = models.Period{
+		periods[i] = dal.Period{
 			From: hours[i],
 			To:   hours[i+1],
 		}
@@ -164,8 +183,8 @@ func parsePeriods(s *goquery.Selection) ([]models.Period, error) {
 	return periods, err
 }
 
-func parseItems(gsv *goquery.Selection, groupNum int) []models.Status {
-	items := make([]models.Status, 0)
+func parseItems(gsv *goquery.Selection, groupNum int) []dal.Status {
+	items := make([]dal.Status, 0)
 
 	node := gsv.Find(fmt.Sprintf("div[data-id='%d']", groupNum)).First()
 	for _, sn := range node.Children().Nodes {
@@ -173,14 +192,14 @@ func parseItems(gsv *goquery.Selection, groupNum int) []models.Status {
 			continue
 		}
 
-		var status models.Status
+		var status dal.Status
 		switch strings.ToLower(goquery.NewDocumentFromNode(sn).Text()) {
 		case "в":
-			status = models.OFF
+			status = dal.OFF
 		case "з":
-			status = models.ON
+			status = dal.ON
 		default:
-			status = models.MAYBE
+			status = dal.MAYBE
 		}
 		items = append(items, status)
 	}

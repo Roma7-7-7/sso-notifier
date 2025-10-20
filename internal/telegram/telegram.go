@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,13 +9,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	tb "gopkg.in/telebot.v3"
-
-	"github.com/Roma7-7-7/sso-notifier/models"
 )
 
+const GroupsCount = 12
+
 type MessageSender interface {
-	Send(chatID int64, msg string) error
+	SendMessage(ctx context.Context, chatID, msg string) error
 }
 
 type MessageSenderSetter interface {
@@ -22,10 +24,9 @@ type MessageSenderSetter interface {
 }
 
 type SubscriptionService interface {
-	GroupsCount() int
 	IsSubscribed(chatID int64) (bool, error)
-	GetSubscriptions() ([]models.Subscription, error)
-	SubscribeToGroup(chatID int64, number string) (models.Subscription, error)
+	GetSubscriptions() ([]dal.Subscription, error)
+	SubscribeToGroup(chatID int64, number string) (dal.Subscription, error)
 	Unsubscribe(chatID int64) error
 }
 
@@ -83,10 +84,7 @@ func (b *SSOBot) ChooseGroupHandler(c tb.Context) error {
 func (b *SSOBot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		_, err := b.subscriptionService.SubscribeToGroup(c.Sender().ID, groupNumber)
-		if errors.Is(err, models.ErrSubscriptionsLimitReached) {
-			slog.Warn("failed to subscribe", "error", err, "groupNum", groupNumber)
-			return c.Send("Кількість підписок досягла межі. Будь ласка, спробуйте пізніше.")
-		} else if err != nil {
+		if err != nil {
 			slog.Error("failed to subscribe", "error", err, "groupNum", groupNumber)
 			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше.")
 		}
@@ -117,7 +115,7 @@ func (bb *SSOBotBuilder) Sender(handler BlockedByUserHandler) MessageSender {
 func (bb *SSOBotBuilder) Build(subscriptionService SubscriptionService) *SSOBot {
 	return &SSOBot{
 		bot:     bb.bot,
-		markups: newMarkups(subscriptionService.GroupsCount()),
+		markups: newMarkups(GroupsCount),
 
 		subscriptionService: subscriptionService,
 	}
@@ -254,8 +252,13 @@ type messageSender struct {
 	blockedHandler BlockedByUserHandler
 }
 
-func (s *messageSender) Send(chatID int64, msg string) error {
-	_, err := s.bot.Send(tb.ChatID(chatID), msg)
+func (s *messageSender) SendMessage(_ context.Context, chatIDStr string, msg string) error {
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID: %s", chatIDStr)
+	}
+
+	_, err = s.bot.Send(tb.ChatID(chatID), msg)
 	if errors.Is(err, tb.ErrBlockedByUser) {
 		slog.Debug("bot is banned, removing subscriber and all related data", "chatID", chatID)
 		s.blockedHandler(chatID)
