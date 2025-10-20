@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
+
 	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -18,28 +20,41 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
 
-const refreshTableInterval = 5 * time.Minute
-const notifyUpdatesInterval = time.Minute
+type Config struct {
+	Dev                      bool          `envconfig:"DEV" default:"false"`
+	GroupsCount              int           `envconfig:"GROUPS_COUNT" default:"12"`
+	DBPath                   string        `envconfig:"DB_PATH" default:"data/sso-notifier.db"`
+	RefreshShutdownsInterval time.Duration `envconfig:"REFRESH_SHUTDOWNS_INTERVAL" default:"5m"`
+	NotifyInterval           time.Duration `envconfig:"NOTIFY_INTERVAL" default:"5m"`
+	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN" required:"true"`
+}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	log := mustLogger(os.Getenv("ENV") == "dev")
+	conf := &Config{}
+	err := envconfig.Process("", conf)
+	if err != nil {
+		slog.Error("Failed to process env vars", "error", err)
+		os.Exit(1)
+	}
 
-	store, err := dal.NewBoltDB("data/app.db")
+	log := mustLogger(conf.Dev)
+
+	store, err := dal.NewBoltDB(conf.DBPath)
 	if err != nil {
 		log.Error("Failed to open database", err)
 		os.Exit(1)
 	}
 	defer store.Close()
 
-	sender := tc.NewClient(http.DefaultClient, os.Getenv("TOKEN"))
+	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	shutdownsSvc := service.NewShutdowns(store, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, sender, log)
 
-	bot, err := telegram.NewBot(os.Getenv("TOKEN"), subscriptionsSvc, log)
+	bot, err := telegram.NewBot(conf.TelegramToken, subscriptionsSvc, conf.GroupsCount, log)
 	if err != nil {
 		log.Error("Failed to create telegram bot", err)
 		os.Exit(1)
@@ -49,12 +64,12 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		refreshShutdowns(ctx, shutdownsSvc, log.With("component", "schedule").With("action", "refresh"))
+		refreshShutdowns(ctx, shutdownsSvc, conf.RefreshShutdownsInterval, log.With("component", "schedule").With("action", "refresh"))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		notifyShutdownUpdates(ctx, notificationsSvc, log.With("component", "schedule").With("action", "notify"))
+		notifyShutdownUpdates(ctx, notificationsSvc, conf.NotifyInterval, log.With("component", "schedule").With("action", "notify"))
 	}()
 
 	log.Info("Starting bot")
@@ -69,7 +84,7 @@ func main() {
 	log.Info("Stopped bot")
 }
 
-func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Logger) {
+func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, delay time.Duration, log *slog.Logger) {
 	defer func() {
 		log.InfoContext(ctx, "Stopped refresh shutdowns schedule")
 	}()
@@ -79,7 +94,7 @@ func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Log
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(refreshTableInterval):
+		case <-time.After(delay):
 			err := svc.Refresh(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
@@ -96,7 +111,7 @@ func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, log *slog.Log
 	}
 }
 
-func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log *slog.Logger) {
+func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, delay time.Duration, log *slog.Logger) {
 	defer func() {
 		log.InfoContext(ctx, "Stopped notify shutdown updates schedule")
 	}()
@@ -106,7 +121,7 @@ func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, log 
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(notifyUpdatesInterval):
+		case <-time.After(delay):
 			err := svc.NotifyShutdownUpdates(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
