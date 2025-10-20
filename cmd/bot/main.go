@@ -31,21 +31,27 @@ type Config struct {
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	if status := run(ctx); status > 0 {
+		cancel()
+		os.Exit(status)
+	}
+	cancel()
+}
 
+func run(ctx context.Context) int {
 	conf := &Config{}
 	err := envconfig.Process("", conf)
 	if err != nil {
-		slog.Error("Failed to process env vars", "error", err)
-		os.Exit(1)
+		slog.ErrorContext(ctx, "Failed to process env vars", "error", err) //nolint:sloglint // not initialized yet
+		return 1
 	}
 
 	log := mustLogger(conf.Dev)
 
 	store, err := dal.NewBoltDB(conf.DBPath)
 	if err != nil {
-		log.Error("Failed to open database", err)
-		os.Exit(1)
+		log.ErrorContext(ctx, "Failed to open database", "error", err)
+		return 1
 	}
 	defer store.Close()
 
@@ -56,8 +62,8 @@ func main() {
 
 	bot, err := telegram.NewBot(conf.TelegramToken, subscriptionsSvc, conf.GroupsCount, log)
 	if err != nil {
-		log.Error("Failed to create telegram bot", err)
-		os.Exit(1)
+		log.ErrorContext(ctx, "Failed to create telegram bot", "error", err)
+		return 1
 	}
 
 	wg := &sync.WaitGroup{}
@@ -72,16 +78,17 @@ func main() {
 		notifyShutdownUpdates(ctx, notificationsSvc, conf.NotifyInterval, log.With("component", "schedule").With("action", "notify"))
 	}()
 
-	log.Info("Starting bot")
+	log.InfoContext(ctx, "Starting bot")
 	err = bot.Start(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			log.Error("Failed to start bot", err)
+			log.ErrorContext(ctx, "Failed to start bot", "error", err)
 		}
 	}
 
 	wg.Wait()
-	log.Info("Stopped bot")
+	log.InfoContext(ctx, "Stopped bot")
+	return 0
 }
 
 func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, delay time.Duration, log *slog.Logger) {

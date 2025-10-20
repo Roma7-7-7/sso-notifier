@@ -34,7 +34,7 @@ type Bot struct {
 func NewBot(token string, svc SubscriptionService, groupsCount int, log *slog.Logger) (*Bot, error) {
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  token,
-		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd
+		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd // it's ok
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot: %w", err)
