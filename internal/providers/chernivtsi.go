@@ -145,32 +145,47 @@ func parseGroups(s *goquery.Selection) ([]dal.ShutdownGroup, error) {
 }
 
 func parsePeriods(s *goquery.Selection) ([]dal.Period, error) {
-	var err error
-
 	row := s.Find("div > p").First()
 	if row == nil || row.Length() == 0 {
 		return nil, fmt.Errorf("failed o find shutdowns periods by [div p] selector")
 	}
+
 	hours := make([]string, 0)
-	row.Find("u").EachWithBreak(func(i int, s *goquery.Selection) bool {
-		val := s.Text()
-		// HH:mm
-		// nolint:gomnd
-		if len(val) == 5 {
-			hours = append(hours, val)
-			return true
-		}
 
-		// 23:0000:00
-		if len(val) == 10 && strings.HasSuffix(val, "00:00") {
-			hours = append(hours, val[:5])
-			hours = append(hours, "24:00")
-			return true
-		}
+	// The new structure has nested <u> tags:
+	// <u><b>HH<em>:00</em></b><u>HH<em>:30</em></u></u>
+	// Special case at the end: <u><b>23<em>:00</em></b><b>00<em>:00</em></b><u>23<em>:30</em></u></u>
+	// We need to extract both the hour mark (HH:00) and half-hour mark (HH:30)
+	row.Find("u").Each(func(i int, outer *goquery.Selection) {
+		// Check if this is a top-level <u> tag (contains <b> tag)
+		if outer.Find("b").Length() > 0 {
+			// Extract all <b> tags (normally one, but two in the last entry)
+			outer.Find("b").Each(func(j int, b *goquery.Selection) {
+				hourText := b.Text()
+				hours = append(hours, hourText)
+			})
 
-		err = fmt.Errorf("invalid shutdowns period=%s", val)
-		return false
+			// Extract half-hour mark from nested <u>HH<em>:30</em></u>
+			halfHourText := outer.Find("u").Text()
+			if halfHourText != "" {
+				hours = append(hours, halfHourText)
+			}
+		}
 	})
+
+	// Handle edge case: if we have "00:00" after "23:00" and "23:30", replace it with "24:00"
+	// The order should be: ...23:00, 00:00, 23:30 -> ...23:00, 23:30, 24:00
+	for i := 0; i < len(hours)-1; i++ {
+		if hours[i] == "23:00" && hours[i+1] == "00:00" && i+2 < len(hours) && hours[i+2] == "23:30" {
+			// Swap 00:00 and 23:30, then convert 00:00 to 24:00
+			hours[i+1], hours[i+2] = hours[i+2], "24:00"
+			break
+		}
+	}
+
+	if len(hours) < 2 {
+		return nil, fmt.Errorf("not enough time periods found: got %d", len(hours))
+	}
 
 	periods := make([]dal.Period, len(hours)-1)
 	for i := 0; i < len(periods); i++ {
@@ -180,7 +195,7 @@ func parsePeriods(s *goquery.Selection) ([]dal.Period, error) {
 		}
 	}
 
-	return periods, err
+	return periods, nil
 }
 
 func parseItems(gsv *goquery.Selection, groupNum int) []dal.Status {
