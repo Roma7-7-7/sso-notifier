@@ -11,23 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
-
 	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
-
-type Config struct {
-	Dev                      bool          `envconfig:"DEV" default:"false"`
-	GroupsCount              int           `envconfig:"GROUPS_COUNT" default:"12"`
-	DBPath                   string        `envconfig:"DB_PATH" default:"data/sso-notifier.db"`
-	RefreshShutdownsInterval time.Duration `envconfig:"REFRESH_SHUTDOWNS_INTERVAL" default:"5m"`
-	NotifyInterval           time.Duration `envconfig:"NOTIFY_INTERVAL" default:"5m"`
-	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN" required:"true"`
-}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -39,10 +28,9 @@ func main() {
 }
 
 func run(ctx context.Context) int {
-	conf := &Config{}
-	err := envconfig.Process("", conf)
+	conf, err := telegram.NewConfig(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to process env vars", "error", err) //nolint:sloglint // not initialized yet
+		slog.ErrorContext(ctx, "Failed to create configuration", "error", err)
 		return 1
 	}
 
@@ -60,7 +48,7 @@ func run(ctx context.Context) int {
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, sender, log)
 
-	bot, err := telegram.NewBot(conf.TelegramToken, subscriptionsSvc, conf.GroupsCount, log)
+	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to create telegram bot", "error", err)
 		return 1

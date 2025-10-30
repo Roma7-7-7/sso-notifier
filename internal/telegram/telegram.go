@@ -31,9 +31,9 @@ type Bot struct {
 	log *slog.Logger
 }
 
-func NewBot(token string, svc SubscriptionService, groupsCount int, log *slog.Logger) (*Bot, error) {
+func NewBot(config *Config, svc SubscriptionService, log *slog.Logger) (*Bot, error) {
 	bot, err := tb.NewBot(tb.Settings{
-		Token:  token,
+		Token:  config.TelegramToken,
 		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd // it's ok
 	})
 	if err != nil {
@@ -44,7 +44,7 @@ func NewBot(token string, svc SubscriptionService, groupsCount int, log *slog.Lo
 		bot: bot,
 
 		svc:     svc,
-		markups: newMarkups(groupsCount),
+		markups: newMarkups(config.GroupsCount),
 
 		log: log.With("component", "bot"),
 	}, nil
