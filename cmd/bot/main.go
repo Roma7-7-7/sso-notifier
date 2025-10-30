@@ -30,7 +30,7 @@ func main() {
 func run(ctx context.Context) int {
 	conf, err := telegram.NewConfig(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to create configuration", "error", err)
+		slog.ErrorContext(ctx, "Failed to create configuration", "error", err) //nolint:sloglint // not initialized yet
 		return 1
 	}
 

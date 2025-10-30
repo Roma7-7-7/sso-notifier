@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,7 +38,7 @@ func NewConfig(ctx context.Context) (*Config, error) {
 	}
 
 	if res.TelegramToken == "" {
-		return nil, fmt.Errorf("telegram token is required")
+		return nil, errors.New("telegram token is required")
 	}
 
 	return res, nil
@@ -58,7 +59,7 @@ func getSSMToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("get SSM token: %w", err)
 	}
 	if param.Parameter.Value == nil {
-		return "", fmt.Errorf("SSM Token not found")
+		return "", errors.New("SSM Token not found")
 	}
 
 	return *param.Parameter.Value, nil
