@@ -1,0 +1,43 @@
+[Unit]
+Description=SSO Notifier Telegram Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/sso-notifier
+
+# Environment configuration
+# Telegram token will be automatically fetched from SSM Parameter Store: /sso-notifier-bot/prod/telegram-token
+# Database path - customize if needed
+Environment="DB_PATH=/opt/sso-notifier/data/sso-notifier.db"
+
+# Optional: Uncomment and modify these to override defaults
+# Environment="GROUPS_COUNT=12"
+# Environment="REFRESH_SHUTDOWNS_INTERVAL=5m"
+# Environment="NOTIFY_INTERVAL=5m"
+# Environment="DEV=false"
+
+ExecStart=/opt/sso-notifier/bin/sso-notifier
+
+# Restart configuration
+Restart=always
+RestartSec=10s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sso-notifier
+
+# Resource limits
+MemoryLimit=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
