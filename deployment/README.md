@@ -280,12 +280,14 @@ Available variables:
 
 ### Cron Job Management
 
-```bash
-# View current cron jobs
-crontab -u ec2-user -l
+The deployment cron job runs under **root's crontab** (since deploy.sh requires sudo to restart services).
 
-# Edit cron jobs
-crontab -u ec2-user -e
+```bash
+# View current cron jobs (as root)
+sudo crontab -l
+
+# Edit cron jobs (as root)
+sudo crontab -e
 
 # Disable automated deployments (comment out the line)
 # 0 * * * * /opt/sso-notifier/deploy.sh >> /opt/sso-notifier/deployment.log 2>&1
@@ -382,8 +384,8 @@ sudo systemctl disable sso-notifier.service
 sudo rm /etc/systemd/system/sso-notifier.service
 sudo systemctl daemon-reload
 
-# Remove cron job
-crontab -u ec2-user -l | grep -v "sso-notifier" | crontab -u ec2-user -
+# Remove cron job (from root's crontab)
+sudo crontab -l | grep -v "sso-notifier" | sudo crontab -
 
 # Remove installation directory
 sudo rm -rf /opt/sso-notifier

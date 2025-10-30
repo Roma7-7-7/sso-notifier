@@ -73,11 +73,11 @@ echo ""
 echo -e "${GREEN}[6/7] Setting up automated deployment cron job...${NC}"
 
 # Check if cron job already exists
-if crontab -u ec2-user -l 2>/dev/null | grep -q "${INSTALL_DIR}/deploy.sh"; then
+if crontab -l 2>/dev/null | grep -q "${INSTALL_DIR}/deploy.sh"; then
     echo "Cron job already exists, skipping..."
 else
-    # Add cron job to check for updates every hour
-    (crontab -u ec2-user -l 2>/dev/null; echo "0 * * * * ${INSTALL_DIR}/deploy.sh >> ${INSTALL_DIR}/deployment.log 2>&1") | crontab -u ec2-user -
+    # Add cron job to check for updates every hour (runs as root since deploy.sh needs sudo)
+    (crontab -l 2>/dev/null; echo "0 * * * * ${INSTALL_DIR}/deploy.sh >> ${INSTALL_DIR}/deployment.log 2>&1") | crontab -
     echo "✓ Cron job added (runs hourly)"
 fi
 
