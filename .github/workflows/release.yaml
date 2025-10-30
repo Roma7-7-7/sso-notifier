@@ -1,0 +1,83 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/release.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+  build-and-release:
+    name: Build and Release Binaries
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "version=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+          echo "tag=v$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: make ci-build VERSION=${{ steps.version.outputs.version }} BUILD_TIME=${{ steps.version.outputs.timestamp }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body: |
+            Automated release from commit ${{ github.sha }}
+
+            **Changes:**
+            ${{ github.event.head_commit.message }}
+
+            **Binary:**
+            - `sso-notifier` - Telegram bot for power outage notifications
+            - `VERSION` - Version information
+
+            **Deployment:**
+            Download the binary for your platform and run with required environment variables.
+            See README for configuration details.
+          files: |
+            bin/sso-notifier
+            bin/VERSION
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
