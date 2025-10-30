@@ -10,6 +10,9 @@ Group=ec2-user
 WorkingDirectory=/opt/sso-notifier
 
 # Environment configuration
+# AWS region for SSM Parameter Store
+Environment="AWS_REGION=eu-central-1"
+
 # Telegram token will be automatically fetched from SSM Parameter Store: /sso-notifier-bot/prod/telegram-token
 # Database path - customize if needed
 Environment="DB_PATH=/opt/sso-notifier/data/sso-notifier.db"
@@ -36,7 +39,7 @@ StandardError=journal
 SyslogIdentifier=sso-notifier
 
 # Resource limits
-MemoryLimit=256M
+MemoryMax=256M
 CPUQuota=50%
 
 [Install]
