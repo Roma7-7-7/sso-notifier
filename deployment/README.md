@@ -81,13 +81,15 @@ The deployment setup provides:
 
 3. **SSM Parameter Store**
    ```bash
-   # Create the Telegram bot token parameter
+   # Create the Telegram bot token parameter in eu-central-1
    aws ssm put-parameter \
      --name "/sso-notifier-bot/prod/telegram-token" \
      --value "YOUR_TELEGRAM_BOT_TOKEN_FROM_BOTFATHER" \
      --type "SecureString" \
-     --region us-east-1
+     --region eu-central-1
    ```
+
+   **Note:** The region is configured in the systemd service file. If using a different region, update the `AWS_REGION` environment variable in `/etc/systemd/system/sso-notifier.service`.
 
 ## Initial Setup
 
@@ -234,6 +236,7 @@ Available variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `AWS_REGION` | `eu-central-1` | AWS region for SSM Parameter Store |
 | `TELEGRAM_TOKEN` | *(from SSM)* | Telegram bot token (automatically fetched from SSM) |
 | `DB_PATH` | `/opt/sso-notifier/data/sso-notifier.db` | Database file path |
 | `GROUPS_COUNT` | `12` | Number of power outage groups |
@@ -348,7 +351,7 @@ fi
    aws ssm get-parameter \
      --name "/sso-notifier-bot/prod/telegram-token" \
      --with-decryption \
-     --region us-east-1
+     --region eu-central-1
    ```
 
 2. Verify IAM role is attached to EC2 instance:
@@ -388,7 +391,7 @@ sudo rm -rf /opt/sso-notifier
 # Remove SSM parameter
 aws ssm delete-parameter \
   --name "/sso-notifier-bot/prod/telegram-token" \
-  --region us-east-1
+  --region eu-central-1
 ```
 
 ## Support
