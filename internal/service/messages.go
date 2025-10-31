@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -40,7 +42,21 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 
 	groupSchedules := make([]GroupSchedule, 0)
 
-	for groupNum, hash := range sub.Groups {
+	// Collect and sort group numbers to ensure deterministic order
+	groupNums := make([]string, 0, len(sub.Groups))
+	for groupNum := range sub.Groups {
+		groupNums = append(groupNums, groupNum)
+	}
+
+	// Sort numerically (e.g., "1", "2", "11" -> 1, 2, 11 not "1", "11", "2")
+	sort.Slice(groupNums, func(i, j int) bool {
+		numI, _ := strconv.Atoi(groupNums[i])
+		numJ, _ := strconv.Atoi(groupNums[j])
+		return numI < numJ
+	})
+
+	for _, groupNum := range groupNums {
+		hash := sub.Groups[groupNum]
 		group, ok := mb.shutdowns.Groups[groupNum]
 		if !ok {
 			continue
