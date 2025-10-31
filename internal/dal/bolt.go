@@ -155,7 +155,7 @@ func (s *BoltDB) GetAllSubscriptions() ([]Subscription, error) {
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			var sub Subscription
 			if err := json.Unmarshal(v, &sub); err != nil {
-				return fmt.Errorf("failed to unmarshal subscription: %w", err)
+				return fmt.Errorf("unmarshal subscription: %w", err)
 			}
 			res = append(res, sub)
 		}
@@ -173,10 +173,10 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 		id := i64tob(sub.ChatID)
 		data, err := json.Marshal(&sub)
 		if err != nil {
-			return fmt.Errorf("failed to marshal subscription for chatID=%d: %w", sub.ChatID, err)
+			return fmt.Errorf("marshal subscription for chatID=%d: %w", sub.ChatID, err)
 		}
 		if err := b.Put(id, data); err != nil {
-			return fmt.Errorf("failed to put subscription for chatID=%d: %w", sub.ChatID, err)
+			return fmt.Errorf("put subscription for chatID=%d: %w", sub.ChatID, err)
 		}
 
 		return nil
@@ -190,7 +190,7 @@ func (s *BoltDB) PurgeSubscriptions(chatID int64) error {
 		b := tx.Bucket([]byte(subscriptionsBucket))
 
 		if err := b.Delete(i64tob(chatID)); err != nil {
-			return fmt.Errorf("failed to delete subscriber with id=%d: %w", chatID, err)
+			return fmt.Errorf("delete subscriber with id=%d: %w", chatID, err)
 		}
 
 		return nil
