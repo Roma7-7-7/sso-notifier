@@ -221,22 +221,42 @@ Before: [00:00-00:30 OFF, 00:30-01:00 OFF, 01:00-01:30 OFF]
 After:  [00:00-01:30 OFF]
 ```
 
-**Message Templates** (lines 172-183):
+**Message Templates** (messages.go:164-174):
+
+> **IMPORTANT:** If you change the template or rendering logic in `messages.go`, you MUST also update:
+> - `internal/service/TEMPLATES.md` - Update all examples
+> - This section in CLAUDE.md
+
+Current template structure (supports multiple dates and groups):
 
 ```go
-messageTemplate = `
-Графік стабілізаційних відключень на {{.Date}}:
+messageTemplate = `Графік стабілізаційних відключень:
+{{range .Dates}}
+📅 {{.Date}}:
+{{range .Groups}}Група {{.GroupNum}}:
+{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
+{{end}}{{end}}
+{{end}}{{end}}`
 
-{{range .Msgs}} {{.}}
-{{end}}
-`
-
-groupMessageTemplate = `Група {{.GroupNum}}:
-  🟢 Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
-  🟡 Можливо заживлено: {{range .Maybe}} {{.From}} - {{.To}}; {{end}}
-  🔴 Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
-`
+// Status line configuration (messages.go:185-189):
+statusLines := []StatusLine{
+    {Emoji: "🟢", Label: "Заживлено", Periods: grouped[dal.ON]},
+    {Emoji: "🟡", Label: "Можливо заживлено", Periods: grouped[dal.MAYBE]},
+    {Emoji: "🔴", Label: "Відключено", Periods: grouped[dal.OFF]},
+}
 ```
+
+Example output:
+```
+Графік стабілізаційних відключень:
+
+📅 20 жовтня:
+Група 5:
+  🟢 Заживлено:  14:00 - 18:00; 20:00 - 24:00;
+  🔴 Відключено:  18:00 - 20:00;
+```
+
+See `internal/service/TEMPLATES.md` for detailed documentation on the template system.
 
 ### `/internal/service/subscriptions.go`
 
