@@ -12,8 +12,10 @@ import (
 	"time"
 
 	tc "github.com/Roma7-7-7/telegram"
+	"go.etcd.io/bbolt"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
@@ -42,12 +44,24 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	store, err := dal.NewBoltDB(conf.DBPath)
+	db, err := bbolt.Open(conf.DBPath, 0600, nil) //nolint:mnd // read_write
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to open database", "error", err)
+		return 1
+	}
+
+	store, err := dal.NewBoltDB(db)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
 		return 1
 	}
 	defer store.Close()
+
+	log.InfoContext(ctx, "Running database migrations")
+	if err := migrations.RunMigrations(db, log); err != nil {
+		log.ErrorContext(ctx, "Failed to run database migrations", "error", err)
+		return 1
+	}
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	shutdownsSvc := service.NewShutdowns(store, loc, log)
