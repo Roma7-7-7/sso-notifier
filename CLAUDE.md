@@ -426,14 +426,14 @@ internal/dal/migrations/
 ├── README.md           # Latest DB schema + migration system overview
 ├── migrations.go       # Core migration runner and interfaces
 ├── v1/
-│   ├── README.md      # What v1 does (bootstrap)
+│   ├── README.md      # Bootstrap migration docs
 │   └── migration.go   # Creates migrations bucket
 ├── v2/
-│   ├── README.md      # Description of v2 changes
-│   └── migration.go   # Example: Add CreatedAt to subscriptions
+│   ├── README.md      # v2 migration docs
+│   └── migration.go   # Creates shutdowns and subscriptions buckets
 └── v3/
-    ├── README.md      # Description of v3 changes
-    └── migration.go   # Future migrations...
+    ├── README.md      # v3 migration docs
+    └── migration.go   # Adds CreatedAt to subscriptions (not yet enabled)
 ```
 
 ### Migration Storage
@@ -501,11 +501,11 @@ type Migration interface {
 
 ### Example Migration Structure
 
-**Scenario:** Add `CreatedAt` timestamp to subscriptions
+**Scenario:** Add `CreatedAt` timestamp to subscriptions (v3 migration)
 
 ```go
-// internal/dal/migrations/v2/migration.go
-package v2
+// internal/dal/migrations/v3/migration.go
+package v3
 
 import (
     "encoding/json"
@@ -514,34 +514,34 @@ import (
     "go.etcd.io/bbolt"
 )
 
-// SubscriptionV1 is the OLD structure (copy-pasted from dal at time of v1)
-type SubscriptionV1 struct {
+// SubscriptionV2 is the OLD structure (copy-pasted from dal at time of v2)
+type SubscriptionV2 struct {
     ChatID int64             `json:"chat_id"`
     Groups map[string]string `json:"groups"`
 }
 
-// SubscriptionV2 is the NEW structure
-type SubscriptionV2 struct {
+// SubscriptionV3 is the NEW structure
+type SubscriptionV3 struct {
     ChatID    int64             `json:"chat_id"`
     Groups    map[string]string `json:"groups"`
     CreatedAt time.Time         `json:"created_at"`
 }
 
-type MigrationV2 struct{}
+type MigrationV3 struct{}
 
-func (m *MigrationV2) Version() int {
-    return 2
+func (m *MigrationV3) Version() int {
+    return 3
 }
 
-func (m *MigrationV2) Description() string {
+func (m *MigrationV3) Description() string {
     return "Add CreatedAt timestamp to subscriptions"
 }
 
-func (m *MigrationV2) Up(db *bbolt.DB) error {
+func (m *MigrationV3) Up(db *bbolt.DB) error {
     return db.Update(func(tx *bbolt.Tx) error {
         b := tx.Bucket([]byte("subscriptions"))
         if b == nil {
-            return fmt.Errorf("subscriptions bucket not found")
+            return nil // No subscriptions to migrate
         }
 
         c := b.Cursor()
@@ -549,13 +549,13 @@ func (m *MigrationV2) Up(db *bbolt.DB) error {
 
         for k, v := c.First(); k != nil; k, v = c.Next() {
             // Unmarshal old structure
-            var oldSub SubscriptionV1
+            var oldSub SubscriptionV2
             if err := json.Unmarshal(v, &oldSub); err != nil {
                 return fmt.Errorf("unmarshal old subscription: %w", err)
             }
 
             // Transform to new structure
-            newSub := SubscriptionV2{
+            newSub := SubscriptionV3{
                 ChatID:    oldSub.ChatID,
                 Groups:    oldSub.Groups,
                 CreatedAt: now, // Set to migration time

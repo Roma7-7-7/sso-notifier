@@ -8,9 +8,9 @@ The migration system manages schema changes to the BoltDB database in a versione
 
 ## Current Database Schema
 
-### Latest Schema Version: v2 (production-ready)
+### Latest Schema Version: v2 (active in production)
 
-**Note:** v3 is an example migration showing how to add fields. It is commented out.
+**Note:** v3 is prepared but not yet enabled. It will be activated in a future release.
 
 ### Buckets
 
@@ -147,9 +147,9 @@ Continue with application startup
 
 | Version | Description | Status | Date Applied |
 |---------|-------------|--------|--------------|
-| v1 | Bootstrap migration system | ✅ Production | 2025-10-31 |
-| v2 | Create shutdowns and subscriptions buckets | ✅ Production | 2025-10-31 |
-| v3 | Add CreatedAt to subscriptions | ⏸️ Example (commented) | Not applied |
+| v1 | Bootstrap migration system | ✅ Active | 2025-10-31 |
+| v2 | Create shutdowns and subscriptions buckets | ✅ Active | 2025-10-31 |
+| v3 | Add CreatedAt to subscriptions | ⏸️ Prepared | Not yet enabled |
 
 ## How to Create a New Migration
 
@@ -390,10 +390,10 @@ go test ./internal/dal/migrations -integration
 - Moved bucket creation from NewBoltDB to migrations
 - Status: ✅ Deployed
 
-### v3 - Example Migration (2025-10-31)
-- Adds CreatedAt field to Subscription
-- Purpose: Example/reference implementation
-- Status: ⏸️ Example only, not deployed
+### v3 - Add CreatedAt to Subscriptions (2025-10-31)
+- Adds CreatedAt timestamp field to Subscription
+- Enables user acquisition analytics
+- Status: ⏸️ Prepared, not yet enabled
 
 ## Resources
 
@@ -413,5 +413,5 @@ If you encounter issues with migrations:
 ---
 
 **Last Updated:** 2025-10-31
-**Schema Version:** v2 (production), v3 (example)
+**Schema Version:** v2 (active), v3 (prepared)
 **Maintainer:** @rsav

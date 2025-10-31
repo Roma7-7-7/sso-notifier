@@ -11,7 +11,7 @@ This migration adds a `CreatedAt` timestamp field to all user subscriptions. Thi
 - Allow filtering/sorting subscriptions by creation date
 - Provide audit trail for subscription creation
 
-**Note:** This is an example migration demonstrating how to add a new field to an existing structure. Currently commented out - enable when this feature is needed.
+**Status:** Prepared but not yet enabled. Will be activated in a future PR.
 
 ## Schema Changes
 
@@ -195,6 +195,6 @@ Migration is considered successful when:
 
 ---
 
-**Status:** ⏸️ Example - Commented Out
-**Enable When:** CreatedAt analytics feature is needed
+**Status:** ⏸️ Prepared - Not Yet Enabled
 **Dependencies:** v1 and v2 must be applied first
+**Activation:** Uncomment in migrations.go when ready to deploy
