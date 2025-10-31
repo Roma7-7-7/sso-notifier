@@ -12,20 +12,22 @@ import (
 )
 
 type ShutdownsStore interface {
-	GetShutdowns() (dal.Shutdowns, bool, error)
-	PutShutdowns(s dal.Shutdowns) error
+	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)
+	PutShutdowns(d dal.Date, s dal.Shutdowns) error
 }
 
 type Shutdowns struct {
 	store ShutdownsStore
 
+	loc *time.Location
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewShutdowns(store ShutdownsStore, log *slog.Logger) *Shutdowns {
+func NewShutdowns(store ShutdownsStore, loc *time.Location, log *slog.Logger) *Shutdowns {
 	return &Shutdowns{
 		store: store,
+		loc:   loc,
 		log:   log.With("component", "service").With("service", "shutdowns"),
 		mx:    &sync.Mutex{},
 	}
@@ -43,7 +45,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get chernivtsi shutdowns: %w", err)
 	}
-	if err = s.store.PutShutdowns(table); err != nil {
+	if err = s.store.PutShutdowns(dal.TodayDate(s.loc), table); err != nil {
 		return fmt.Errorf("put shutdowns: %w", err)
 	}
 

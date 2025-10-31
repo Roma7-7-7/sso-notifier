@@ -36,6 +36,12 @@ func run(ctx context.Context) int {
 
 	log := mustLogger(conf.Dev)
 
+	loc, err := time.LoadLocation("Europe/Kyiv")
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to load timezone", "error", err)
+		return 1
+	}
+
 	store, err := dal.NewBoltDB(conf.DBPath)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
@@ -44,9 +50,9 @@ func run(ctx context.Context) int {
 	defer store.Close()
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
-	shutdownsSvc := service.NewShutdowns(store, log)
+	shutdownsSvc := service.NewShutdowns(store, loc, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
-	notificationsSvc := service.NewNotifications(store, store, sender, log)
+	notificationsSvc := service.NewNotifications(store, store, sender, loc, log)
 
 	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
 	if err != nil {
