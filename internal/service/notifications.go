@@ -22,24 +22,18 @@ type Notifications struct {
 	subscriptions SubscriptionsStore
 	telegram      TelegramClient
 
-	kyivLocation *time.Location
-
+	loc *time.Location
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewNotifications(shutdowns ShutdownsStore, subscriptions SubscriptionsStore, telegram TelegramClient, log *slog.Logger) *Notifications {
-	loc, err := time.LoadLocation("Europe/Kyiv")
-	if err != nil {
-		panic(fmt.Sprintf("could not load time location: %v", err))
-	}
-
+func NewNotifications(shutdowns ShutdownsStore, subscriptions SubscriptionsStore, telegram TelegramClient, loc *time.Location, log *slog.Logger) *Notifications {
 	return &Notifications{
 		shutdowns:     shutdowns,
 		subscriptions: subscriptions,
 		telegram:      telegram,
 
-		kyivLocation: loc,
+		loc: loc,
 
 		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
@@ -51,7 +45,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
-	table, ok, err := s.shutdowns.GetShutdowns()
+	table, ok, err := s.shutdowns.GetShutdowns(dal.TodayDate(s.loc))
 	if err != nil {
 		return fmt.Errorf("getting shutdowns table: %w", err)
 	}
@@ -91,7 +85,7 @@ func (s *Notifications) processSubscription(ctx context.Context, sub dal.Subscri
 		}
 
 		gropuedPeriod, groupedStatuses := join(table.Periods, grouped[groupNum].Items)
-		cutPeriod, cutStatuses := cutByKyivTime(s.kyivLocation, gropuedPeriod, groupedStatuses)
+		cutPeriod, cutStatuses := cutByKyivTime(s.loc, gropuedPeriod, groupedStatuses)
 		msg, err := renderGroup(groupNum, cutPeriod, cutStatuses)
 		if err != nil {
 			log.ErrorContext(ctx, "failed to render group message", "group", groupNum, "error", err)
