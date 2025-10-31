@@ -857,6 +857,24 @@ make build
 ENV=dev TOKEN=your_token ./bin/sso-notifier
 ```
 
+### Linting
+
+**IMPORTANT**: When making code changes, only lint the files you've modified, not the entire codebase.
+
+```bash
+# Lint only changed files (recommended during development)
+make lint:changed
+
+# Lint entire codebase (use sparingly, only when fixing all issues)
+make lint
+```
+
+**Best Practice for AI Assistants:**
+- After modifying code, run `make lint:changed` to check only your changes
+- Do NOT run `make lint` or fix linting issues in files you didn't modify
+- Only address linting issues in code you've actually changed
+- This prevents scope creep and keeps changes focused
+
 ### Dependencies
 
 All vendored (no network required for builds):

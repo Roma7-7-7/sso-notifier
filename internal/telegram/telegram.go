@@ -79,16 +79,16 @@ func (b *Bot) Start(ctx context.Context) error {
 
 func (b *Bot) StartHandler(c tb.Context) error {
 	chatID := c.Sender().ID
-	markup := b.markups.main.unsubscribed.ReplyMarkup
 
 	subscribed, err := b.svc.IsSubscribed(chatID)
 	if err != nil {
 		b.log.Error("failed to check if user is subscribed",
 			"error", err,
 			"chatID", chatID)
-		return c.Send("Щось пішло не так. Будь ласка, спробуйте пізніше.")
+		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 	}
 
+	markup := b.markups.main.unsubscribed.ReplyMarkup
 	if subscribed {
 		markup = b.markups.main.subscribed.ReplyMarkup
 	}
@@ -96,31 +96,33 @@ func (b *Bot) StartHandler(c tb.Context) error {
 	b.log.Debug("start handler called",
 		"chatID", chatID,
 		"subscribed", subscribed)
-	return c.Send("Привіт! Бажаєте підписатись на оновлення графіку відключень?", markup)
+
+	return b.sendOrDelete(c, "Привіт! Бажаєте підписатись на оновлення графіку відключень?", markup)
 }
 
 func (b *Bot) ChooseGroupHandler(c tb.Context) error {
 	b.log.Debug("choose group handler called", "chatID", c.Sender().ID)
-	return c.Send("Оберіть групу", b.markups.groups.ReplyMarkup)
+	return b.sendOrDelete(c, "Оберіть групу", b.markups.groups.ReplyMarkup)
 }
 
 func (b *Bot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		chatID := c.Sender().ID
 
-		err := b.svc.SubscribeToGroup(chatID, groupNumber)
-		if err != nil {
+		if err := b.svc.SubscribeToGroup(chatID, groupNumber); err != nil {
 			b.log.Error("failed to subscribe",
 				"error", err,
 				"chatID", chatID,
 				"groupNum", groupNumber)
-			return c.Send("Не вдалось підписатись. Будь ласка, спробуйте пізніше.")
+			return b.sendOrDelete(c, "Не вдалось підписатись. Будь ласка, спробуйте пізніше.", nil)
 		}
 
 		b.log.Info("user subscribed to group",
 			"chatID", chatID,
 			"groupNum", groupNumber)
-		return c.Send(("Ви підписались на групу ")+groupNumber, b.markups.main.subscribed.ReplyMarkup)
+
+		message := fmt.Sprintf("Ви підписались на групу %s", groupNumber)
+		return b.sendOrDelete(c, message, b.markups.main.subscribed.ReplyMarkup)
 	}
 }
 
@@ -131,11 +133,28 @@ func (b *Bot) UnsubscribeHandler(c tb.Context) error {
 		b.log.Error("failed to unsubscribe",
 			"error", err,
 			"chatID", chatID)
-		return c.Send("Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
+		return b.sendOrDelete(c, "Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
 	}
 
 	b.log.Info("user unsubscribed", "chatID", chatID)
-	return c.Send("Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
+	return b.sendOrDelete(c, "Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
+}
+
+// sendOrDelete deletes the previous message for callbacks and sends a new one
+func (b *Bot) sendOrDelete(c tb.Context, text string, markup *tb.ReplyMarkup) error {
+	// Check if this is a callback query (button press)
+	if c.Callback() != nil {
+		// Delete the old message to keep chat clean
+		if err := c.Delete(); err != nil {
+			b.log.Warn("failed to delete message",
+				"error", err,
+				"chatID", c.Sender().ID,
+				"messageID", c.Message().ID)
+		}
+	}
+
+	// Send new message (for both callbacks and commands)
+	return c.Send(text, markup)
 }
 
 // registerButtonHandlers registers the same handler for multiple buttons
@@ -145,36 +164,42 @@ func (b *Bot) registerButtonHandlers(buttons []tb.Btn, handler tb.HandlerFunc) {
 	}
 }
 
-type BlockedByUserHandler func(chatID int64)
+type (
+	// subscribedMarkup contains the markup for subscribed users
+	subscribedMarkup struct {
+		*tb.ReplyMarkup
+		chooseOtherGroup tb.Btn
+		unsubscribe      tb.Btn
+	}
 
-type subscribedMarkup struct {
-	*tb.ReplyMarkup
-	chooseOtherGroup tb.Btn
-	unsubscribe      tb.Btn
-}
+	// unsubscribedMarkup contains the markup for unsubscribed users
+	unsubscribedMarkup struct {
+		*tb.ReplyMarkup
+		subscribe tb.Btn
+	}
 
-type unsubscribedMarkup struct {
-	*tb.ReplyMarkup
-	subscribe tb.Btn
-}
+	// mainMarkups holds both subscribed and unsubscribed markups
+	mainMarkups struct {
+		subscribed   subscribedMarkup
+		unsubscribed unsubscribedMarkup
+	}
 
-type mainMarkups struct {
-	subscribed   subscribedMarkup
-	unsubscribed unsubscribedMarkup
-}
+	// groupsMarkup contains the group selection markup
+	groupsMarkup struct {
+		*tb.ReplyMarkup
+		subscribeGroupBtns map[string]tb.Btn
+		backBtn            tb.Btn
+	}
 
-type groupsMarkup struct {
-	*tb.ReplyMarkup
-	subscribeGroupBtns map[string]tb.Btn
-	backBtn            tb.Btn
-}
-
-type markups struct {
-	main   mainMarkups
-	groups groupsMarkup
-}
+	// markups aggregates all keyboard markups used by the bot
+	markups struct {
+		main   mainMarkups
+		groups groupsMarkup
+	}
+)
 
 func newMarkups(subscriptionGroupsCount int) *markups {
+	// Create markup for subscribed users
 	mainSubscribed := &tb.ReplyMarkup{}
 	chooseOtherGroupBtn := mainSubscribed.Data("Обрати іншу групу", "choose_other_group")
 	unsubscribeBtn := mainSubscribed.Data("Відписатись", "unsubscribe")
@@ -183,27 +208,13 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 		mainSubscribed.Row(unsubscribeBtn),
 	)
 
+	// Create markup for unsubscribed users
 	mainUnsubscribed := &tb.ReplyMarkup{}
 	subscribeBtn := mainUnsubscribed.Data("Підписатись на оновлення", "subscribe")
 	mainUnsubscribed.Inline(mainUnsubscribed.Row(subscribeBtn))
 
-	gm := &tb.ReplyMarkup{}
-	const buttonsPerRow = 5
-	groupBtns := make(map[string]tb.Btn, subscriptionGroupsCount)
-	groupMarkupRows := make([]tb.Row, 0, subscriptionGroupsCount/buttonsPerRow+1)
-	for i := 0; i < subscriptionGroupsCount; i++ {
-		groupNum := strconv.Itoa(i + 1)
-		groupBtns[groupNum] = gm.Data(groupNum, "subscribe_group_"+groupNum)
-
-		rowIndex := i / buttonsPerRow
-		if len(groupMarkupRows) <= rowIndex {
-			groupMarkupRows = append(groupMarkupRows, tb.Row{})
-		}
-		groupMarkupRows[rowIndex] = append(groupMarkupRows[rowIndex], groupBtns[groupNum])
-	}
-	back := gm.Data("Назад", "back")
-	groupMarkupRows = append(groupMarkupRows, tb.Row{back})
-	gm.Inline(groupMarkupRows...)
+	// Create group selection markup
+	groupsMarkup := buildGroupsMarkup(subscriptionGroupsCount)
 
 	return &markups{
 		main: mainMarkups{
@@ -217,11 +228,51 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 				subscribe:   subscribeBtn,
 			},
 		},
-		groups: groupsMarkup{
-			ReplyMarkup:        gm,
-			subscribeGroupBtns: groupBtns,
-			backBtn:            back,
-		},
+		groups: groupsMarkup,
+	}
+}
+
+// buildGroupsMarkup creates the group selection keyboard with configurable number of groups
+func buildGroupsMarkup(groupsCount int) groupsMarkup {
+	const (
+		buttonsPerRow        = 5
+		additionalRowsBuffer = 2 // Buffer for potential partial row and back button
+	)
+
+	markup := &tb.ReplyMarkup{}
+	groupBtns := make(map[string]tb.Btn, groupsCount)
+	rows := make([]tb.Row, 0, groupsCount/buttonsPerRow+additionalRowsBuffer)
+
+	// Build group selection buttons
+	currentRow := tb.Row{}
+	for i := range groupsCount {
+		groupNum := strconv.Itoa(i + 1)
+		btn := markup.Data(groupNum, "subscribe_group_"+groupNum)
+		groupBtns[groupNum] = btn
+		currentRow = append(currentRow, btn)
+
+		// Create new row when we reach buttonsPerRow
+		if len(currentRow) == buttonsPerRow {
+			rows = append(rows, currentRow)
+			currentRow = tb.Row{}
+		}
+	}
+
+	// Add remaining buttons if any
+	if len(currentRow) > 0 {
+		rows = append(rows, currentRow)
+	}
+
+	// Add back button
+	backBtn := markup.Data("Назад", "back")
+	rows = append(rows, markup.Row(backBtn))
+
+	markup.Inline(rows...)
+
+	return groupsMarkup{
+		ReplyMarkup:        markup,
+		subscribeGroupBtns: groupBtns,
+		backBtn:            backBtn,
 	}
 }
 
