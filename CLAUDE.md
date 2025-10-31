@@ -409,6 +409,278 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 }
 ```
 
+## Database Migrations
+
+The codebase uses a custom migration system for managing BoltDB schema changes.
+
+### Migration System Architecture
+
+**Location:** `internal/dal/migrations/`
+
+**Key Principle:** Migrations are completely independent from the `dal` package. They work directly with raw `*bbolt.DB` and contain their own type definitions.
+
+### Package Structure
+
+```
+internal/dal/migrations/
+├── README.md           # Latest DB schema + migration system overview
+├── migrations.go       # Core migration runner and interfaces
+├── v1/
+│   ├── README.md      # What v1 does (bootstrap)
+│   └── migration.go   # Creates migrations bucket
+├── v2/
+│   ├── README.md      # Description of v2 changes
+│   └── migration.go   # Example: Add CreatedAt to subscriptions
+└── v3/
+    ├── README.md      # Description of v3 changes
+    └── migration.go   # Future migrations...
+```
+
+### Migration Storage
+
+Migrations are tracked in BoltDB itself:
+
+- **Bucket:** `migrations`
+- **Key Format:** `"v1"`, `"v2"`, `"v3"`, etc.
+- **Value Format:** ISO 8601 timestamp (RFC3339) of when migration was applied
+- **Example:** Key: `"v3"`, Value: `"2025-10-31T14:23:45Z"`
+
+### Migration Interface
+
+```go
+type Migration interface {
+    // Version returns migration version (1, 2, 3, etc.)
+    Version() int
+
+    // Description returns human-readable description
+    Description() string
+
+    // Up performs the migration
+    Up(db *bbolt.DB) error
+}
+```
+
+### Migration Execution Flow
+
+1. Open/create `migrations` bucket in BoltDB
+2. Load all registered migrations
+3. Read applied migrations from DB
+4. Filter out already-applied migrations
+5. Sort remaining by version (ascending)
+6. Execute each migration sequentially
+7. Record execution timestamp after successful completion
+8. Fail fast if any migration errors
+
+### Creating a New Migration
+
+**CRITICAL RULES:**
+
+1. **Never import from `internal/dal`** - Migrations must be self-contained
+2. **Copy-paste old types** - Include both old and new structures in migration code
+3. **Write README first** - Document what changes and why
+4. **Test on production data copy** - Never test migrations on live DB
+5. **Never modify existing migrations** - Once deployed, migrations are immutable
+
+**Step-by-Step Checklist:**
+
+- [ ] Create `internal/dal/migrations/vN/` directory (N = next version)
+- [ ] Copy old type definitions from `dal/bolt.go` to `vN/migration.go`
+- [ ] Define new type structures in `vN/migration.go`
+- [ ] Implement `Migration` interface with transformation logic
+- [ ] Write `vN/README.md` with:
+  - Date
+  - Description of what changed and why
+  - Schema before/after
+  - Data transformation details
+  - Rollback strategy (or "not possible")
+- [ ] Update core `migrations/README.md` with latest schema
+- [ ] Test migration on copy of production DB
+- [ ] Verify idempotency (running twice doesn't break)
+- [ ] Update `dal/bolt.go` types (after migration is tested)
+- [ ] Register migration in `migrations.go`
+
+### Example Migration Structure
+
+**Scenario:** Add `CreatedAt` timestamp to subscriptions
+
+```go
+// internal/dal/migrations/v2/migration.go
+package v2
+
+import (
+    "encoding/json"
+    "fmt"
+    "time"
+    "go.etcd.io/bbolt"
+)
+
+// SubscriptionV1 is the OLD structure (copy-pasted from dal at time of v1)
+type SubscriptionV1 struct {
+    ChatID int64             `json:"chat_id"`
+    Groups map[string]string `json:"groups"`
+}
+
+// SubscriptionV2 is the NEW structure
+type SubscriptionV2 struct {
+    ChatID    int64             `json:"chat_id"`
+    Groups    map[string]string `json:"groups"`
+    CreatedAt time.Time         `json:"created_at"`
+}
+
+type MigrationV2 struct{}
+
+func (m *MigrationV2) Version() int {
+    return 2
+}
+
+func (m *MigrationV2) Description() string {
+    return "Add CreatedAt timestamp to subscriptions"
+}
+
+func (m *MigrationV2) Up(db *bbolt.DB) error {
+    return db.Update(func(tx *bbolt.Tx) error {
+        b := tx.Bucket([]byte("subscriptions"))
+        if b == nil {
+            return fmt.Errorf("subscriptions bucket not found")
+        }
+
+        c := b.Cursor()
+        now := time.Now()
+
+        for k, v := c.First(); k != nil; k, v = c.Next() {
+            // Unmarshal old structure
+            var oldSub SubscriptionV1
+            if err := json.Unmarshal(v, &oldSub); err != nil {
+                return fmt.Errorf("unmarshal old subscription: %w", err)
+            }
+
+            // Transform to new structure
+            newSub := SubscriptionV2{
+                ChatID:    oldSub.ChatID,
+                Groups:    oldSub.Groups,
+                CreatedAt: now, // Set to migration time
+            }
+
+            // Marshal and write back
+            newData, err := json.Marshal(newSub)
+            if err != nil {
+                return fmt.Errorf("marshal new subscription: %w", err)
+            }
+
+            if err := b.Put(k, newData); err != nil {
+                return fmt.Errorf("put new subscription: %w", err)
+            }
+        }
+
+        return nil
+    })
+}
+```
+
+### Migration Best Practices
+
+**DO:**
+- ✅ Copy-paste type definitions to migration package
+- ✅ Document every change in README
+- ✅ Test on production data snapshot
+- ✅ Handle errors gracefully
+- ✅ Use transactions for data integrity
+- ✅ Log migration progress
+- ✅ Verify idempotency
+- ✅ Consider data volume (may need batching)
+
+**DON'T:**
+- ❌ Import types from `internal/dal`
+- ❌ Modify existing migrations
+- ❌ Skip documentation
+- ❌ Test on live database
+- ❌ Assume migration succeeds
+- ❌ Forget about rollback strategy
+- ❌ Ignore backward compatibility during deployment
+
+### Integration with Application
+
+**In `cmd/bot/main.go`:**
+
+```go
+// After creating BoltDB instance, before services
+if err := migrations.RunMigrations(store.DB()); err != nil {
+    log.Error("Failed to run database migrations", "error", err)
+    os.Exit(1)
+}
+```
+
+**Expose raw DB access in `internal/dal/bolt.go`:**
+
+```go
+// DB returns the underlying BoltDB instance for migrations
+func (s *BoltDB) DB() *bbolt.DB {
+    return s.db
+}
+```
+
+### Migration README Template
+
+```markdown
+# Migration v{N}: {Brief Title}
+
+## Date
+{YYYY-MM-DD}
+
+## Description
+{Detailed explanation of what this migration does and why it's needed}
+
+## Schema Changes
+
+### Before
+{Old structure with field descriptions}
+
+### After
+{New structure with field descriptions}
+
+## Data Transformation
+{How existing data is migrated. Include examples.}
+
+## Rollback Strategy
+{How to rollback if needed, or explicitly state "Not possible - breaking change"}
+
+## Testing Notes
+{Any special considerations for testing this migration}
+```
+
+### Troubleshooting
+
+**Migration fails midway:**
+- Migrations run in transactions when possible
+- Check logs for specific error
+- Restore from backup if needed
+- Fix migration code and retry
+
+**Migration marked as applied but data unchanged:**
+- Check migration logic
+- Verify bucket names are correct
+- Ensure transaction committed
+
+**Need to rollback migration:**
+- Restore database from backup
+- Remove migration from registry
+- Fix migration code
+
+### Version 1 (Bootstrap)
+
+The first migration (v1) is special - it creates the migrations bucket itself:
+
+```go
+func (m *MigrationV1) Up(db *bbolt.DB) error {
+    return db.Update(func(tx *bbolt.Tx) error {
+        _, err := tx.CreateBucketIfNotExists([]byte("migrations"))
+        return err
+    })
+}
+```
+
+This ensures the migration system can track itself from the start.
+
 ## Configuration
 
 All configuration via environment variables using `envconfig`:
@@ -599,10 +871,16 @@ go mod vendor
 1. Edit constants in `cmd/bot/main.go`
 2. Consider impact on server load
 
-**Add new data field:**
-1. Update structs in `dal/bolt.go`
-2. Update parsing in `providers/chernivtsi.go`
-3. Update templates in `notifications.go`
+**Add new data field (requires migration):**
+1. Create new migration version in `internal/dal/migrations/vN/`
+2. Copy-paste old and new structs to migration package
+3. Implement transformation logic in migration
+4. Write vN/README.md with change description
+5. Update core migrations/README.md with latest schema
+6. Test migration on copy of production DB
+7. Update structs in `dal/bolt.go` (after migration is ready)
+8. Update parsing in `providers/chernivtsi.go` (if needed)
+9. Update templates in `notifications.go` (if needed)
 
 ## Resources
 
