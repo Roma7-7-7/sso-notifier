@@ -1,0 +1,205 @@
+package service
+
+import (
+	"bytes"
+	"fmt"
+	"text/template"
+	"time"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+)
+
+// MessageBuilder builds notification messages for subscribed users
+type MessageBuilder struct {
+	date      string
+	shutdowns dal.Shutdowns
+	now       time.Time
+}
+
+// NewMessageBuilder creates a new message builder for a specific date and shutdowns data
+func NewMessageBuilder(date string, shutdowns dal.Shutdowns, now time.Time) *MessageBuilder {
+	return &MessageBuilder{
+		date:      date,
+		shutdowns: shutdowns,
+		now:       now,
+	}
+}
+
+// GroupUpdate represents changes for a single group
+type GroupUpdate struct {
+	GroupNum string
+	NewHash  string
+	Message  string
+}
+
+// Message contains the built message and updated subscription
+type Message struct {
+	Text          string
+	GroupUpdates  []GroupUpdate
+	HasChanges    bool
+	UpdatedGroups map[string]string // groupNum -> newHash
+}
+
+// Build generates a notification message for a subscription
+// Returns Message with message and hash updates, or empty result if no changes
+func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
+	result := Message{
+		GroupUpdates:  make([]GroupUpdate, 0),
+		UpdatedGroups: make(map[string]string),
+		HasChanges:    false,
+	}
+
+	groupMessages := make([]string, 0)
+
+	for groupNum, hash := range sub.Groups {
+		group, ok := mb.shutdowns.Groups[groupNum]
+		if !ok {
+			continue
+		}
+
+		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
+		newHash := shutdownGroupHash(group, fmt.Sprintf("%s:", mb.date))
+		if hash == newHash {
+			continue
+		}
+
+		// Process group shutdown periods
+		joinedPeriods, joinedStatuses := join(mb.shutdowns.Periods, group.Items)
+		cutPeriods, cutStatuses := cutByTime(mb.now, joinedPeriods, joinedStatuses)
+
+		// Render group message
+		msg, err := renderGroup(groupNum, cutPeriods, cutStatuses)
+		if err != nil {
+			return Message{}, fmt.Errorf("render group %s: %w", groupNum, err)
+		}
+
+		groupMessages = append(groupMessages, msg)
+		result.UpdatedGroups[groupNum] = newHash
+		result.GroupUpdates = append(result.GroupUpdates, GroupUpdate{
+			GroupNum: groupNum,
+			NewHash:  newHash,
+			Message:  msg,
+		})
+	}
+
+	if len(groupMessages) == 0 {
+		return result, nil
+	}
+
+	// Render final message
+	msg, err := renderMessage(mb.date, groupMessages)
+	if err != nil {
+		return Message{}, fmt.Errorf("render message: %w", err)
+	}
+
+	result.Text = msg
+	result.HasChanges = true
+
+	return result, nil
+}
+
+// shutdownGroupHash generates a hash for a shutdown group
+func shutdownGroupHash(g dal.ShutdownGroup, prefix string) string {
+	var buf bytes.Buffer
+
+	buf.WriteString(prefix)
+	for _, i := range g.Items {
+		buf.WriteString(string(i))
+	}
+	return buf.String()
+}
+
+// join merges consecutive periods with the same status
+func join(periods []dal.Period, statuses []dal.Status) ([]dal.Period, []dal.Status) {
+	if len(periods) == 0 {
+		return []dal.Period{}, []dal.Status{}
+	}
+
+	groupedPeriod := make([]dal.Period, 0)
+	groupedStatus := make([]dal.Status, 0)
+
+	currentFrom := periods[0].From
+	currentTo := periods[0].To
+	currentStatus := statuses[0]
+	for i := 1; i < len(periods); i++ {
+		if statuses[i] == currentStatus {
+			currentTo = periods[i].To
+			continue
+		}
+		groupedPeriod = append(groupedPeriod, dal.Period{From: currentFrom, To: currentTo})
+		groupedStatus = append(groupedStatus, currentStatus)
+		currentFrom = periods[i].From
+		currentTo = periods[i].To
+		currentStatus = statuses[i]
+	}
+	groupedPeriod = append(groupedPeriod, dal.Period{From: currentFrom, To: currentTo})
+	groupedStatus = append(groupedStatus, currentStatus)
+
+	return groupedPeriod, groupedStatus
+}
+
+// cutByTime filters out past periods based on the provided time
+func cutByTime(now time.Time, periods []dal.Period, items []dal.Status) ([]dal.Period, []dal.Status) {
+	currentTime := now.Format("15:04")
+
+	cutPeriods := make([]dal.Period, 0)
+	cutItems := make([]dal.Status, 0)
+	for i := 0; i < len(periods); i++ {
+		if periods[i].To > currentTime {
+			cutPeriods = append(cutPeriods, periods[i])
+			cutItems = append(cutItems, items[i])
+		}
+	}
+
+	return cutPeriods, cutItems
+}
+
+var messageTemplate = template.Must(template.New("message").Parse(`
+Графік стабілізаційних відключень на {{.Date}}:
+
+{{range .Msgs}} {{.}}
+{{end}}
+`))
+
+var groupMessageTemplate = template.Must(template.New("groupMessage").Parse(`Група {{.GroupNum}}:
+  🟢 Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
+  🟡 Можливо заживлено: {{range .Maybe}} {{.From}} - {{.To}}; {{end}}
+  🔴 Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
+`))
+
+type message struct {
+	Date string
+	Msgs []string
+}
+
+type groupMessage struct {
+	GroupNum string
+	On       []dal.Period
+	Off      []dal.Period
+	Maybe    []dal.Period
+}
+
+func renderMessage(date string, msgs []string) (string, error) {
+	var buf bytes.Buffer
+	err := messageTemplate.Execute(&buf, message{Date: date, Msgs: msgs})
+	return buf.String(), err
+}
+
+func renderGroup(num string, periods []dal.Period, statuses []dal.Status) (string, error) {
+	grouped := make(map[dal.Status][]dal.Period)
+
+	for i := 0; i < len(periods); i++ {
+		grouped[statuses[i]] = append(grouped[statuses[i]], periods[i])
+	}
+
+	msg := groupMessage{
+		GroupNum: num,
+		On:       grouped[dal.ON],
+		Off:      grouped[dal.OFF],
+		Maybe:    grouped[dal.MAYBE],
+	}
+
+	var buf bytes.Buffer
+	err := groupMessageTemplate.Execute(&buf, msg)
+	return buf.String(), err
+}
