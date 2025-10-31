@@ -35,7 +35,7 @@ func NewSubscription(store SubscriptionsStore, log *slog.Logger) *Subscriptions 
 func (s *Subscriptions) IsSubscribed(chatID int64) (bool, error) {
 	exists, err := s.store.ExistsSubscription(chatID)
 	if err != nil {
-		return false, fmt.Errorf("failed to check if subscription exists: %w", err)
+		return false, fmt.Errorf("check if subscription exists: %w", err)
 	}
 	return exists, nil
 }
@@ -43,7 +43,7 @@ func (s *Subscriptions) IsSubscribed(chatID int64) (bool, error) {
 func (s *Subscriptions) GetSubscriptions() ([]dal.Subscription, error) {
 	subs, err := s.store.GetAllSubscriptions()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get subscriptions: %w", err)
+		return nil, fmt.Errorf("get subscriptions: %w", err)
 	}
 	return subs, nil
 }
@@ -51,7 +51,7 @@ func (s *Subscriptions) GetSubscriptions() ([]dal.Subscription, error) {
 func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 	sub, exists, err := s.store.GetSubscription(chatID)
 	if err != nil {
-		return fmt.Errorf("failed to get subscription: %w", err)
+		return fmt.Errorf("get subscription: %w", err)
 	}
 
 	if !exists {

@@ -17,12 +17,12 @@ const url = "https://oblenergo.cv.ua/shutdowns/"
 func ChernivtsiShutdowns(ctx context.Context) (dal.Shutdowns, error) {
 	html, err := loadPage(ctx)
 	if err != nil {
-		return dal.Shutdowns{}, fmt.Errorf("failed to load shutdowns page: %w", err)
+		return dal.Shutdowns{}, fmt.Errorf("load shutdowns page: %w", err)
 	}
 
 	res, err := parseShutdownsPage(html)
 	if err != nil {
-		return dal.Shutdowns{}, fmt.Errorf("failed to parse shutdowns page: %w", err)
+		return dal.Shutdowns{}, fmt.Errorf("parse shutdowns page: %w", err)
 	}
 
 	return res, nil
@@ -31,21 +31,21 @@ func ChernivtsiShutdowns(ctx context.Context) (dal.Shutdowns, error) {
 func loadPage(ctx context.Context) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get shutdowns from page=%s: %w", url, err)
+		return nil, fmt.Errorf("get shutdowns from page=%s: %w", url, err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get shutdowns from page=%s: %w", url, err)
+		return nil, fmt.Errorf("get shutdowns from page=%s: %w", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get shutdowns from page=%s: status=%s", url, resp.Status)
+		return nil, fmt.Errorf("get shutdowns from page=%s: status=%s", url, resp.Status)
 	}
 
 	var res bytes.Buffer
 	_, err = res.ReadFrom(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read shutdowns from page=%s: %w", url, err)
+		return nil, fmt.Errorf("read shutdowns from page=%s: %w", url, err)
 	}
 
 	return res.Bytes(), nil
