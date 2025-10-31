@@ -66,7 +66,7 @@ func TodayDate(loc *time.Location) Date {
 }
 
 func TomorrowDate(loc *time.Location) Date {
-	tomorrow := time.Now().In(loc).Add(24 * time.Hour)
+	tomorrow := time.Now().In(loc).Add(24 * time.Hour) //nolint:mnd // 1 day
 	return Date{
 		Year:  tomorrow.Year(),
 		Month: tomorrow.Month(),
