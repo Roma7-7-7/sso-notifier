@@ -66,7 +66,7 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 	}
 	err = s.store.PutSubscription(sub)
 	if err != nil {
-		fmt.Errorf("failed to put subscription: %w", err)
+		return fmt.Errorf("put subscription: %w", err)
 	}
 
 	if !exists {
