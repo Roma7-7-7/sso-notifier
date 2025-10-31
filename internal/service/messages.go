@@ -57,10 +57,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 		cutPeriods, cutStatuses := cutByTime(mb.now, joinedPeriods, joinedStatuses)
 
 		// Build group schedule
-		groupSchedule, err := renderGroup(groupNum, cutPeriods, cutStatuses)
-		if err != nil {
-			return Message{}, fmt.Errorf("render group %s: %w", groupNum, err)
-		}
+		groupSchedule := buildGroupSchedule(groupNum, cutPeriods, cutStatuses)
 
 		groupSchedules = append(groupSchedules, groupSchedule)
 		result.UpdatedGroups[groupNum] = newHash
@@ -127,9 +124,9 @@ func cutByTime(now time.Time, periods []dal.Period, items []dal.Status) ([]dal.P
 
 	cutPeriods := make([]dal.Period, 0)
 	cutItems := make([]dal.Status, 0)
-	for i := 0; i < len(periods); i++ {
+	for i, p := range periods {
 		if periods[i].To > currentTime {
-			cutPeriods = append(cutPeriods, periods[i])
+			cutPeriods = append(cutPeriods, p)
 			cutItems = append(cutItems, items[i])
 		}
 	}
@@ -165,6 +162,8 @@ type NotificationMessage struct {
 // IMPORTANT: If you change this template or the rendering logic below, you must also update:
 // - internal/service/TEMPLATES.md - Update examples and documentation
 // - CLAUDE.md - Update message format examples in "Message Templates" section
+//
+//nolint:gochecknoglobals // it's template
 var messageTemplate = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
 {{range .Dates}}
 📅 {{.Date}}:
@@ -177,8 +176,8 @@ var messageTemplate = template.Must(template.New("message").Parse(`Графік 
 func buildGroupSchedule(num string, periods []dal.Period, statuses []dal.Status) GroupSchedule {
 	grouped := make(map[dal.Status][]dal.Period)
 
-	for i := 0; i < len(periods); i++ {
-		grouped[statuses[i]] = append(grouped[statuses[i]], periods[i])
+	for i, p := range periods {
+		grouped[statuses[i]] = append(grouped[statuses[i]], p)
 	}
 
 	// IMPORTANT: If you change these emojis or labels, update CLAUDE.md and TEMPLATES.md
@@ -207,8 +206,4 @@ func renderMessage(date string, groups []GroupSchedule) (string, error) {
 	var buf bytes.Buffer
 	err := messageTemplate.Execute(&buf, msg)
 	return buf.String(), err
-}
-
-func renderGroup(num string, periods []dal.Period, statuses []dal.Status) (GroupSchedule, error) {
-	return buildGroupSchedule(num, periods, statuses), nil
 }
