@@ -1,158 +1,139 @@
-# Migration v2: Add CreatedAt Timestamp to Subscriptions
+# Migration v2: Create Application Buckets
 
 ## Date
 2025-10-31
 
 ## Description
-This migration adds a `CreatedAt` timestamp field to all user subscriptions. This field tracks when each user first subscribed to the notification service.
+This migration creates the core application buckets needed for the SSO Notifier to function:
+- `shutdowns` - stores power outage schedules
+- `subscriptions` - stores user subscriptions
 
-**Purpose:**
-- Enable analytics on user acquisition over time
-- Allow filtering/sorting subscriptions by creation date
-- Provide audit trail for subscription creation
-
-**Note:** This is an example migration demonstrating how to add a new field to an existing structure. In production, you would only create this migration when the feature is actually needed.
+Previously, these buckets were created in `NewBoltDB()` constructor. Moving this logic to migrations ensures:
+1. All schema changes are tracked and versioned
+2. Database initialization is consistent
+3. Migration system has full control over schema
 
 ## Schema Changes
 
 ### Before
-```go
-type Subscription struct {
-    ChatID int64             `json:"chat_id"`
-    Groups map[string]string `json:"groups"` // group_id -> schedule_hash
-}
-```
-
-**Example data:**
-```json
-{
-  "chat_id": 123456789,
-  "groups": {
-    "5": "hash_abc123"
-  }
-}
-```
+- Only `migrations` bucket exists (created by v1)
 
 ### After
-```go
-type Subscription struct {
-    ChatID    int64             `json:"chat_id"`
-    Groups    map[string]string `json:"groups"`
-    CreatedAt time.Time         `json:"created_at"` // NEW FIELD
-}
-```
+Database now has three buckets:
+- `migrations` - migration tracking (from v1)
+- `shutdowns` - power outage schedules (NEW)
+- `subscriptions` - user subscriptions (NEW)
 
-**Example data:**
-```json
-{
-  "chat_id": 123456789,
-  "groups": {
-    "5": "hash_abc123"
-  },
-  "created_at": "2025-10-31T14:23:45Z"
-}
-```
+### Bucket Structures
+
+#### shutdowns
+- **Key Format:** Date string `"YYYY-MM-DD"` (e.g., `"2025-10-31"`)
+- **Value Format:** JSON-encoded `Shutdowns` struct
+- **Purpose:** Store fetched power outage schedules
+
+#### subscriptions
+- **Key Format:** Chat ID as string (e.g., `"123456789"`)
+- **Value Format:** JSON-encoded `Subscription` struct
+- **Purpose:** Store user subscriptions to power outage groups
 
 ## Data Transformation
-
-### For Existing Subscriptions
-All existing subscriptions will have `CreatedAt` set to the migration execution time. This means:
-- We cannot know the actual subscription date for existing users
-- All existing users will have the same `CreatedAt` timestamp (when migration runs)
-- This is acceptable as it provides a baseline for future analytics
-
-### For New Subscriptions
-After this migration, all new subscriptions created through the application will have `CreatedAt` set to the actual subscription time.
+No data transformation is performed. This migration only creates empty buckets if they don't already exist.
 
 ### Idempotency
-The migration checks if a subscription already has a non-zero `CreatedAt` value before migrating it. This ensures the migration can be safely run multiple times without overwriting already-migrated data.
+Uses `CreateBucketIfNotExists`, so running multiple times is safe and will not cause errors.
 
 ### Edge Cases
-- **Empty subscriptions bucket:** If no subscriptions exist, the migration completes successfully without any action
-- **Already migrated:** If a subscription already has `CreatedAt`, it is skipped
-- **Invalid data:** If a subscription cannot be unmarshaled, the migration fails and rolls back the transaction
+- **Buckets already exist:** Migration succeeds without changes
+- **Fresh database:** Creates both buckets successfully
+- **Partial state (one bucket exists):** Creates only the missing bucket
 
 ## Rollback Strategy
 
 ### Option 1: Restore from Backup (Recommended)
 1. Stop the application
 2. Restore database from pre-migration backup
-3. Remove v2 migration from code if needed
-4. Restart application
+3. Restart application (v2 will not be applied)
 
-### Option 2: Manual Field Removal (Advanced)
-If you need to rollback without losing new data:
+### Option 2: Manual Bucket Deletion (Not Recommended)
+**WARNING:** This will delete all data!
+
 1. Stop the application
-2. Create a reverse migration (v3) that removes the `CreatedAt` field
-3. Restart application
+2. Open database with BoltDB tool
+3. Delete `shutdowns` and `subscriptions` buckets
+4. Remove v2 migration record from `migrations` bucket
+5. Restart application
 
-**Example reverse migration logic:**
-```go
-// Read all subscriptions as V2
-// Transform to V1 (drop CreatedAt field)
-// Write back as V1
-```
+**Note:** Only do this on test databases. Production databases should be restored from backup.
 
 ## Testing Notes
 
 ### Test Cases
-1. **Empty database:** Migration should succeed with no errors
-2. **Database with subscriptions:** All subscriptions should have `CreatedAt` added
-3. **Run twice:** Second run should skip already-migrated subscriptions
-4. **New subscription after migration:** Should have actual creation time, not migration time
+1. **Fresh database:** Both buckets created successfully
+2. **Existing buckets:** Migration succeeds without errors
+3. **Run twice:** Second run completes successfully (idempotent)
+4. **Application functionality:** App works normally after migration
 
 ### Manual Testing
 ```bash
-# Before migration
-$ boltbrowser data/sso-notifier.db
-# Check subscriptions bucket - should NOT have created_at field
+# Before migration - only migrations bucket should exist
+$ bolt buckets data/sso-notifier.db
+migrations
 
-# Run application with migration
+# Run application with v2 enabled
 $ ./bin/sso-notifier
 
-# After migration
-$ boltbrowser data/sso-notifier.db
-# Check subscriptions bucket - should have created_at field
+# After migration - all three buckets should exist
+$ bolt buckets data/sso-notifier.db
+migrations
+shutdowns
+subscriptions
 ```
 
 ### Performance Considerations
-- **Small databases (<10,000 users):** Migration completes in milliseconds
-- **Large databases (>100,000 users):** May take several seconds
-- **Downtime:** Application should not start until migration completes
-- **Transaction safety:** All changes rolled back if migration fails
+- **Execution Time:** <1ms (just creates empty buckets)
+- **Downtime:** None (part of startup sequence)
+- **Resource Usage:** Negligible
 
 ## Application Code Changes Required
 
-After this migration is deployed, update the following files:
-
 ### 1. `internal/dal/bolt.go`
-Update the `Subscription` struct to include `CreatedAt`:
+Remove bucket creation from `NewBoltDB()`:
+
+**Before:**
 ```go
-type Subscription struct {
-    ChatID    int64             `json:"chat_id"`
-    Groups    map[string]string `json:"groups"`
-    CreatedAt time.Time         `json:"created_at"` // ADD THIS
+func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
+    mustBucket(db, shutdownsBucket)      // REMOVE
+    mustBucket(db, subscriptionsBucket)  // REMOVE
+    return &BoltDB{db: db}, nil
 }
 ```
 
-### 2. `internal/service/subscriptions.go`
-Update subscription creation to set `CreatedAt`:
+**After:**
 ```go
-func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
-    sub := dal.Subscription{
-        ChatID:    chatID,
-        Groups:    map[string]string{groupNum: ""},
-        CreatedAt: time.Now(), // ADD THIS
-    }
-    return s.store.PutSubscription(sub)
+func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
+    // Buckets are now created by migrations
+    return &BoltDB{db: db}, nil
 }
 ```
 
-### 3. Optional: Add Analytics Queries
-You can now query subscriptions by date:
+The `mustBucket` function can be removed entirely if not used elsewhere.
+
+### 2. `internal/dal/migrations/migrations.go`
+Enable v2 migration:
+
+**Before:**
 ```go
-func (s *BoltDB) GetSubscriptionsAfter(date time.Time) ([]Subscription, error) {
-    // Implementation to filter by CreatedAt
+func init() {
+    registerMigration(v1.New())
+    // registerMigration(v2.New())  // Commented out
+}
+```
+
+**After:**
+```go
+func init() {
+    registerMigration(v1.New())
+    registerMigration(v2.New())  // Uncommented
 }
 ```
 
@@ -161,18 +142,52 @@ func (s *BoltDB) GetSubscriptionsAfter(date time.Time) ([]Subscription, error) {
 - [ ] Code reviewed and approved
 - [ ] Database backed up
 - [ ] Migration tested on copy of production database
-- [ ] Migration verified to be idempotent
-- [ ] Application code updated to use new `CreatedAt` field
-- [ ] Deployment scheduled during low-traffic period
-- [ ] Monitoring in place to detect migration failures
-- [ ] Rollback plan documented and communicated
+- [ ] Verified application starts successfully after migration
+- [ ] Verified v2 is registered in `migrations.go`
+- [ ] Verified bucket creation removed from `NewBoltDB()`
+- [ ] Deployment scheduled
+- [ ] Monitoring in place
 
 ## Success Criteria
 
 Migration is considered successful when:
-- ✅ All existing subscriptions have `CreatedAt` field
-- ✅ All `CreatedAt` values are valid timestamps
-- ✅ Application starts successfully after migration
-- ✅ New subscriptions get correct `CreatedAt` timestamp
+- ✅ `shutdowns` bucket exists
+- ✅ `subscriptions` bucket exists
+- ✅ Application starts successfully
+- ✅ All existing functionality works
 - ✅ No errors in application logs
-- ✅ All existing functionality works as before
+- ✅ v2 recorded in migrations bucket
+
+## Impact on Existing Databases
+
+### New Databases (First Install)
+- v1 creates `migrations` bucket
+- v2 creates `shutdowns` and `subscriptions` buckets
+- Ready to use immediately
+
+### Existing Databases
+- v1 already applied (skipped)
+- v2 checks if buckets exist before creating
+- **Expected:** Migration succeeds because buckets already exist (created by old `NewBoltDB`)
+- **Result:** No data loss, seamless upgrade
+
+## Why This Change?
+
+Moving bucket creation to migrations provides several benefits:
+
+1. **Consistency:** All schema changes tracked in one place
+2. **Visibility:** Clear history of what buckets were created and when
+3. **Control:** Migrations have full ownership of schema
+4. **Simplicity:** `NewBoltDB` constructor simplified (no side effects)
+5. **Testing:** Easier to test migration system independently
+
+## Related Migrations
+
+- **v1:** Creates migrations bucket (bootstrap)
+- **v3:** (Future) Add CreatedAt to Subscription (example, commented)
+
+---
+
+**Status:** ✅ Ready for Production
+**Dependencies:** v1 must be applied first
+**Backwards Compatible:** Yes (idempotent bucket creation)

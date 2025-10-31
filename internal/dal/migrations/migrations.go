@@ -9,6 +9,8 @@ import (
 	"go.etcd.io/bbolt"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v1"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v2"
+	// "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v3"
 )
 
 // Migration represents a database migration
@@ -29,13 +31,13 @@ const migrationsBucket = "migrations"
 
 func init() {
 	registerMigration(v1.New())
-	// Future migrations will be registered here
-	// registerMigration(v2.New())
+	registerMigration(v2.New())
+	// registerMigration(v3.New()) // Uncomment when CreatedAt feature is needed
 }
 
 func registerMigration(m Migration) {
-	for _, m := range registeredMigrations {
-		if m.Version() == m.Version() {
+	for _, existing := range registeredMigrations {
+		if existing.Version() == m.Version() {
 			panic(fmt.Sprintf("migration with version %d already registered", m.Version()))
 		}
 	}

@@ -8,9 +8,9 @@ The migration system manages schema changes to the BoltDB database in a versione
 
 ## Current Database Schema
 
-### Latest Schema Version: v2 (with example migration)
+### Latest Schema Version: v2 (production-ready)
 
-**Note:** v2 is an example migration. The actual production schema is v1 until v2 is activated.
+**Note:** v3 is an example migration showing how to add fields. It is commented out.
 
 ### Buckets
 
@@ -64,7 +64,7 @@ Stores user subscriptions to power outage groups.
 
 - **Key Format:** Chat ID as string (e.g., `"123456789"`)
 - **Value Format:** JSON-encoded `Subscription` struct
-- **Current Structure (v1):**
+- **Current Structure (v2):**
   ```go
   type Subscription struct {
       ChatID int64             `json:"chat_id"`
@@ -72,16 +72,16 @@ Stores user subscriptions to power outage groups.
   }
   ```
 
-- **Example Structure (v2 - if activated):**
+- **Future Structure (v3 - if activated):**
   ```go
   type Subscription struct {
       ChatID    int64             `json:"chat_id"`
       Groups    map[string]string `json:"groups"`
-      CreatedAt time.Time         `json:"created_at"` // Added in v2
+      CreatedAt time.Time         `json:"created_at"` // Would be added in v3
   }
   ```
 
-- **Example Entry (v1):**
+- **Example Entry (v2):**
   - Key: `"123456789"`
   - Value:
     ```json
@@ -147,8 +147,9 @@ Continue with application startup
 
 | Version | Description | Status | Date Applied |
 |---------|-------------|--------|--------------|
-| v1 | Bootstrap migration system | Production | 2025-10-31 |
-| v2 | Add CreatedAt to subscriptions | Example | Not applied |
+| v1 | Bootstrap migration system | ✅ Production | 2025-10-31 |
+| v2 | Create shutdowns and subscriptions buckets | ✅ Production | 2025-10-31 |
+| v3 | Add CreatedAt to subscriptions | ⏸️ Example (commented) | Not applied |
 
 ## How to Create a New Migration
 
@@ -384,8 +385,13 @@ go test ./internal/dal/migrations -integration
 - Initialized migration tracking system
 - Status: ✅ Deployed
 
-### v2 - Example Migration (2025-10-31)
-- Added CreatedAt field to Subscription
+### v2 - Create Application Buckets (2025-10-31)
+- Created shutdowns and subscriptions buckets
+- Moved bucket creation from NewBoltDB to migrations
+- Status: ✅ Deployed
+
+### v3 - Example Migration (2025-10-31)
+- Adds CreatedAt field to Subscription
 - Purpose: Example/reference implementation
 - Status: ⏸️ Example only, not deployed
 
@@ -407,5 +413,5 @@ If you encounter issues with migrations:
 ---
 
 **Last Updated:** 2025-10-31
-**Schema Version:** v1 (production), v2 (example)
+**Schema Version:** v2 (production), v3 (example)
 **Maintainer:** @rsav

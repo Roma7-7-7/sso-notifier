@@ -75,9 +75,6 @@ func TomorrowDate(loc *time.Location) Date {
 }
 
 func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
-	mustBucket(db, shutdownsBucket)
-	mustBucket(db, subscriptionsBucket)
-
 	return &BoltDB{db: db}, nil
 }
 
@@ -205,13 +202,4 @@ func (s *BoltDB) Close() error {
 
 func i64tob(id int64) []byte {
 	return []byte(fmt.Sprintf("%d", id))
-}
-
-func mustBucket(db *bbolt.DB, name string) {
-	if err := db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(name))
-		return err
-	}); err != nil {
-		panic(fmt.Errorf("create bucket: %w", err))
-	}
 }

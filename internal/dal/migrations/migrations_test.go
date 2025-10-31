@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -38,13 +39,14 @@ func TestRunMigrations_EmptyDatabase(t *testing.T) {
 			t.Fatal("migrations bucket not created")
 		}
 
-		// Check that v1 migration was applied
-		v1Record := b.Get([]byte("v1"))
-		if v1Record == nil {
-			t.Fatal("v1 migration not recorded")
+		for _, m := range registeredMigrations {
+			record := b.Get([]byte(fmt.Sprintf("v%d", m.Version())))
+			if record == nil {
+				t.Fatalf("migration %d not found in database", m.Version())
+			}
+			t.Logf("migration %d found in database: %s", m.Version(), string(record))
 		}
 
-		t.Logf("v1 migration applied at: %s", string(v1Record))
 		return nil
 	})
 
@@ -98,9 +100,9 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 			return err
 		}
 
-		// We should have exactly 1 migration record (v1)
-		if count != 1 {
-			t.Fatalf("Expected 1 migration record, got %d", count)
+		// We should have all registered migrations
+		if count != len(registeredMigrations) {
+			t.Fatalf("Expected %d migration records, got %d", len(registeredMigrations), count)
 		}
 
 		return nil
@@ -133,16 +135,27 @@ func TestRunMigrations_CreatesRequiredBuckets(t *testing.T) {
 		t.Fatalf("RunMigrations failed: %v", err)
 	}
 
-	// Verify the migrations bucket was created
+	// Verify all required buckets were created
 	err = db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("migrations"))
-		if b == nil {
+		// Check migrations bucket
+		if tx.Bucket([]byte("migrations")) == nil {
 			t.Fatal("migrations bucket was not created")
 		}
+
+		// Check shutdowns bucket (created by v2)
+		if tx.Bucket([]byte("shutdowns")) == nil {
+			t.Fatal("shutdowns bucket was not created by v2 migration")
+		}
+
+		// Check subscriptions bucket (created by v2)
+		if tx.Bucket([]byte("subscriptions")) == nil {
+			t.Fatal("subscriptions bucket was not created by v2 migration")
+		}
+
 		return nil
 	})
 
 	if err != nil {
-		t.Fatalf("Failed to verify migrations bucket: %v", err)
+		t.Fatalf("Failed to verify buckets: %v", err)
 	}
 }
