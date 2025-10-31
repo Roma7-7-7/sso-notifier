@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -8,9 +9,8 @@ import (
 
 	"go.etcd.io/bbolt"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v1"
-	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v2"
-	// "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v3"
+	v1 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v1"
+	v2 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v2"
 )
 
 // Migration represents a database migration
@@ -25,10 +25,11 @@ type Migration interface {
 	Up(db *bbolt.DB) error
 }
 
-var registeredMigrations []Migration
+var registeredMigrations []Migration //nolint:gochecknoglobals // it's ok here
 
 const migrationsBucket = "migrations"
 
+//nolint:gochecknoinits // it's ok here
 func init() {
 	registerMigration(v1.New())
 	registerMigration(v2.New())
@@ -151,7 +152,7 @@ func recordMigration(db *bbolt.DB, version int) error {
 	return db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(migrationsBucket))
 		if b == nil {
-			return fmt.Errorf("migrations bucket not found")
+			return errors.New("migrations bucket not found")
 		}
 		key := []byte(fmt.Sprintf("v%d", version))
 		value := []byte(time.Now().Format(time.RFC3339))

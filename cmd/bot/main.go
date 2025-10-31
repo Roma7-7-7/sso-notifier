@@ -44,7 +44,7 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	db, err := bbolt.Open(conf.DBPath, 0600, nil) //nolint:gomnd
+	db, err := bbolt.Open(conf.DBPath, 0600, nil) //nolint:mnd // read_write
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
 		return 1

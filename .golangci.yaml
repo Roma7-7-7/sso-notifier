@@ -65,7 +65,7 @@ linters:
     - staticcheck
     - testableexamples
     - testifylint
-    - testpackage
+#    - testpackage
     - tparallel
     - unconvert
     - unparam
@@ -196,10 +196,7 @@ linters:
         text: "error returned from interface method should be wrapped.*gopkg.in/telebot.v3"
       - linters:
           - wrapcheck
-        text: "error returned from interface method should be wrapped.*github.com/labstack/echo/v4.Context"
-      - linters:
-          - wrapcheck
-        text: "error returned from interface method should be wrapped: sig: func \\(github.com/Roma7-7-7/english-learning-bot/internal/dal.Repository\\).Transact"
+        text: "error returned from external package is unwrapped: sig: func \\(\\*go.etcd.io/bbolt..*\\)"
       - linters:
           - bodyclose
           - dupl
@@ -209,6 +206,7 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+          - revive
         path: _test\.go
     paths:
       - third_party$

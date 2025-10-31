@@ -3,6 +3,9 @@ VERSION ?= dev
 BUILD_TIME ?= $(shell date -u +%Y%m%d-%H%M%S)
 LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)
 
+lint:
+	golangci-lint run ./...
+
 build:
 	go mod download
 	CGO_ENABLED=0 go build -o ./bin/sso-notifier ./cmd/bot/main.go

@@ -9,7 +9,7 @@ type MigrationV2 struct{}
 
 // Version returns the migration version
 func (m *MigrationV2) Version() int {
-	return 2
+	return 2 //nolint:mnd // version 2
 }
 
 // Description returns a human-readable description of the migration

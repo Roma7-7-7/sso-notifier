@@ -27,7 +27,7 @@ type MigrationV3 struct{}
 
 // Version returns the migration version
 func (m *MigrationV3) Version() int {
-	return 3
+	return 3 //nolint:mnd // version 3
 }
 
 // Description returns a human-readable description of the migration
