@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tc "github.com/Roma7-7-7/telegram"
+	"go.etcd.io/bbolt"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
@@ -43,7 +44,13 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	store, err := dal.NewBoltDB(conf.DBPath)
+	db, err := bbolt.Open(conf.DBPath, 0600, nil) //nolint:gomnd
+	if err != nil {
+		log.ErrorContext(ctx, "Failed to open database", "error", err)
+		return 1
+	}
+
+	store, err := dal.NewBoltDB(db)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
 		return 1
@@ -51,7 +58,7 @@ func run(ctx context.Context) int {
 	defer store.Close()
 
 	log.InfoContext(ctx, "Running database migrations")
-	if err := migrations.RunMigrations(store.DB(), log); err != nil {
+	if err := migrations.RunMigrations(db, log); err != nil {
 		log.ErrorContext(ctx, "Failed to run database migrations", "error", err)
 		return 1
 	}

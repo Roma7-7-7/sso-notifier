@@ -74,12 +74,7 @@ func TomorrowDate(loc *time.Location) Date {
 	}
 }
 
-func NewBoltDB(path string) (*BoltDB, error) {
-	db, err := bbolt.Open(path, 0600, nil) //nolint:gomnd
-	if err != nil {
-		return nil, fmt.Errorf("open bolt db: %w", err)
-	}
-
+func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
 	mustBucket(db, shutdownsBucket)
 	mustBucket(db, subscriptionsBucket)
 
@@ -206,11 +201,6 @@ func (s *BoltDB) PurgeSubscriptions(chatID int64) error {
 
 func (s *BoltDB) Close() error {
 	return s.db.Close()
-}
-
-// DB returns the underlying BoltDB instance for migrations
-func (s *BoltDB) DB() *bbolt.DB {
-	return s.db
 }
 
 func i64tob(id int64) []byte {

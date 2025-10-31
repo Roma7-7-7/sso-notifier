@@ -34,6 +34,11 @@ func init() {
 }
 
 func registerMigration(m Migration) {
+	for _, m := range registeredMigrations {
+		if m.Version() == m.Version() {
+			panic(fmt.Sprintf("migration with version %d already registered", m.Version()))
+		}
+	}
 	registeredMigrations = append(registeredMigrations, m)
 }
 
