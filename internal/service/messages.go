@@ -38,7 +38,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 		UpdatedGroups: make(map[string]string),
 	}
 
-	groupMessages := make([]string, 0)
+	groupSchedules := make([]GroupSchedule, 0)
 
 	for groupNum, hash := range sub.Groups {
 		group, ok := mb.shutdowns.Groups[groupNum]
@@ -56,22 +56,22 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 		joinedPeriods, joinedStatuses := join(mb.shutdowns.Periods, group.Items)
 		cutPeriods, cutStatuses := cutByTime(mb.now, joinedPeriods, joinedStatuses)
 
-		// Render group message
-		msg, err := renderGroup(groupNum, cutPeriods, cutStatuses)
+		// Build group schedule
+		groupSchedule, err := renderGroup(groupNum, cutPeriods, cutStatuses)
 		if err != nil {
 			return Message{}, fmt.Errorf("render group %s: %w", groupNum, err)
 		}
 
-		groupMessages = append(groupMessages, msg)
+		groupSchedules = append(groupSchedules, groupSchedule)
 		result.UpdatedGroups[groupNum] = newHash
 	}
 
-	if len(groupMessages) == 0 {
+	if len(groupSchedules) == 0 {
 		return result, nil
 	}
 
-	// Render final message
-	msg, err := renderMessage(mb.date, groupMessages)
+	// Render final message using template
+	msg, err := renderMessage(mb.date, groupSchedules)
 	if err != nil {
 		return Message{}, fmt.Errorf("render message: %w", err)
 	}
@@ -137,52 +137,78 @@ func cutByTime(now time.Time, periods []dal.Period, items []dal.Status) ([]dal.P
 	return cutPeriods, cutItems
 }
 
-var messageTemplate = template.Must(template.New("message").Parse(`
-Графік стабілізаційних відключень на {{.Date}}:
-
-{{range .Msgs}} {{.}}
-{{end}}
-`))
-
-var groupMessageTemplate = template.Must(template.New("groupMessage").Parse(`Група {{.GroupNum}}:
-  🟢 Заживлено:  {{range .On}} {{.From}} - {{.To}}; {{end}}
-  🟡 Можливо заживлено: {{range .Maybe}} {{.From}} - {{.To}}; {{end}}
-  🔴 Відключено: {{range .Off}} {{.From}} - {{.To}}; {{end}}
-`))
-
-type message struct {
-	Date string
-	Msgs []string
+// StatusLine represents a single status type with its periods
+type StatusLine struct {
+	Emoji   string
+	Label   string
+	Periods []dal.Period
 }
 
-type groupMessage struct {
-	GroupNum string
-	On       []dal.Period
-	Off      []dal.Period
-	Maybe    []dal.Period
+// GroupSchedule represents schedule for a single group
+type GroupSchedule struct {
+	GroupNum    string
+	StatusLines []StatusLine
 }
 
-func renderMessage(date string, msgs []string) (string, error) {
-	var buf bytes.Buffer
-	err := messageTemplate.Execute(&buf, message{Date: date, Msgs: msgs})
-	return buf.String(), err
+// DateSchedule represents schedule for a single date
+type DateSchedule struct {
+	Date   string
+	Groups []GroupSchedule
 }
 
-func renderGroup(num string, periods []dal.Period, statuses []dal.Status) (string, error) {
+// NotificationMessage represents the complete notification structure
+type NotificationMessage struct {
+	Dates []DateSchedule
+}
+
+// messageTemplate is the main notification template
+// IMPORTANT: If you change this template or the rendering logic below, you must also update:
+// - internal/service/TEMPLATES.md - Update examples and documentation
+// - CLAUDE.md - Update message format examples in "Message Templates" section
+var messageTemplate = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
+{{range .Dates}}
+📅 {{.Date}}:
+{{range .Groups}}Група {{.GroupNum}}:
+{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
+{{end}}{{end}}
+{{end}}{{end}}`))
+
+// buildGroupSchedule creates a GroupSchedule from periods and statuses
+func buildGroupSchedule(num string, periods []dal.Period, statuses []dal.Status) GroupSchedule {
 	grouped := make(map[dal.Status][]dal.Period)
 
 	for i := 0; i < len(periods); i++ {
 		grouped[statuses[i]] = append(grouped[statuses[i]], periods[i])
 	}
 
-	msg := groupMessage{
-		GroupNum: num,
-		On:       grouped[dal.ON],
-		Off:      grouped[dal.OFF],
-		Maybe:    grouped[dal.MAYBE],
+	// IMPORTANT: If you change these emojis or labels, update CLAUDE.md and TEMPLATES.md
+	statusLines := []StatusLine{
+		{Emoji: "🟢", Label: "Заживлено", Periods: grouped[dal.ON]},
+		{Emoji: "🟡", Label: "Можливо заживлено", Periods: grouped[dal.MAYBE]},
+		{Emoji: "🔴", Label: "Відключено", Periods: grouped[dal.OFF]},
+	}
+
+	return GroupSchedule{
+		GroupNum:    num,
+		StatusLines: statusLines,
+	}
+}
+
+func renderMessage(date string, groups []GroupSchedule) (string, error) {
+	msg := NotificationMessage{
+		Dates: []DateSchedule{
+			{
+				Date:   date,
+				Groups: groups,
+			},
+		},
 	}
 
 	var buf bytes.Buffer
-	err := groupMessageTemplate.Execute(&buf, msg)
+	err := messageTemplate.Execute(&buf, msg)
 	return buf.String(), err
+}
+
+func renderGroup(num string, periods []dal.Period, statuses []dal.Status) (GroupSchedule, error) {
+	return buildGroupSchedule(num, periods, statuses), nil
 }
