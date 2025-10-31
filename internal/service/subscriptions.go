@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
@@ -47,15 +48,16 @@ func (s *Subscriptions) GetSubscriptions() ([]dal.Subscription, error) {
 	return subs, nil
 }
 
-func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) (dal.Subscription, error) {
+func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 	sub, exists, err := s.store.GetSubscription(chatID)
 	if err != nil {
-		return dal.Subscription{}, fmt.Errorf("failed to get subscription: %w", err)
+		return fmt.Errorf("failed to get subscription: %w", err)
 	}
 
 	if !exists {
 		sub = dal.Subscription{
-			ChatID: chatID,
+			ChatID:    chatID,
+			CreatedAt: time.Now(),
 		}
 	}
 
@@ -64,14 +66,14 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) (dal.Sub
 	}
 	err = s.store.PutSubscription(sub)
 	if err != nil {
-		return dal.Subscription{}, fmt.Errorf("failed to put subscription: %w", err)
+		return fmt.Errorf("put subscription: %w", err)
 	}
 
 	if !exists {
 		s.log.Debug("new subscriber", "chatID", chatID)
 	}
 
-	return sub, nil
+	return nil
 }
 
 func (s *Subscriptions) Unsubscribe(chatID int64) error {

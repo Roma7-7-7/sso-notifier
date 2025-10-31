@@ -18,7 +18,7 @@ type MessageSender interface {
 type SubscriptionService interface {
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscriptions() ([]dal.Subscription, error)
-	SubscribeToGroup(chatID int64, number string) (dal.Subscription, error)
+	SubscribeToGroup(chatID int64, number string) error
 	Unsubscribe(chatID int64) error
 }
 
@@ -108,7 +108,7 @@ func (b *Bot) SetGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		chatID := c.Sender().ID
 
-		_, err := b.svc.SubscribeToGroup(chatID, groupNumber)
+		err := b.svc.SubscribeToGroup(chatID, groupNumber)
 		if err != nil {
 			b.log.Error("failed to subscribe",
 				"error", err,

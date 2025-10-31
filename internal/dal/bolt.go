@@ -34,8 +34,9 @@ type (
 	}
 
 	Subscription struct {
-		ChatID int64             `json:"chat_id"`
-		Groups map[string]string `json:"groups"`
+		ChatID    int64             `json:"chat_id"`
+		Groups    map[string]string `json:"groups"`
+		CreatedAt time.Time         `json:"created_at"`
 	}
 
 	BoltDB struct {
