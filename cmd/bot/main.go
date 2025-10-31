@@ -14,6 +14,7 @@ import (
 	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
@@ -48,6 +49,12 @@ func run(ctx context.Context) int {
 		return 1
 	}
 	defer store.Close()
+
+	log.InfoContext(ctx, "Running database migrations")
+	if err := migrations.RunMigrations(store.DB(), log); err != nil {
+		log.ErrorContext(ctx, "Failed to run database migrations", "error", err)
+		return 1
+	}
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	shutdownsSvc := service.NewShutdowns(store, loc, log)

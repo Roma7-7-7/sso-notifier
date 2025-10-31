@@ -208,6 +208,11 @@ func (s *BoltDB) Close() error {
 	return s.db.Close()
 }
 
+// DB returns the underlying BoltDB instance for migrations
+func (s *BoltDB) DB() *bbolt.DB {
+	return s.db
+}
+
 func i64tob(id int64) []byte {
 	return []byte(fmt.Sprintf("%d", id))
 }
