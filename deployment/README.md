@@ -7,7 +7,7 @@ This directory contains scripts and configuration files for automated deployment
 The deployment setup provides:
 - **Automated releases** via GitHub Actions on every push to `main`
 - **One-time EC2 setup** with `setup-ec2.sh`
-- **Automated deployments** via hourly cron job
+- **Manual deployment** script for security and control
 - **Zero-downtime updates** with automatic rollback capability
 - **Secure configuration** via AWS Systems Manager Parameter Store
 
@@ -38,8 +38,8 @@ The deployment setup provides:
          ▼
 ┌─────────────────┐
 │  EC2 Instance   │
-│  - Hourly cron  │
-│  - deploy.sh    │
+│  - Manual run:  │
+│    deploy.sh    │
 │  - Download new │
 │    release      │
 │  - Restart      │
@@ -96,6 +96,10 @@ The deployment setup provides:
 ### Step 1: Connect to EC2
 
 ```bash
+# Using AWS Session Manager
+aws ssm start-session --target <instance-id>
+
+# Or using SSH (if configured)
 ssh ec2-user@<your-ec2-ip>
 ```
 
@@ -114,9 +118,9 @@ The setup script will:
 1. Create directory structure at `/opt/sso-notifier/`
 2. Download and install `deploy.sh`
 3. Install systemd service
-4. Perform initial deployment
-5. Enable auto-start on boot
-6. Set up hourly cron job for automated deployments
+4. Configure passwordless sudo for service management
+5. Perform initial deployment
+6. Enable auto-start on boot
 7. Start the service
 
 ### Step 3: Verify Installation
@@ -149,17 +153,25 @@ After setup, the following structure is created:
 ├── deploy.sh                   # Deployment script
 ├── current_version             # Current release tag
 └── deployment.log              # Deployment history
+
+/etc/sudoers.d/
+└── sso-notifier                # Passwordless sudo config for service management
+
+/etc/systemd/system/
+└── sso-notifier.service        # Systemd service file
 ```
 
 ## Manual Operations
 
 ### Manual Deployment
 
-Force a deployment check:
+To deploy the latest release from GitHub, run:
 
 ```bash
-sudo /opt/sso-notifier/deploy.sh
+/opt/sso-notifier/deploy.sh
 ```
+
+**Note:** This script no longer requires `sudo`. It uses passwordless sudo only for systemctl commands to manage the service.
 
 ### View Deployment History
 
@@ -263,38 +275,47 @@ Available variables:
    sudo systemctl restart sso-notifier.service
    ```
 
-## Automated Deployments
+## Deployment Process
 
-### How It Works
+### How Manual Deployment Works
 
-1. **GitHub Actions** creates a new release when code is pushed to `main`
-2. **Cron job** runs hourly: `0 * * * * /opt/sso-notifier/deploy.sh`
-3. **deploy.sh** checks for new releases
-4. If a new version is found:
+When you run `/opt/sso-notifier/deploy.sh`:
+
+1. **Checks GitHub** for the latest release
+2. **Compares versions** with currently installed version
+3. If a new version is found:
    - Downloads the new binary
-   - Stops the service
-   - Backs up the current version
+   - Stops the service (using `sudo systemctl stop`)
+   - Backs up the current version (last 5 backups are kept)
    - Installs the new version
-   - Restarts the service
-   - Verifies health
+   - Restarts the service (using `sudo systemctl start`)
+   - Verifies the service is running
+4. If already on the latest version, exits gracefully
 
-### Cron Job Management
+### Why Manual Deployment?
 
-The deployment cron job runs under **root's crontab** (since deploy.sh requires sudo to restart services).
+For security reasons, automated deployments via cron are **not** configured by default. This gives you:
+- **Full control** over when updates are applied
+- **Ability to review** release notes before deploying
+- **Reduced attack surface** (no automated code execution)
+- **Better change management** for production environments
+
+### Optional: Set Up Automated Deployments
+
+If you want to enable automated deployments (e.g., for development environments), you can add a cron job:
 
 ```bash
-# View current cron jobs (as root)
-sudo crontab -l
+# Edit ec2-user's crontab
+crontab -e
 
-# Edit cron jobs (as root)
-sudo crontab -e
+# Add this line to check for updates hourly
+0 * * * * /opt/sso-notifier/deploy.sh >> /opt/sso-notifier/deployment.log 2>&1
 
-# Disable automated deployments (comment out the line)
-# 0 * * * * /opt/sso-notifier/deploy.sh >> /opt/sso-notifier/deployment.log 2>&1
-
-# Change frequency (e.g., every 30 minutes)
+# Or every 30 minutes
 */30 * * * * /opt/sso-notifier/deploy.sh >> /opt/sso-notifier/deployment.log 2>&1
 ```
+
+**Note:** The deploy script now runs as `ec2-user` and uses passwordless sudo only for systemctl commands.
 
 ## Monitoring
 
@@ -370,6 +391,8 @@ fi
 5. **Enable security hardening** in systemd (NoNewPrivileges, PrivateTmp)
 6. **Keep backups** of previous versions (automatic)
 7. **Monitor logs** for suspicious activity
+8. **Manual deployments** prevent unauthorized automatic code execution
+9. **Passwordless sudo** restricted to specific systemctl commands only
 
 ## Uninstallation
 
@@ -384,8 +407,11 @@ sudo systemctl disable sso-notifier.service
 sudo rm /etc/systemd/system/sso-notifier.service
 sudo systemctl daemon-reload
 
-# Remove cron job (from root's crontab)
-sudo crontab -l | grep -v "sso-notifier" | sudo crontab -
+# Remove sudoers configuration
+sudo rm /etc/sudoers.d/sso-notifier
+
+# Remove cron job if you set one up
+crontab -l | grep -v "sso-notifier" | crontab -
 
 # Remove installation directory
 sudo rm -rf /opt/sso-notifier

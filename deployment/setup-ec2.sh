@@ -38,7 +38,7 @@ if [ -d "${INSTALL_DIR}" ]; then
     fi
 fi
 
-echo -e "${GREEN}[1/7] Creating directory structure...${NC}"
+echo -e "${GREEN}[1/6] Creating directory structure...${NC}"
 mkdir -p "${BIN_DIR}"
 mkdir -p "${DATA_DIR}"
 mkdir -p "${BACKUP_DIR}"
@@ -46,43 +46,38 @@ chown -R ec2-user:ec2-user "${INSTALL_DIR}"
 echo "✓ Directories created"
 
 echo ""
-echo -e "${GREEN}[2/7] Downloading deploy.sh script...${NC}"
+echo -e "${GREEN}[2/6] Downloading deploy.sh script...${NC}"
 curl -L -o "${INSTALL_DIR}/deploy.sh" \
     "https://raw.githubusercontent.com/${GITHUB_REPO}/main/deployment/deploy.sh"
 chmod +x "${INSTALL_DIR}/deploy.sh"
 echo "✓ Deploy script installed"
 
 echo ""
-echo -e "${GREEN}[3/7] Installing systemd service...${NC}"
+echo -e "${GREEN}[3/6] Installing systemd service...${NC}"
 curl -L -o /etc/systemd/system/sso-notifier.service \
     "https://raw.githubusercontent.com/${GITHUB_REPO}/main/deployment/systemd/sso-notifier.service"
 systemctl daemon-reload
 echo "✓ Systemd service installed"
 
 echo ""
-echo -e "${GREEN}[4/7] Running initial deployment...${NC}"
+echo -e "${GREEN}[3.1/6] Configuring sudoers for passwordless service management...${NC}"
+curl -L -o /etc/sudoers.d/sso-notifier \
+    "https://raw.githubusercontent.com/${GITHUB_REPO}/main/deployment/sudoers.d/sso-notifier"
+chmod 0440 /etc/sudoers.d/sso-notifier
+echo "✓ Sudoers configuration installed"
+
+echo ""
+echo -e "${GREEN}[4/6] Running initial deployment...${NC}"
 "${INSTALL_DIR}/deploy.sh"
 echo "✓ Initial deployment completed"
 
 echo ""
-echo -e "${GREEN}[5/7] Enabling service auto-start...${NC}"
+echo -e "${GREEN}[5/6] Enabling service auto-start...${NC}"
 systemctl enable sso-notifier.service
 echo "✓ Service will start automatically on boot"
 
 echo ""
-echo -e "${GREEN}[6/7] Setting up automated deployment cron job...${NC}"
-
-# Check if cron job already exists
-if crontab -l 2>/dev/null | grep -q "${INSTALL_DIR}/deploy.sh"; then
-    echo "Cron job already exists, skipping..."
-else
-    # Add cron job to check for updates every hour (runs as root since deploy.sh needs sudo)
-    (crontab -l 2>/dev/null; echo "0 * * * * ${INSTALL_DIR}/deploy.sh >> ${INSTALL_DIR}/deployment.log 2>&1") | crontab -
-    echo "✓ Cron job added (runs hourly)"
-fi
-
-echo ""
-echo -e "${GREEN}[7/7] Verifying installation...${NC}"
+echo -e "${GREEN}[6/6] Verifying installation...${NC}"
 
 # Check service status
 if systemctl is-active --quiet sso-notifier.service; then
@@ -130,9 +125,10 @@ echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
 echo "  Status:  sudo systemctl status sso-notifier.service"
 echo "  Logs:    sudo journalctl -u sso-notifier.service -f"
-echo "  Deploy:  sudo ${INSTALL_DIR}/deploy.sh"
+echo "  Deploy:  ${INSTALL_DIR}/deploy.sh"
 echo "  Stop:    sudo systemctl stop sso-notifier.service"
 echo "  Start:   sudo systemctl start sso-notifier.service"
 echo ""
-echo -e "${GREEN}Automated deployments are enabled! New releases will be deployed hourly.${NC}"
+echo -e "${YELLOW}Note: Automated deployments are NOT enabled for security reasons.${NC}"
+echo -e "${YELLOW}Run ${INSTALL_DIR}/deploy.sh manually to update to the latest release.${NC}"
 echo ""
