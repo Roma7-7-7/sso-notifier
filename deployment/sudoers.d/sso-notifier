@@ -1,0 +1,6 @@
+# Allow ec2-user to manage sso-notifier service without password
+ec2-user ALL=(ALL) NOPASSWD: /bin/systemctl start sso-notifier.service
+ec2-user ALL=(ALL) NOPASSWD: /bin/systemctl stop sso-notifier.service
+ec2-user ALL=(ALL) NOPASSWD: /bin/systemctl restart sso-notifier.service
+ec2-user ALL=(ALL) NOPASSWD: /bin/systemctl status sso-notifier.service
+ec2-user ALL=(ALL) NOPASSWD: /bin/systemctl is-active sso-notifier.service

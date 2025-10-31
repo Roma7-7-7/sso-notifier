@@ -30,10 +30,10 @@ log_warning() {
     echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1" | tee -a "${LOG_FILE}"
 }
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    log_error "Please run as root or with sudo"
-    exit 1
+# Check if ec2-user can run systemctl commands
+if ! sudo -n systemctl status sso-notifier.service &>/dev/null && [ $? -ne 3 ]; then
+    log_warning "This script requires passwordless sudo for systemctl commands"
+    log_warning "Please ensure /etc/sudoers.d/ is configured properly"
 fi
 
 # Get latest release info from GitHub
@@ -92,7 +92,7 @@ log "Downloaded files successfully"
 
 # Stop the service
 log "Stopping ${SERVICE_NAME} service..."
-systemctl stop "${SERVICE_NAME}.service" || true
+sudo systemctl stop "${SERVICE_NAME}.service" || true
 
 # Backup current installation if it exists
 if [ -f "${BIN_DIR}/sso-notifier" ]; then
@@ -117,18 +117,15 @@ mkdir -p "${BIN_DIR}"
 cp "${TMP_DIR}/sso-notifier" "${BIN_DIR}/"
 echo "${LATEST_VERSION}" > "${VERSION_FILE}"
 
-# Set ownership
-chown -R ec2-user:ec2-user "${INSTALL_DIR}"
-
 # Start the service
 log "Starting ${SERVICE_NAME} service..."
-systemctl start "${SERVICE_NAME}.service"
+sudo systemctl start "${SERVICE_NAME}.service"
 
 # Wait a moment for the service to initialize
 sleep 2
 
 # Check service status
-if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+if sudo systemctl is-active --quiet "${SERVICE_NAME}.service"; then
     log "✓ Service ${SERVICE_NAME} is running"
     log "Deployment completed successfully!"
     exit 0
