@@ -73,7 +73,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 			continue
 		}
 
-		if !msg.HasChanges {
+		if len(msg.UpdatedGroups) == 0 {
 			continue
 		}
 

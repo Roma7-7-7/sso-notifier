@@ -25,18 +25,9 @@ func NewMessageBuilder(date string, shutdowns dal.Shutdowns, now time.Time) *Mes
 	}
 }
 
-// GroupUpdate represents changes for a single group
-type GroupUpdate struct {
-	GroupNum string
-	NewHash  string
-	Message  string
-}
-
 // Message contains the built message and updated subscription
 type Message struct {
 	Text          string
-	GroupUpdates  []GroupUpdate
-	HasChanges    bool
 	UpdatedGroups map[string]string // groupNum -> newHash
 }
 
@@ -44,9 +35,7 @@ type Message struct {
 // Returns Message with message and hash updates, or empty result if no changes
 func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 	result := Message{
-		GroupUpdates:  make([]GroupUpdate, 0),
 		UpdatedGroups: make(map[string]string),
-		HasChanges:    false,
 	}
 
 	groupMessages := make([]string, 0)
@@ -75,11 +64,6 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 
 		groupMessages = append(groupMessages, msg)
 		result.UpdatedGroups[groupNum] = newHash
-		result.GroupUpdates = append(result.GroupUpdates, GroupUpdate{
-			GroupNum: groupNum,
-			NewHash:  newHash,
-			Message:  msg,
-		})
 	}
 
 	if len(groupMessages) == 0 {
@@ -93,7 +77,6 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 	}
 
 	result.Text = msg
-	result.HasChanges = true
 
 	return result, nil
 }
