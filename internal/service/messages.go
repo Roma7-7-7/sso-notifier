@@ -65,7 +65,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.Notificatio
 		}
 
 		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
-		newHash := shutdownGroupHash(group, fmt.Sprintf("%s:", mb.date))
+		newHash := shutdownGroupHash(group)
 		if currentHash == newHash {
 			continue
 		}
@@ -97,10 +97,8 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.Notificatio
 }
 
 // shutdownGroupHash generates a hash for a shutdown group
-func shutdownGroupHash(g dal.ShutdownGroup, prefix string) string {
+func shutdownGroupHash(g dal.ShutdownGroup) string {
 	var buf bytes.Buffer
-
-	buf.WriteString(prefix)
 	for _, i := range g.Items {
 		buf.WriteString(string(i))
 	}
