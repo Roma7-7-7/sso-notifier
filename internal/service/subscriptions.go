@@ -61,8 +61,8 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 		}
 	}
 
-	sub.Groups = map[string]string{
-		groupNum: "",
+	sub.Groups = map[string]struct{}{
+		groupNum: {},
 	}
 	err = s.store.PutSubscription(sub)
 	if err != nil {
@@ -77,5 +77,8 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 }
 
 func (s *Subscriptions) Unsubscribe(chatID int64) error {
-	return s.store.PurgeSubscriptions(chatID)
+	if err := s.store.PurgeSubscriptions(chatID); err != nil {
+		return fmt.Errorf("purge subscriptions: %w", err)
+	}
+	return nil
 }

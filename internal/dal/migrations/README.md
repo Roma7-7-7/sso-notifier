@@ -8,9 +8,9 @@ The migration system manages schema changes to the BoltDB database in a versione
 
 ## Current Database Schema
 
-### Latest Schema Version: v2 (active in production)
+### Latest Schema Version: v4 (active in production)
 
-**Note:** v3 is prepared but not yet enabled. It will be activated in a future release.
+**Note:** This schema separates subscription metadata from notification tracking state.
 
 ### Buckets
 
@@ -60,45 +60,74 @@ Stores power outage schedules fetched from the provider.
     ```
 
 #### 2. `subscriptions`
-Stores user subscriptions to power outage groups.
+Stores user subscription metadata (which groups they're subscribed to).
 
 - **Key Format:** Chat ID as string (e.g., `"123456789"`)
 - **Value Format:** JSON-encoded `Subscription` struct
-- **Current Structure (v2):**
+- **Current Structure (v4):**
   ```go
   type Subscription struct {
-      ChatID int64             `json:"chat_id"`
-      Groups map[string]string `json:"groups"` // group_id -> schedule_hash
+      ChatID    int64              `json:"chat_id"`
+      Groups    map[string]struct{} `json:"groups"` // Set of group IDs
+      CreatedAt time.Time          `json:"created_at"`
   }
   ```
 
-- **Future Structure (v3 - if activated):**
-  ```go
-  type Subscription struct {
-      ChatID    int64             `json:"chat_id"`
-      Groups    map[string]string `json:"groups"`
-      CreatedAt time.Time         `json:"created_at"` // Would be added in v3
-  }
-  ```
-
-- **Example Entry (v2):**
+- **Example Entry (v4):**
   - Key: `"123456789"`
   - Value:
     ```json
     {
       "chat_id": 123456789,
       "groups": {
-        "5": "abc123def456"
-      }
+        "5": {},
+        "7": {}
+      },
+      "created_at": "2025-10-31T14:23:45Z"
     }
     ```
 
 - **Groups Map Explanation:**
   - **Key:** Group number (as string, e.g., `"5"`)
-  - **Value:** Hash of the last notified schedule for that group
-  - **Purpose:** Detect changes in schedule to trigger notifications
+  - **Value:** Empty struct (set semantics - only membership matters)
+  - **Purpose:** Track which groups the user is subscribed to
 
-#### 3. `migrations`
+#### 3. `notifications`
+Stores notification state (what we last sent to users).
+
+- **Key Format:** `<chatID>_<YYYY-MM-DD>` (e.g., `"123456789_2024-10-31"`)
+- **Value Format:** JSON-encoded `NotificationState` struct
+- **Structure (v4):**
+  ```go
+  type NotificationState struct {
+      ChatID int64             `json:"chat_id"`
+      Date   string            `json:"date"`   // "2024-10-31" (YYYY-MM-DD)
+      SentAt time.Time         `json:"sent_at"`
+      Hashes map[string]string `json:"hashes"` // group_id -> schedule_hash
+  }
+  ```
+
+- **Example Entry:**
+  - Key: `"123456789_2024-10-31"`
+  - Value:
+    ```json
+    {
+      "chat_id": 123456789,
+      "date": "2024-10-31",
+      "sent_at": "2025-10-31T14:30:00Z",
+      "hashes": {
+        "5": "abc123def456",
+        "7": "xyz789ghi012"
+      }
+    }
+    ```
+
+- **Hashes Map Explanation:**
+  - **Key:** Group number (as string, e.g., `"5"`)
+  - **Value:** Hash of the schedule we last sent for that group
+  - **Purpose:** Detect changes in schedule to trigger new notifications
+
+#### 4. `migrations`
 Tracks applied database migrations.
 
 - **Key Format:** Version string (e.g., `"v1"`, `"v2"`)
@@ -149,7 +178,8 @@ Continue with application startup
 |---------|-------------|--------|--------------|
 | v1 | Bootstrap migration system | ✅ Active | 2025-10-31 |
 | v2 | Create shutdowns and subscriptions buckets | ✅ Active | 2025-10-31 |
-| v3 | Add CreatedAt to subscriptions | ⏸️ Prepared | Not yet enabled |
+| v3 | Add CreatedAt to subscriptions | ✅ Active | 2025-10-31 |
+| v4 | Split subscription metadata from notification state | ✅ Active | 2025-10-31 |
 
 ## How to Create a New Migration
 
@@ -393,7 +423,14 @@ go test ./internal/dal/migrations -integration
 ### v3 - Add CreatedAt to Subscriptions (2025-10-31)
 - Adds CreatedAt timestamp field to Subscription
 - Enables user acquisition analytics
-- Status: ⏸️ Prepared, not yet enabled
+- Status: ✅ Deployed
+
+### v4 - Split Subscription Metadata from Notification State (2025-10-31)
+- Separates subscription metadata from notification tracking
+- Creates new `notifications` bucket
+- Changes Groups from `map[string]string` to `map[string]struct{}`
+- Enables multi-group subscriptions and notification history
+- Status: ✅ Deployed
 
 ## Resources
 
@@ -413,5 +450,5 @@ If you encounter issues with migrations:
 ---
 
 **Last Updated:** 2025-10-31
-**Schema Version:** v2 (active), v3 (prepared)
+**Schema Version:** v4 (active)
 **Maintainer:** @rsav
