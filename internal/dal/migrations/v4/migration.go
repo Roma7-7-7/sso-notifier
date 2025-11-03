@@ -19,16 +19,16 @@ type SubscriptionV3 struct {
 // SubscriptionV4 is the NEW structure with separated concerns
 // Only stores subscription metadata, notification state moved to separate bucket
 type SubscriptionV4 struct {
-	ChatID    int64              `json:"chat_id"`
+	ChatID    int64               `json:"chat_id"`
 	Groups    map[string]struct{} `json:"groups"` // Set of group IDs (metadata only)
-	CreatedAt time.Time          `json:"created_at"`
+	CreatedAt time.Time           `json:"created_at"`
 }
 
 // NotificationStateV4 tracks what we last sent to a user for a specific date
 // Separated from subscription metadata for cleaner architecture
 type NotificationStateV4 struct {
 	ChatID int64             `json:"chat_id"`
-	Date   string            `json:"date"`   // "2024-10-31" (YYYY-MM-DD format)
+	Date   string            `json:"date"` // "2024-10-31" (YYYY-MM-DD format)
 	SentAt time.Time         `json:"sent_at"`
 	Hashes map[string]string `json:"hashes"` // group_id -> schedule_hash
 }
