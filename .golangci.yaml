@@ -208,6 +208,9 @@ linters:
           - wrapcheck
           - revive
         path: _test\.go
+      - linters:
+          - gocognit
+        path: internal/dal/migrations/.*\.go
     paths:
       - third_party$
       - builtin$

@@ -15,9 +15,15 @@ type TelegramClient interface {
 	SendMessage(context.Context, string, string) error
 }
 
+type NotificationsStore interface {
+	GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
+	PutNotificationState(state dal.NotificationState) error
+}
+
 type Notifications struct {
 	shutdowns     ShutdownsStore
 	subscriptions SubscriptionsStore
+	notifications NotificationsStore
 	telegram      TelegramClient
 
 	loc *time.Location
@@ -25,10 +31,18 @@ type Notifications struct {
 	mx  *sync.Mutex
 }
 
-func NewNotifications(shutdowns ShutdownsStore, subscriptions SubscriptionsStore, telegram TelegramClient, loc *time.Location, log *slog.Logger) *Notifications {
+func NewNotifications(
+	shutdowns ShutdownsStore,
+	subscriptions SubscriptionsStore,
+	notifications NotificationsStore,
+	telegram TelegramClient,
+	loc *time.Location,
+	log *slog.Logger,
+) *Notifications {
 	return &Notifications{
 		shutdowns:     shutdowns,
 		subscriptions: subscriptions,
+		notifications: notifications,
 		telegram:      telegram,
 
 		loc: loc,
@@ -43,7 +57,8 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
-	table, ok, err := s.shutdowns.GetShutdowns(dal.TodayDate(s.loc))
+	today := dal.TodayDate(s.loc)
+	table, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return fmt.Errorf("getting shutdowns table: %w", err)
 	}
@@ -66,8 +81,24 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 		chatID := sub.ChatID
 		log := s.log.With("chatID", chatID)
 
+		// Get notification state for this user and date
+		notifState, exists, err := s.notifications.GetNotificationState(chatID, today)
+		if err != nil {
+			log.ErrorContext(ctx, "failed to get notification state", "error", err)
+			continue
+		}
+
+		// If notification state doesn't exist, create an empty one
+		if !exists {
+			notifState = dal.NotificationState{
+				ChatID: chatID,
+				Date:   today.ToKey(),
+				Hashes: make(map[string]string),
+			}
+		}
+
 		// Build message
-		msg, err := msgBuilder.Build(sub)
+		msg, err := msgBuilder.Build(sub, notifState)
 		if err != nil {
 			log.ErrorContext(ctx, "failed to build message", "error", err)
 			continue
@@ -83,13 +114,14 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 			continue
 		}
 
-		// Update subscription hashes
+		// Update notification state with new hashes
 		for groupNum, newHash := range msg.UpdatedGroups {
-			sub.Groups[groupNum] = newHash
+			notifState.Hashes[groupNum] = newHash
 		}
+		notifState.SentAt = time.Now()
 
-		if err := s.subscriptions.PutSubscription(sub); err != nil {
-			log.ErrorContext(ctx, "failed to update subscription", "error", err)
+		if err := s.notifications.PutNotificationState(notifState); err != nil {
+			log.ErrorContext(ctx, "failed to update notification state", "error", err)
 			continue
 		}
 	}

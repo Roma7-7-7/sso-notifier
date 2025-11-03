@@ -35,7 +35,7 @@ type Message struct {
 
 // Build generates a notification message for a subscription
 // Returns Message with message and hash updates, or empty result if no changes
-func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
+func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.NotificationState) (Message, error) {
 	result := Message{
 		UpdatedGroups: make(map[string]string),
 	}
@@ -56,15 +56,17 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 	})
 
 	for _, groupNum := range groupNums {
-		hash := sub.Groups[groupNum]
+		// Get current hash from notification state
+		currentHash := notifState.Hashes[groupNum]
+
 		group, ok := mb.shutdowns.Groups[groupNum]
 		if !ok {
 			continue
 		}
 
 		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
-		newHash := shutdownGroupHash(group, fmt.Sprintf("%s:", mb.date))
-		if hash == newHash {
+		newHash := shutdownGroupHash(group)
+		if currentHash == newHash {
 			continue
 		}
 
@@ -95,10 +97,8 @@ func (mb *MessageBuilder) Build(sub dal.Subscription) (Message, error) {
 }
 
 // shutdownGroupHash generates a hash for a shutdown group
-func shutdownGroupHash(g dal.ShutdownGroup, prefix string) string {
+func shutdownGroupHash(g dal.ShutdownGroup) string {
 	var buf bytes.Buffer
-
-	buf.WriteString(prefix)
 	for _, i := range g.Items {
 		buf.WriteString(string(i))
 	}

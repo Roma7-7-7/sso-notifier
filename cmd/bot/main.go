@@ -66,7 +66,7 @@ func run(ctx context.Context) int {
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	shutdownsSvc := service.NewShutdowns(store, loc, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
-	notificationsSvc := service.NewNotifications(store, store, sender, loc, log)
+	notificationsSvc := service.NewNotifications(store, store, store, sender, loc, log)
 
 	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
 	if err != nil {
