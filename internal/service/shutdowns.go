@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -41,13 +42,41 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	ctx, cancelFunc := context.WithTimeout(ctx, time.Minute)
 	defer cancelFunc()
 
-	table, err := providers.ChernivtsiShutdowns(ctx)
+	// Fetch today's schedule and check if tomorrow's is available
+	today := dal.TodayDate(s.loc)
+	todayTable, nextDayAvailable, err := providers.ChernivtsiShutdowns(ctx)
 	if err != nil {
-		return fmt.Errorf("get chernivtsi shutdowns: %w", err)
+		if !errors.Is(err, providers.ErrCheckNextDayAvailability) {
+			return fmt.Errorf("get chernivtsi shutdowns for today: %w", err)
+		}
+		s.log.WarnContext(ctx, "failed to check next day availability", "error", err)
 	}
-	if err = s.store.PutShutdowns(dal.TodayDate(s.loc), table); err != nil {
-		return fmt.Errorf("put shutdowns: %w", err)
+
+	if err = s.store.PutShutdowns(today, todayTable); err != nil {
+		return fmt.Errorf("put shutdowns for today: %w", err)
 	}
+	s.log.InfoContext(ctx, "refreshed today's shutdowns", "date", today.ToKey())
+
+	// Fetch tomorrow's schedule only if it's available
+	if !nextDayAvailable {
+		s.log.InfoContext(ctx, "tomorrow's shutdowns not yet available")
+		return nil
+	}
+
+	tomorrow := dal.TomorrowDate(s.loc)
+	tomorrowTable, err := providers.ChernivtsiShutdownsNext(ctx)
+	if err != nil {
+		// Log error but don't fail the entire refresh - today's data is already saved
+		s.log.ErrorContext(ctx, "failed to get tomorrow's shutdowns", "error", err)
+		return nil
+	}
+
+	if err = s.store.PutShutdowns(tomorrow, tomorrowTable); err != nil {
+		// Log error but don't fail - today's data is already saved
+		s.log.ErrorContext(ctx, "failed to put tomorrow's shutdowns", "error", err)
+		return nil
+	}
+	s.log.InfoContext(ctx, "refreshed tomorrow's shutdowns", "date", tomorrow.ToKey())
 
 	return nil
 }
