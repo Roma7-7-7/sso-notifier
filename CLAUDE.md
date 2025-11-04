@@ -828,6 +828,55 @@ func (m *MockStore) GetShutdowns() (dal.Shutdowns, bool, error) {
 - Database: `data/app.db`
 - Logs: stdout (JSON or text)
 
+### Backup System
+
+The project includes automated backup functionality for the BoltDB database:
+
+**Scripts:**
+- `deployment/backup.sh`: Uploads database to S3 with timestamp
+- `deployment/setup-ec2.sh`: Configures automated backups during initial setup
+
+**Key Features:**
+1. **Automated S3 Backups**
+   - Schedule: Daily at 8 PM (20:00) via cron job
+   - Naming: `sso-notifier-db-YYYY-MM-DD_HH-MM-SS.db`
+   - Configuration: `/opt/sso-notifier/backup.env`
+   - Logs: `/opt/sso-notifier/backups/backup.log`
+
+2. **Local Safety Backups**
+   - Created automatically when re-running `setup-ec2.sh` on existing installation
+   - Naming: `sso-notifier.db.backup.YYYYMMDD_HHMMSS`
+   - Location: `/opt/sso-notifier/backups/`
+   - Purpose: Protects database during script re-runs
+
+3. **Environment Variables** (backup.sh)
+   - `DB_PATH`: Database file location (default: `/opt/sso-notifier/data/sso-notifier.db`)
+   - `S3_BACKUP_URI`: S3 destination (e.g., `s3://bucket/backups`)
+   - `AWS_DEFAULT_REGION`: AWS region for S3 (default: `eu-central-1`)
+
+**IAM Requirements:**
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject", "s3:PutObjectAcl"],
+  "Resource": "arn:aws:s3:::your-bucket/*"
+}
+```
+
+**Setup Process:**
+- During `setup-ec2.sh` execution, user is prompted to enable S3 backups
+- If enabled, creates cron job running `/opt/sso-notifier/backup-wrapper.sh`
+- Wrapper sources environment variables from `backup.env` for cron context
+- Manual backups can be triggered: `/opt/sso-notifier/backup.sh`
+
+**Safety Guarantees:**
+- Re-running `setup-ec2.sh` never overwrites existing database
+- Local backup created before any setup modifications
+- Only binary files and scripts are updated during setup
+- `deploy.sh` never touches the database
+
+See `deployment/README.md` for detailed backup/restore procedures.
+
 ### Monitoring
 
 Structured logging with slog:
@@ -919,6 +968,12 @@ go mod vendor
 7. Update structs in `dal/bolt.go` (after migration is ready)
 8. Update parsing in `providers/chernivtsi.go` (if needed)
 9. Update templates in `notifications.go` (if needed)
+
+**Modify deployment scripts:**
+- `deployment/setup-ec2.sh`: Initial EC2 setup and configuration
+- `deployment/deploy.sh`: Binary deployment only (never touches DB)
+- `deployment/backup.sh`: S3 backup script
+- Note: Always preserve database during script modifications
 
 ## Resources
 

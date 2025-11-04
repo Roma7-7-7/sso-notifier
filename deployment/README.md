@@ -74,10 +74,20 @@ The deployment setup provides:
            "kms:Decrypt"
          ],
          "Resource": "*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:PutObject",
+           "s3:PutObjectAcl"
+         ],
+         "Resource": "arn:aws:s3:::your-backup-bucket/*"
        }
      ]
    }
    ```
+
+   **Note:** The S3 permissions are only required if you enable automated backups during setup.
 
 3. **SSM Parameter Store**
    ```bash
@@ -120,8 +130,11 @@ The setup script will:
 3. Install systemd service
 4. Configure passwordless sudo for service management
 5. Perform initial deployment
-6. Enable auto-start on boot
-7. Start the service
+6. Set up automated S3 backups (optional)
+7. Enable auto-start on boot
+8. Start the service
+
+**Note:** If running on an existing installation, the script will automatically create a safety backup of your database before proceeding.
 
 ### Step 3: Verify Installation
 
@@ -143,22 +156,117 @@ After setup, the following structure is created:
 ```
 /opt/sso-notifier/
 ├── bin/
-│   └── sso-notifier           # Current binary
+│   └── sso-notifier                      # Current binary
 ├── data/
-│   └── sso-notifier.db        # BoltDB database
+│   └── sso-notifier.db                   # BoltDB database
 ├── backups/
-│   ├── backup_20250130_120000/
+│   ├── backup_20250130_120000/           # Binary backups (last 5 kept)
 │   ├── backup_20250130_130000/
-│   └── ...                     # Last 5 backups kept
-├── deploy.sh                   # Deployment script
-├── current_version             # Current release tag
-└── deployment.log              # Deployment history
+│   ├── sso-notifier.db.backup.*/         # Database safety backups
+│   └── backup.log                        # S3 backup logs (if enabled)
+├── deploy.sh                              # Deployment script
+├── backup.sh                              # S3 backup script (if enabled)
+├── backup.env                             # Backup environment config (if enabled)
+├── backup-wrapper.sh                      # Cron wrapper for backups (if enabled)
+├── current_version                        # Current release tag
+└── deployment.log                         # Deployment history
 
 /etc/sudoers.d/
 └── sso-notifier                # Passwordless sudo config for service management
 
 /etc/systemd/system/
 └── sso-notifier.service        # Systemd service file
+```
+
+## Backup System
+
+The bot includes a comprehensive backup system to protect your database.
+
+### Automated S3 Backups
+
+During initial setup, you'll be prompted to enable automated S3 backups. If enabled:
+
+- **Schedule**: Daily at 8 PM (20:00) server time
+- **Location**: Your specified S3 bucket/path
+- **Naming**: `sso-notifier-db-YYYY-MM-DD_HH-MM-SS.db`
+- **Logs**: `/opt/sso-notifier/backups/backup.log`
+
+### Manual Backup to S3
+
+If you configured S3 backups, you can trigger a manual backup anytime:
+
+```bash
+/opt/sso-notifier/backup.sh
+```
+
+This will upload the current database to your configured S3 location with a timestamp.
+
+### Local Database Safety Backups
+
+The setup script automatically creates local backups:
+
+- **When**: Before re-running `setup-ec2.sh` on an existing installation
+- **Location**: `/opt/sso-notifier/backups/sso-notifier.db.backup.YYYYMMDD_HHMMSS`
+- **Purpose**: Protects your data during script re-runs or updates
+
+### Backup Configuration
+
+S3 backup settings are stored in `/opt/sso-notifier/backup.env`:
+
+```bash
+DB_PATH=/opt/sso-notifier/data/sso-notifier.db
+S3_BACKUP_URI=s3://your-bucket/backups
+PATH=/usr/local/bin:/usr/bin:/bin
+AWS_DEFAULT_REGION=eu-central-1
+```
+
+To change the S3 location:
+1. Edit `/opt/sso-notifier/backup.env`
+2. Update `S3_BACKUP_URI` value
+3. Test: `/opt/sso-notifier/backup.sh`
+
+### View Backup Logs
+
+```bash
+# Follow backup logs in real-time
+tail -f /opt/sso-notifier/backups/backup.log
+
+# View all backup logs
+cat /opt/sso-notifier/backups/backup.log
+```
+
+### Restore from S3 Backup
+
+```bash
+# List available backups
+aws s3 ls s3://your-bucket/backups/
+
+# Download a specific backup
+aws s3 cp s3://your-bucket/backups/sso-notifier-db-2025-01-30_20-00-00.db \
+          /tmp/restore.db
+
+# Stop the service
+sudo systemctl stop sso-notifier.service
+
+# Replace database
+sudo cp /tmp/restore.db /opt/sso-notifier/data/sso-notifier.db
+sudo chown ec2-user:ec2-user /opt/sso-notifier/data/sso-notifier.db
+
+# Start the service
+sudo systemctl start sso-notifier.service
+```
+
+### Manage Cron Job
+
+```bash
+# View current cron jobs
+crontab -l
+
+# Edit cron schedule (change backup time)
+crontab -e
+
+# Remove backup cron job
+crontab -l | grep -v "backup-wrapper.sh" | crontab -
 ```
 
 ## Manual Operations
@@ -410,8 +518,8 @@ sudo systemctl daemon-reload
 # Remove sudoers configuration
 sudo rm /etc/sudoers.d/sso-notifier
 
-# Remove cron job if you set one up
-crontab -l | grep -v "sso-notifier" | crontab -
+# Remove backup cron job if configured
+crontab -l | grep -v "backup-wrapper.sh" | crontab -
 
 # Remove installation directory
 sudo rm -rf /opt/sso-notifier
