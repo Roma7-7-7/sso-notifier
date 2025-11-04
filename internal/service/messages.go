@@ -13,34 +13,41 @@ import (
 
 // MessageBuilder builds notification messages for subscribed users
 type MessageBuilder struct {
-	date      string
-	shutdowns dal.Shutdowns
-	now       time.Time
+	shutdowns    dal.Shutdowns
+	nextDayTable *dal.Shutdowns // Optional next day shutdowns
+	now          time.Time
 }
 
 // NewMessageBuilder creates a new message builder for a specific date and shutdowns data
-func NewMessageBuilder(date string, shutdowns dal.Shutdowns, now time.Time) *MessageBuilder {
+func NewMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *MessageBuilder {
 	return &MessageBuilder{
-		date:      date,
 		shutdowns: shutdowns,
 		now:       now,
 	}
 }
 
+// WithNextDay adds tomorrow's shutdown schedule to the builder
+// Returns the builder for chaining
+func (mb *MessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *MessageBuilder {
+	mb.nextDayTable = &nextDayShutdowns
+	return mb
+}
+
 // Message contains the built message and updated subscription
 type Message struct {
-	Text          string
-	UpdatedGroups map[string]string // groupNum -> newHash
+	Text                  string
+	TodayUpdatedGroups    map[string]string // groupNum -> newHash for today
+	TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
 }
 
 // Build generates a notification message for a subscription
 // Returns Message with message and hash updates, or empty result if no changes
-func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.NotificationState) (Message, error) {
+// If builder has next day data, tomorrowState must be provided
+func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (Message, error) {
 	result := Message{
-		UpdatedGroups: make(map[string]string),
+		TodayUpdatedGroups:    make(map[string]string),
+		TomorrowUpdatedGroups: make(map[string]string),
 	}
-
-	groupSchedules := make([]GroupSchedule, 0)
 
 	// Collect and sort group numbers to ensure deterministic order
 	groupNums := make([]string, 0, len(sub.Groups))
@@ -55,38 +62,41 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.Notificatio
 		return numI < numJ
 	})
 
-	for _, groupNum := range groupNums {
-		// Get current hash from notification state
-		currentHash := notifState.Hashes[groupNum]
+	// Collect date schedules (today + tomorrow max)
+	const maxDates = 2
+	dateSchedules := make([]DateSchedule, 0, maxDates)
 
-		group, ok := mb.shutdowns.Groups[groupNum]
-		if !ok {
-			continue
-		}
-
-		// Hack to make sure updates for new day will be sent even if there is no changes in schedule
-		newHash := shutdownGroupHash(group)
-		if currentHash == newHash {
-			continue
-		}
-
-		// Process group shutdown periods
-		joinedPeriods, joinedStatuses := join(mb.shutdowns.Periods, group.Items)
-		cutPeriods, cutStatuses := cutByTime(mb.now, joinedPeriods, joinedStatuses)
-
-		// Build group schedule
-		groupSchedule := buildGroupSchedule(groupNum, cutPeriods, cutStatuses)
-
-		groupSchedules = append(groupSchedules, groupSchedule)
-		result.UpdatedGroups[groupNum] = newHash
+	// Process today's schedule
+	todaySchedule := mb.processDateSchedule(mb.shutdowns, todayState, groupNums, mb.now)
+	if len(todaySchedule.UpdatedGroups) > 0 {
+		dateSchedules = append(dateSchedules, DateSchedule{
+			Date:   mb.shutdowns.Date,
+			Groups: todaySchedule.Groups,
+		})
+		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
 	}
 
-	if len(groupSchedules) == 0 {
+	// Process tomorrow's schedule if available
+	if mb.nextDayTable != nil {
+		// For tomorrow, show all periods (start from midnight)
+		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location()) // Use arbitrary date with 00:00
+		tomorrowSchedule := mb.processDateSchedule(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
+		if len(tomorrowSchedule.UpdatedGroups) > 0 {
+			dateSchedules = append(dateSchedules, DateSchedule{
+				Date:   mb.nextDayTable.Date,
+				Groups: tomorrowSchedule.Groups,
+			})
+			result.TomorrowUpdatedGroups = tomorrowSchedule.UpdatedGroups
+		}
+	}
+
+	// If no changes at all, return empty result
+	if len(dateSchedules) == 0 {
 		return result, nil
 	}
 
-	// Render final message using template
-	msg, err := renderMessage(mb.date, groupSchedules)
+	// Render multi-date message
+	msg, err := renderMultiDateMessage(dateSchedules)
 	if err != nil {
 		return Message{}, fmt.Errorf("render message: %w", err)
 	}
@@ -94,6 +104,49 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, notifState dal.Notificatio
 	result.Text = msg
 
 	return result, nil
+}
+
+// dateScheduleResult holds the result of processing a single date's schedule
+type dateScheduleResult struct {
+	Groups        []GroupSchedule
+	UpdatedGroups map[string]string
+}
+
+// processDateSchedule processes shutdown schedule for a single date
+func (mb *MessageBuilder) processDateSchedule(
+	shutdowns dal.Shutdowns,
+	notifState dal.NotificationState,
+	groupNums []string,
+	filterTime time.Time,
+) dateScheduleResult {
+	result := dateScheduleResult{
+		Groups:        make([]GroupSchedule, 0),
+		UpdatedGroups: make(map[string]string),
+	}
+
+	for _, groupNum := range groupNums {
+		currentHash := notifState.Hashes[groupNum]
+
+		group, ok := shutdowns.Groups[groupNum]
+		if !ok {
+			continue
+		}
+
+		newHash := shutdownGroupHash(group)
+		if currentHash == newHash {
+			continue
+		}
+
+		joinedPeriods, joinedStatuses := join(shutdowns.Periods, group.Items)
+		cutPeriods, cutStatuses := cutByTime(filterTime, joinedPeriods, joinedStatuses)
+
+		groupSchedule := buildGroupSchedule(groupNum, cutPeriods, cutStatuses)
+
+		result.Groups = append(result.Groups, groupSchedule)
+		result.UpdatedGroups[groupNum] = newHash
+	}
+
+	return result
 }
 
 // shutdownGroupHash generates a hash for a shutdown group
@@ -209,14 +262,10 @@ func buildGroupSchedule(num string, periods []dal.Period, statuses []dal.Status)
 	}
 }
 
-func renderMessage(date string, groups []GroupSchedule) (string, error) {
+// renderMultiDateMessage renders a message for multiple dates
+func renderMultiDateMessage(dates []DateSchedule) (string, error) {
 	msg := NotificationMessage{
-		Dates: []DateSchedule{
-			{
-				Date:   date,
-				Groups: groups,
-			},
-		},
+		Dates: dates,
 	}
 
 	var buf bytes.Buffer
