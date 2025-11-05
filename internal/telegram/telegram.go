@@ -20,7 +20,6 @@ type SubscriptionService interface {
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscriptions() ([]dal.Subscription, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
-	SubscribeToGroup(chatID int64, number string) error
 	ToggleGroupSubscription(chatID int64, number string) error
 	Unsubscribe(chatID int64) error
 }
