@@ -384,27 +384,31 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ---
 
-### Phase 2: Service Layer ✅ / ❌
+### Phase 2: Service Layer ✅
 
-- [ ] **New Service**: `internal/service/alerts.go`
+- [x] **New Service**: `internal/service/alerts.go`
   - `NotifyUpcomingShutdowns(ctx context.Context) error`
-  - `isOutageStart(items []dal.ShutdownGroupItem, index int, status dal.Status) bool`
-  - `findPeriodIndex(items []dal.ShutdownGroupItem, timeStr string) int`
+  - `isOutageStart(items []dal.Status, index int, status dal.Status) bool`
+  - `findPeriodIndex(periods []dal.Period, timeStr string) int`
   - `isWithinNotificationWindow(hour int) bool` (6 AM - 11 PM check)
-  - `buildNotificationKey(chatID int64, date, time, status, group string) string`
-  - `groupNotificationsByUser() map[int64][]PendingNotification`
-  - `renderUpcomingMessage(notifications []PendingNotification) string`
+  - `renderUpcomingMessage(alerts []PendingAlert) string` (includes grouping logic)
+  - `processSubscriptionAlert()` (processes alerts per user)
+  - `getSettingKeyForStatus()`, `getEmojiForStatus()`, `getLabelForStatus()` helpers
 
-- [ ] **Subscription Service**: Extend `internal/service/subscriptions.go`
-  - `GetSettings(chatID int64) (map[string]interface{}, error)`
-  - `ToggleSetting(chatID int64, key string, defaultValue bool) error`
-  - `GetBoolSetting(chatID int64, key string, defaultBool bool) (bool, error)`
+- [x] **Subscription Service**: Extend `internal/service/subscriptions.go`
+  - `GetSettings(chatID int64) (map[dal.SettingKey]interface{}, error)`
+  - `ToggleSetting(chatID int64, key dal.SettingKey, defaultValue bool) error`
+  - `GetBoolSetting(chatID int64, key dal.SettingKey, defaultBool bool) (bool, error)`
 
-**Files to create**:
+- [x] **Data Model**: Updated `internal/dal/subscriptions.go`
+  - Added `Settings map[SettingKey]interface{}` to Subscription struct
+
+**Files created**:
 - `internal/service/alerts.go`
 
-**Files to modify**:
+**Files modified**:
 - `internal/service/subscriptions.go`
+- `internal/dal/subscriptions.go`
 
 ---
 
@@ -520,10 +524,11 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 - [x] Design document created
 - [x] Phase 1: Data Layer (Migration v5, DAL methods, type safety)
+- [x] Phase 2: Service Layer (Alerts service, subscription settings methods)
 
 ### In Progress 🚧
 
-- [ ] Phase 2: Service Layer
+- [ ] Phase 3: Telegram Bot UI
 
 ### Blocked 🚫
 
@@ -690,25 +695,25 @@ func isWithinNotificationWindow(hour int) bool {
 
 ### Functionality
 
-- [x] Notifications sent 10 minutes before outage starts
-- [ ] No duplicate notifications for same outage
-- [ ] Settings UI works correctly
-- [ ] 6 AM - 11 PM window enforced
-- [ ] Multiple groups merged into single message
+- [x] Notifications sent 10 minutes before outage starts (logic implemented)
+- [x] No duplicate notifications for same outage (alerts bucket deduplication)
+- [ ] Settings UI works correctly (Phase 3)
+- [x] 6 AM - 11 PM window enforced (isWithinNotificationWindow)
+- [x] Multiple groups merged into single message (renderUpcomingMessage grouping)
 
 ### Code Quality
 
-- [ ] All new code follows existing patterns
-- [ ] Structured logging throughout
-- [ ] Error handling consistent with existing code
-- [ ] No race conditions
+- [x] All new code follows existing patterns
+- [x] Structured logging throughout
+- [x] Error handling consistent with existing code
+- [x] No race conditions (mutex in Alerts service)
 
 ### Documentation
 
-- [ ] `CLAUDE.md` updated
-- [ ] `TEMPLATES.md` updated
-- [ ] Migration v5 README complete
-- [ ] This design doc serves as PR description
+- [x] `CLAUDE.md` updated (added comment style guidelines)
+- [ ] `TEMPLATES.md` updated (Phase 5)
+- [x] Migration v5 README complete
+- [ ] This design doc serves as PR description (at end)
 
 ---
 

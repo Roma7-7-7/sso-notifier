@@ -11,9 +11,10 @@ import (
 const subscriptionsBucket = "subscriptions"
 
 type Subscription struct {
-	ChatID    int64               `json:"chat_id"`
-	Groups    map[string]struct{} `json:"groups"`
-	CreatedAt time.Time           `json:"created_at"`
+	ChatID    int64                      `json:"chat_id"`
+	Groups    map[string]struct{}        `json:"groups"`
+	CreatedAt time.Time                  `json:"created_at"`
+	Settings  map[SettingKey]interface{} `json:"settings,omitempty"` // nil by default, backward compatible
 }
 
 func (s *BoltDB) CountSubscriptions() (int, error) {
@@ -97,12 +98,12 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 }
 
 // GetBoolSetting retrieves a boolean setting from the settings map with a default value
-func GetBoolSetting(settings map[string]interface{}, key SettingKey, defaultValue bool) bool {
+func GetBoolSetting(settings map[SettingKey]interface{}, key SettingKey, defaultValue bool) bool {
 	if settings == nil {
 		return defaultValue
 	}
 
-	val, exists := settings[string(key)]
+	val, exists := settings[key]
 	if !exists {
 		return defaultValue
 	}
@@ -116,12 +117,12 @@ func GetBoolSetting(settings map[string]interface{}, key SettingKey, defaultValu
 }
 
 // GetIntSetting retrieves an integer setting from the settings map with a default value
-func GetIntSetting(settings map[string]interface{}, key SettingKey, defaultValue int) int {
+func GetIntSetting(settings map[SettingKey]interface{}, key SettingKey, defaultValue int) int {
 	if settings == nil {
 		return defaultValue
 	}
 
-	val, exists := settings[string(key)]
+	val, exists := settings[key]
 	if !exists {
 		return defaultValue
 	}

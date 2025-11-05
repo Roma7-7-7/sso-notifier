@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
+
+var ErrSubscriptionNotFound = errors.New("subscription not found")
 
 type SubscriptionsStore interface {
 	ExistsSubscription(chatID int64) (bool, error)
@@ -112,40 +115,69 @@ func (s *Subscriptions) ToggleGroupSubscription(chatID int64, groupNum string) e
 	return nil
 }
 
-func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
+func (s *Subscriptions) Unsubscribe(chatID int64) error {
+	if err := s.store.Purge(chatID); err != nil {
+		return fmt.Errorf("purge subscriptions: %w", err)
+	}
+	return nil
+}
+
+// GetSettings retrieves the settings map for a user
+func (s *Subscriptions) GetSettings(chatID int64) (map[dal.SettingKey]interface{}, error) {
+	sub, exists, err := s.store.GetSubscription(chatID)
+	if err != nil {
+		return nil, fmt.Errorf("get subscription: %w", err)
+	}
+	if !exists || sub.Settings == nil {
+		return make(map[dal.SettingKey]interface{}), nil
+	}
+
+	return sub.Settings, nil
+}
+
+// ToggleSetting toggles a boolean setting for a user
+func (s *Subscriptions) ToggleSetting(chatID int64, key dal.SettingKey, defaultValue bool) error {
 	sub, exists, err := s.store.GetSubscription(chatID)
 	if err != nil {
 		return fmt.Errorf("get subscription: %w", err)
 	}
 
 	if !exists {
-		sub = dal.Subscription{
-			ChatID:    chatID,
-			CreatedAt: time.Now(),
-			Groups:    make(map[string]struct{}),
-		}
+		return fmt.Errorf("subscription for chatID %d: %w", chatID, ErrSubscriptionNotFound)
 	}
 
-	if sub.Groups == nil {
-		sub.Groups = make(map[string]struct{})
+	if sub.Settings == nil {
+		sub.Settings = make(map[dal.SettingKey]interface{})
 	}
 
-	sub.Groups[groupNum] = struct{}{}
-	err = s.store.PutSubscription(sub)
-	if err != nil {
+	// use !defaultValue because we inverse it below with newValue := !currentValue
+	currentValue := dal.GetBoolSetting(sub.Settings, key, !defaultValue)
+
+	newValue := !currentValue
+	sub.Settings[key] = newValue
+
+	if err := s.store.PutSubscription(sub); err != nil {
 		return fmt.Errorf("put subscription: %w", err)
 	}
 
-	if !exists {
-		s.log.Debug("new subscriber", "chatID", chatID)
-	}
+	s.log.Debug("toggled setting",
+		"chatID", chatID,
+		"key", key,
+		"oldValue", currentValue,
+		"newValue", newValue)
 
 	return nil
 }
 
-func (s *Subscriptions) Unsubscribe(chatID int64) error {
-	if err := s.store.Purge(chatID); err != nil {
-		return fmt.Errorf("purge subscriptions: %w", err)
+// GetBoolSetting retrieves a boolean setting for a user
+func (s *Subscriptions) GetBoolSetting(chatID int64, key dal.SettingKey, defaultValue bool) (bool, error) {
+	sub, exists, err := s.store.GetSubscription(chatID)
+	if err != nil {
+		return defaultValue, fmt.Errorf("get subscription: %w", err)
 	}
-	return nil
+	if !exists {
+		return defaultValue, nil
+	}
+
+	return dal.GetBoolSetting(sub.Settings, key, defaultValue), nil
 }

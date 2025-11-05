@@ -993,6 +993,12 @@ go mod vendor
 - Error wrapping with `fmt.Errorf("context: %w", err)`
 - Context passed to all I/O operations
 - Ukrainian strings for user-facing messages
+- **Comments**: Only add comments that explain WHY or provide context (business rules, corner cases, non-obvious behavior). Never add comments that just repeat what the code obviously does.
+  - ✅ Good: `// use !defaultValue because we inverse it below` (explains non-obvious logic)
+  - ✅ Good: `// Check if we're within notification window (6 AM - 11 PM)` (provides business context)
+  - ❌ Bad: `// Check if user is subscribed` before `if _, subscribed := sub.Groups[groupNum]` (obvious from code)
+  - ❌ Bad: `// Save` before `store.Put()` (completely useless)
+  - ❌ Bad: `// Toggle it` before `newValue := !currentValue` (obvious from code)
 
 ### Common Operations
 
