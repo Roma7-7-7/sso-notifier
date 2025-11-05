@@ -16,6 +16,7 @@ import (
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
+	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
@@ -64,7 +65,8 @@ func run(ctx context.Context) int {
 	}
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
-	shutdownsSvc := service.NewShutdowns(store, loc, log)
+	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
+	shutdownsSvc := service.NewShutdowns(store, provider, loc, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, store, sender, loc, log)
 

@@ -47,7 +47,7 @@ internal/
 ### Data Flow
 
 1. **Schedule Refresh** (configurable, default: 5 minutes)
-   - `providers.ChernivtsiShutdowns()` fetches and parses HTML
+   - `ChernivtsiProvider.Shutdowns()` fetches and parses HTML
    - Stores schedule in BoltDB via `service.Shutdowns`
 
 2. **Notification Check** (configurable, default: 5 minutes)

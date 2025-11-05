@@ -17,20 +17,27 @@ type ShutdownsStore interface {
 	PutShutdowns(d dal.Date, s dal.Shutdowns) error
 }
 
+type ShutdownsProvider interface {
+	Shutdowns(ctx context.Context) (dal.Shutdowns, bool, error)
+	ShutdownsNext(ctx context.Context) (dal.Shutdowns, error)
+}
+
 type Shutdowns struct {
-	store ShutdownsStore
+	store    ShutdownsStore
+	provider ShutdownsProvider
 
 	loc *time.Location
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewShutdowns(store ShutdownsStore, loc *time.Location, log *slog.Logger) *Shutdowns {
+func NewShutdowns(store ShutdownsStore, provider ShutdownsProvider, loc *time.Location, log *slog.Logger) *Shutdowns {
 	return &Shutdowns{
-		store: store,
-		loc:   loc,
-		log:   log.With("component", "service").With("service", "shutdowns"),
-		mx:    &sync.Mutex{},
+		store:    store,
+		provider: provider,
+		loc:      loc,
+		log:      log.With("component", "service").With("service", "shutdowns"),
+		mx:       &sync.Mutex{},
 	}
 }
 
@@ -44,7 +51,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 
 	// Fetch today's schedule and check if tomorrow's is available
 	today := dal.TodayDate(s.loc)
-	todayTable, nextDayAvailable, err := providers.ChernivtsiShutdowns(ctx)
+	todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
 	if err != nil {
 		if !errors.Is(err, providers.ErrCheckNextDayAvailability) {
 			return fmt.Errorf("get chernivtsi shutdowns for today: %w", err)
@@ -64,7 +71,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	}
 
 	tomorrow := dal.TomorrowDate(s.loc)
-	tomorrowTable, err := providers.ChernivtsiShutdownsNext(ctx)
+	tomorrowTable, err := s.provider.ShutdownsNext(ctx)
 	if err != nil {
 		// Log error but don't fail the entire refresh - today's data is already saved
 		s.log.ErrorContext(ctx, "failed to get tomorrow's shutdowns", "error", err)
