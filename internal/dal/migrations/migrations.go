@@ -13,6 +13,7 @@ import (
 	v2 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v2"
 	v3 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v3"
 	v4 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v4"
+	v5 "github.com/Roma7-7-7/sso-notifier/internal/dal/migrations/v5"
 )
 
 // Migration represents a database migration
@@ -37,6 +38,7 @@ func init() {
 	registerMigration(v2.New())
 	registerMigration(v3.New())
 	registerMigration(v4.New())
+	registerMigration(v5.New())
 }
 
 func registerMigration(m Migration) {

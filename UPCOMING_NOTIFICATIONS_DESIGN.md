@@ -167,7 +167,7 @@ type Subscription struct {
 
 **No migration needed** - `Settings` defaults to `nil`, backward compatible.
 
-#### New Bucket: upcoming_notifications
+#### New Bucket: alerts
 
 **Purpose**: Track sent notifications to prevent duplicates.
 
@@ -184,26 +184,26 @@ type Subscription struct {
 
 **Cleanup Strategy**: (Future) Periodically delete entries older than 24 hours.
 
-### Migration v4
+### Migration v5
 
 ```go
-package v4
+package v5
 
 import "go.etcd.io/bbolt"
 
-type MigrationV4 struct{}
+type MigrationV5 struct{}
 
-func (m *MigrationV4) Version() int {
-    return 4
+func (m *MigrationV5) Version() int {
+    return 5
 }
 
-func (m *MigrationV4) Description() string {
-    return "Create upcoming_notifications bucket for tracking 10-minute advance alerts"
+func (m *MigrationV5) Description() string {
+    return "Create alerts bucket for tracking 10-minute advance alerts"
 }
 
-func (m *MigrationV4) Up(db *bbolt.DB) error {
+func (m *MigrationV5) Up(db *bbolt.DB) error {
     return db.Update(func(tx *bbolt.Tx) error {
-        _, err := tx.CreateBucketIfNotExists([]byte("upcoming_notifications"))
+        _, err := tx.CreateBucketIfNotExists([]byte("alerts"))
         return err
     })
 }
@@ -258,7 +258,7 @@ func (m *MigrationV4) Up(db *bbolt.DB) error {
                │
                v
 ┌─────────────────────────────────────────┐
-│ Mark as sent in upcoming_notifications  │
+│ Mark as sent in alerts  │
 │ bucket (separate transaction)           │
 └─────────────────────────────────────────┘
 ```
@@ -349,17 +349,17 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ### Phase 1: Data Layer ✅ / ❌
 
-- [ ] **Migration v4**: Create `upcoming_notifications` bucket
-  - File: `internal/dal/migrations/v4/migration.go`
-  - README: `internal/dal/migrations/v4/README.md`
+- [ ] **Migration v5**: Create `alerts` bucket
+  - File: `internal/dal/migrations/v5/migration.go`
+  - README: `internal/dal/migrations/v5/README.md`
   - Update: `internal/dal/migrations/README.md` (latest schema)
   - Register: `internal/dal/migrations/migrations.go`
 
 - [ ] **DAL Methods**: Add to `internal/dal/bolt.go`
-  - `GetUpcomingNotification(key string) (time.Time, bool, error)`
-  - `PutUpcomingNotification(key string, sentAt time.Time) error`
-  - `DeleteUpcomingNotification(key string) error`
-  - Define `UpcomingNotificationsStore` interface
+  - `GetAlert(key string) (time.Time, bool, error)`
+  - `PutAlert(key string, sentAt time.Time) error`
+  - `DeleteAlert(key string) error`
+  - Define `AlertsStore` interface
 
 - [ ] **Settings Helpers**: Add to `internal/dal/bolt.go`
   - `GetSetting(settings map[string]interface{}, key string, defaultValue interface{}) interface{}`
@@ -372,14 +372,14 @@ Placement: Below "Керувати групами" / "Підписатись н�
 - `internal/dal/migrations/README.md`
 
 **Files to create**:
-- `internal/dal/migrations/v4/migration.go`
-- `internal/dal/migrations/v4/README.md`
+- `internal/dal/migrations/v5/migration.go`
+- `internal/dal/migrations/v5/README.md`
 
 ---
 
 ### Phase 2: Service Layer ✅ / ❌
 
-- [ ] **New Service**: `internal/service/upcoming_notifications.go`
+- [ ] **New Service**: `internal/service/alerts.go`
   - `NotifyUpcomingShutdowns(ctx context.Context) error`
   - `isOutageStart(items []dal.ShutdownGroupItem, index int, status dal.Status) bool`
   - `findPeriodIndex(items []dal.ShutdownGroupItem, timeStr string) int`
@@ -394,7 +394,7 @@ Placement: Below "Керувати групами" / "Підписатись н�
   - `GetBoolSetting(chatID int64, key string, defaultBool bool) (bool, error)`
 
 **Files to create**:
-- `internal/service/upcoming_notifications.go`
+- `internal/service/alerts.go`
 
 **Files to modify**:
 - `internal/service/subscriptions.go`
@@ -430,7 +430,7 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 - [ ] **Main Entry Point**: Update `cmd/bot/main.go`
   - Add `NotifyUpcomingInterval` to `Config` struct (default: 1 minute)
-  - Wire up `UpcomingNotifications` service
+  - Wire up `Alerts` service
   - Add goroutine: `notifyUpcomingShutdowns()`
   - Pass cancellation context
 
@@ -438,7 +438,7 @@ Placement: Below "Керувати групами" / "Підписатись н�
   ```go
   func notifyUpcomingShutdowns(
       ctx context.Context,
-      svc *service.UpcomingNotifications,
+      svc *service.Alerts,
       delay time.Duration,
       log *slog.Logger,
   )
@@ -605,7 +605,7 @@ func isWithinNotificationWindow(hour int) bool {
 
 **Problem**: At 8:20, 8:21, 8:22... we all match "8:30" period.
 
-**Solution**: Deduplication via `upcoming_notifications` bucket. Once key exists, skip notification.
+**Solution**: Deduplication via `alerts` bucket. Once key exists, skip notification.
 
 ### 3. Multiple Dates in Schedule
 
@@ -668,7 +668,7 @@ func isWithinNotificationWindow(hour int) bool {
 
 ### 3. Cleanup Strategy
 
-**Question**: When to delete old entries from `upcoming_notifications` bucket?
+**Question**: When to delete old entries from `alerts` bucket?
 
 **Options**:
 - A. Periodic goroutine (every 24 hours)
@@ -700,14 +700,14 @@ func isWithinNotificationWindow(hour int) bool {
 
 - [ ] `CLAUDE.md` updated
 - [ ] `TEMPLATES.md` updated
-- [ ] Migration v4 README complete
+- [ ] Migration v5 README complete
 - [ ] This design doc serves as PR description
 
 ---
 
 ## Deployment Checklist
 
-- [ ] Migration v4 tested on production DB snapshot
+- [ ] Migration v5 tested on production DB snapshot
 - [ ] Binary deployed to EC2
 - [ ] Verify goroutine starts
 - [ ] Monitor logs for errors
