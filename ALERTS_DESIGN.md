@@ -1,4 +1,4 @@
-# Upcoming Notifications Feature - Design Document
+# Alerts Feature - Design Document
 
 **Status**: 🚧 In Progress
 **Created**: 2025-11-05
