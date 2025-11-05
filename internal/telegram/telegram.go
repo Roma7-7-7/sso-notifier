@@ -58,13 +58,8 @@ func (b *Bot) Start(ctx context.Context) error {
 	b.bot.Handle("/subscribe", b.ManageGroupsHandler)
 	b.bot.Handle("/unsubscribe", b.UnsubscribeHandler)
 
-	// Register button handlers
-	b.registerButtonHandlers(b.markups.backToMainBtns(), b.StartHandler)
-	b.registerButtonHandlers(b.markups.manageGroupsBtns(), b.ManageGroupsHandler)
-	b.registerButtonHandlers(b.markups.unsubscribeBtns(), b.UnsubscribeHandler)
-
-	// Register group toggle button handlers (dynamic callbacks)
-	b.bot.Handle(tb.OnCallback, b.handleCallback)
+	// Register catch-all callback handler FIRST
+	b.bot.Handle(tb.OnCallback, b.handleCallbackRouter)
 
 	go func() {
 		<-ctx.Done()
@@ -142,21 +137,45 @@ func (b *Bot) ManageGroupsHandler(c tb.Context) error {
 	return b.sendOrDelete(c, "Оберіть групи для підписки\n(натисніть щоб додати/видалити)", markup)
 }
 
-func (b *Bot) handleCallback(c tb.Context) error {
+func (b *Bot) handleCallbackRouter(c tb.Context) error {
 	callback := c.Callback()
 	if callback == nil {
+		b.log.Debug("callback router called with nil callback")
 		return nil
 	}
 
 	data := callback.Data
+	chatID := c.Sender().ID
+	b.log.Debug("callback router called", "callbackData", data, "chatID", chatID)
 
-	// Handle toggle_group_ callbacks
-	if len(data) > 13 && data[:13] == "toggle_group_" {
-		groupNum := data[13:]
-		return b.ToggleGroupHandler(groupNum)(c)
+	// Respond to callback first to remove loading state
+	if err := c.Respond(); err != nil {
+		b.log.Warn("failed to respond to callback", "error", err, "chatID", chatID)
 	}
 
-	return nil
+	// Route based on callback data
+	switch {
+	case data == "subscribe", data == "manage_groups":
+		b.log.Debug("routing to ManageGroupsHandler")
+		return b.ManageGroupsHandler(c)
+
+	case data == "unsubscribe":
+		b.log.Debug("routing to UnsubscribeHandler")
+		return b.UnsubscribeHandler(c)
+
+	case data == "back":
+		b.log.Debug("routing to StartHandler")
+		return b.StartHandler(c)
+
+	case len(data) > 13 && data[:13] == "toggle_group_":
+		groupNum := data[13:]
+		b.log.Debug("routing to ToggleGroupHandler", "groupNum", groupNum)
+		return b.ToggleGroupHandler(groupNum)(c)
+
+	default:
+		b.log.Debug("no handler matched for callback", "data", data)
+		return nil
+	}
 }
 
 func (b *Bot) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
