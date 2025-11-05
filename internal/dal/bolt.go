@@ -1,201 +1,23 @@
 package dal
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"go.etcd.io/bbolt"
 )
 
 type (
-	Status string
-
-	Date struct {
-		Year  int
-		Month time.Month
-		Day   int
-	}
-
-	Shutdowns struct {
-		Date    string                   `json:"date"`
-		Periods []Period                 `json:"periods"`
-		Groups  map[string]ShutdownGroup `json:"groups"`
-	}
-
-	Period struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	}
-
-	ShutdownGroup struct {
-		Number int
-		Items  []Status
-	}
-
-	Subscription struct {
-		ChatID    int64               `json:"chat_id"`
-		Groups    map[string]struct{} `json:"groups"`
-		CreatedAt time.Time           `json:"created_at"`
-	}
-
-	NotificationState struct {
-		ChatID int64             `json:"chat_id"`
-		Date   string            `json:"date"`
-		SentAt time.Time         `json:"sent_at"`
-		Hashes map[string]string `json:"hashes"`
-	}
-
 	BoltDB struct {
 		db *bbolt.DB
 	}
 )
 
-const shutdownsBucket = "shutdowns"
-const subscriptionsBucket = "subscriptions"
-const notificationsBucket = "notifications"
-
-const (
-	ON    Status = "Y"
-	OFF   Status = "N"
-	MAYBE Status = "M"
-)
-
-func (d Date) ToKey() string {
-	return fmt.Sprintf("%d-%02d-%02d", d.Year, d.Month, d.Day)
-}
-
-func TodayDate(loc *time.Location) Date {
-	now := time.Now().In(loc)
-	return Date{
-		Year:  now.Year(),
-		Month: now.Month(),
-		Day:   now.Day(),
-	}
-}
-
-func TomorrowDate(loc *time.Location) Date {
-	tomorrow := time.Now().In(loc).Add(24 * time.Hour) //nolint:mnd // 1 day
-	return Date{
-		Year:  tomorrow.Year(),
-		Month: tomorrow.Month(),
-		Day:   tomorrow.Day(),
-	}
-}
-
 func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
 	return &BoltDB{db: db}, nil
 }
 
-func (s *BoltDB) GetShutdowns(d Date) (Shutdowns, bool, error) {
-	var res Shutdowns
-	found := false
-
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		data := tx.Bucket([]byte(shutdownsBucket)).Get([]byte(d.ToKey()))
-		if data == nil {
-			return nil
-		}
-		found = true
-		return json.Unmarshal(data, &res)
-	})
-
-	return res, found, err
-}
-
-func (s *BoltDB) PutShutdowns(d Date, t Shutdowns) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		data, err := json.Marshal(t)
-		if err != nil {
-			return fmt.Errorf("marshal shutdowns table: %w", err)
-		}
-		return tx.Bucket([]byte(shutdownsBucket)).Put([]byte(d.ToKey()), data)
-	})
-}
-
-func (s *BoltDB) CountSubscriptions() (int, error) {
-	var res int
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscriptionsBucket))
-		res = b.Stats().KeyN
-		return nil
-	})
-	return res, err
-}
-
-func (s *BoltDB) ExistsSubscription(chatID int64) (bool, error) {
-	res := false
-
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscriptionsBucket))
-		if b.Get(i64tob(chatID)) != nil {
-			res = true
-		}
-		return nil
-	})
-
-	return res, err
-}
-
-func (s *BoltDB) GetSubscription(chatID int64) (Subscription, bool, error) {
-	var res Subscription
-	found := false
-
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		data := tx.Bucket([]byte(subscriptionsBucket)).Get(i64tob(chatID))
-		if data == nil {
-			return nil
-		}
-		found = true
-		return json.Unmarshal(data, &res)
-	})
-
-	return res, found, err
-}
-
-func (s *BoltDB) GetAllSubscriptions() ([]Subscription, error) {
-	var res []Subscription
-
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscriptionsBucket))
-		c := b.Cursor()
-
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var sub Subscription
-			if err := json.Unmarshal(v, &sub); err != nil {
-				return fmt.Errorf("unmarshal subscription: %w", err)
-			}
-			res = append(res, sub)
-		}
-
-		return nil
-	})
-
-	return res, err
-}
-
-func (s *BoltDB) PutSubscription(sub Subscription) error {
-	err := s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(subscriptionsBucket))
-
-		id := i64tob(sub.ChatID)
-		data, err := json.Marshal(&sub)
-		if err != nil {
-			return fmt.Errorf("marshal subscription for chatID=%d: %w", sub.ChatID, err)
-		}
-		if err := b.Put(id, data); err != nil {
-			return fmt.Errorf("put subscription for chatID=%d: %w", sub.ChatID, err)
-		}
-
-		return nil
-	})
-
-	return err
-}
-
-func (s *BoltDB) PurgeSubscriptions(chatID int64) error {
+func (s *BoltDB) Purge(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		// Delete subscription
 		subsBucket := tx.Bucket([]byte(subscriptionsBucket))
@@ -203,12 +25,12 @@ func (s *BoltDB) PurgeSubscriptions(chatID int64) error {
 			return fmt.Errorf("delete subscriber with id=%d: %w", chatID, err)
 		}
 
+		prefix := fmt.Sprintf("%d_", chatID)
+
 		// Delete all notification states for this user
 		notifBucket := tx.Bucket([]byte(notificationsBucket))
 		if notifBucket != nil {
-			prefix := fmt.Sprintf("%d_", chatID)
 			c := notifBucket.Cursor()
-
 			for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
 				if err := notifBucket.Delete(k); err != nil {
 					return fmt.Errorf("delete notification state for key %s: %w", k, err)
@@ -226,77 +48,4 @@ func (s *BoltDB) Close() error {
 
 func i64tob(id int64) []byte {
 	return []byte(strconv.FormatInt(id, 10))
-}
-
-func notificationKey(chatID int64, date string) string {
-	return fmt.Sprintf("%d_%s", chatID, date)
-}
-
-// GetNotificationState retrieves notification state for a specific user and date
-func (s *BoltDB) GetNotificationState(chatID int64, date Date) (NotificationState, bool, error) {
-	var res NotificationState
-	found := false
-
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(notificationsBucket))
-		if b == nil {
-			return nil
-		}
-
-		key := notificationKey(chatID, date.ToKey())
-		data := b.Get([]byte(key))
-		if data == nil {
-			return nil
-		}
-
-		found = true
-		return json.Unmarshal(data, &res)
-	})
-
-	return res, found, err
-}
-
-// PutNotificationState stores notification state for a specific user and date
-func (s *BoltDB) PutNotificationState(state NotificationState) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(notificationsBucket))
-		if b == nil {
-			return errors.New("notifications bucket not found")
-		}
-
-		key := notificationKey(state.ChatID, state.Date)
-		data, err := json.Marshal(&state)
-		if err != nil {
-			return fmt.Errorf("marshal notification state for chatID=%d date=%s: %w", state.ChatID, state.Date, err)
-		}
-
-		if err := b.Put([]byte(key), data); err != nil {
-			return fmt.Errorf("put notification state for chatID=%d date=%s: %w", state.ChatID, state.Date, err)
-		}
-
-		return nil
-	})
-}
-
-// DeleteNotificationStates removes all notification states for a specific user
-func (s *BoltDB) DeleteNotificationStates(chatID int64) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(notificationsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
-		prefix := fmt.Sprintf("%d_", chatID)
-		c := b.Cursor()
-
-		// Find and delete all keys with this chatID prefix
-		for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
-			if err := b.Delete(k); err != nil {
-				return fmt.Errorf("delete notification state for key %s: %w", k, err)
-			}
-		}
-
-		return nil
-	})
 }
