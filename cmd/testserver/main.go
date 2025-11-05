@@ -1,3 +1,4 @@
+//nolint:errcheck,forbidigo,gosec // test utility allows simpler error handling and direct output
 package main
 
 import (
