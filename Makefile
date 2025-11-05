@@ -25,3 +25,7 @@ ci-build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier ./cmd/bot/main.go
 	echo "Version: $(VERSION)\nBuild Time: $(BUILD_TIME)" > ./bin/VERSION
+
+testserver:
+	go mod download
+	CGO_ENABLED=0 go build -o ./bin/testserver ./cmd/testserver/main.go

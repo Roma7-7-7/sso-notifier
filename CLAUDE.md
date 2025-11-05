@@ -124,6 +124,25 @@ type Subscription struct {
 
 HTML scraper for https://oblenergo.cv.ua/shutdowns/
 
+**Provider Structure:**
+
+```go
+type ChernivtsiProvider struct {
+    baseURL string  // Configurable schedule URL
+}
+
+func NewChernivtsiProvider(baseURL string) *ChernivtsiProvider
+```
+
+**Public Methods:**
+- `Shutdowns(ctx)` - Fetches current schedule, returns (schedule, nextDayAvailable, error)
+- `ShutdownsNext(ctx)` - Fetches next day schedule by appending `?next` to base URL
+
+**Configuration:**
+- Base URL is configurable via `SCHEDULE_URL` environment variable
+- Default: `https://oblenergo.cv.ua/shutdowns/`
+- For testing: Can point to local test server (see `cmd/testserver`)
+
 **Parsing Logic:**
 
 1. **Date Extraction** (line 68)
@@ -155,7 +174,12 @@ HTML scraper for https://oblenergo.cv.ua/shutdowns/
 
 Service for refreshing schedule from external provider.
 
-**Key Method: `Refresh()` (lines 34-51)**
+**Dependencies:**
+- `ShutdownsStore`: Interface for database operations
+- `ShutdownsProvider`: Interface for fetching schedules (implemented by `ChernivtsiProvider`)
+- Uses dependency injection for testability
+
+**Key Method: `Refresh()` (lines 44-85)**
 
 ```go
 func (s *Shutdowns) Refresh(ctx context.Context) error {
@@ -166,11 +190,19 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
     ctx, cancel := context.WithTimeout(ctx, time.Minute)
     defer cancel()
 
-    // Fetch from provider
-    table := providers.ChernivtsiShutdowns(ctx)
+    // Fetch today's schedule from provider
+    today := dal.TodayDate(s.loc)
+    todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
 
-    // Store in database
-    s.store.PutShutdowns(table)
+    // Store today's schedule
+    s.store.PutShutdowns(today, todayTable)
+
+    // Optionally fetch tomorrow's schedule if available
+    if nextDayAvailable {
+        tomorrow := dal.TomorrowDate(s.loc)
+        tomorrowTable, err := s.provider.ShutdownsNext(ctx)
+        s.store.PutShutdowns(tomorrow, tomorrowTable)
+    }
 }
 ```
 
@@ -768,6 +800,7 @@ All configuration via environment variables using `envconfig`:
 - `DB_PATH` (default: "data/sso-notifier.db"): Database file path
 - `REFRESH_SHUTDOWNS_INTERVAL` (default: 5m): Schedule fetch frequency
 - `NOTIFY_INTERVAL` (default: 5m): Notification check frequency
+- `SCHEDULE_URL` (default: "https://oblenergo.cv.ua/shutdowns/"): Schedule provider URL (for testing)
 
 ### Timeouts
 

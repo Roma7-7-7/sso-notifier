@@ -13,17 +13,22 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
-const (
-	baseURL = "https://oblenergo.cv.ua/shutdowns/"
-	nextURL = baseURL + "?next"
-)
-
 var ErrCheckNextDayAvailability = errors.New("check next day availability")
 
-// ChernivtsiShutdowns fetches today's shutdown schedule
+type ChernivtsiProvider struct {
+	baseURL string
+}
+
+func NewChernivtsiProvider(baseURL string) *ChernivtsiProvider {
+	return &ChernivtsiProvider{
+		baseURL: baseURL,
+	}
+}
+
+// Shutdowns fetches today's shutdown schedule
 // Returns the schedule and a boolean indicating if tomorrow's schedule is available
-func ChernivtsiShutdowns(ctx context.Context) (dal.Shutdowns, bool, error) {
-	html, err := loadPage(ctx, baseURL)
+func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool, error) {
+	html, err := loadPage(ctx, p.baseURL)
 	if err != nil {
 		return dal.Shutdowns{}, false, fmt.Errorf("load shutdowns page: %w", err)
 	}
@@ -41,9 +46,10 @@ func ChernivtsiShutdowns(ctx context.Context) (dal.Shutdowns, bool, error) {
 	return res, nextDayAvailable, nil
 }
 
-// ChernivtsiShutdownsNext fetches tomorrow's shutdown schedule
-// Should only be called if ChernivtsiShutdowns indicated next day is available
-func ChernivtsiShutdownsNext(ctx context.Context) (dal.Shutdowns, error) {
+// ShutdownsNext fetches tomorrow's shutdown schedule
+// Should only be called if Shutdowns indicated next day is available
+func (p *ChernivtsiProvider) ShutdownsNext(ctx context.Context) (dal.Shutdowns, error) {
+	nextURL := p.baseURL + "?next"
 	html, err := loadPage(ctx, nextURL)
 	if err != nil {
 		return dal.Shutdowns{}, fmt.Errorf("load shutdowns page: %w", err)
