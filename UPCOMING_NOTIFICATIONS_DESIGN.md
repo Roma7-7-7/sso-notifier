@@ -347,24 +347,31 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ## Implementation Phases
 
-### Phase 1: Data Layer ✅ / ❌
+### Phase 1: Data Layer ✅
 
-- [ ] **Migration v5**: Create `alerts` bucket
+- [x] **Migration v5**: Create `alerts` bucket
   - File: `internal/dal/migrations/v5/migration.go`
   - README: `internal/dal/migrations/v5/README.md`
   - Update: `internal/dal/migrations/README.md` (latest schema)
   - Register: `internal/dal/migrations/migrations.go`
 
-- [ ] **DAL Methods**: Add to `internal/dal/bolt.go`
-  - `GetAlert(key string) (time.Time, bool, error)`
-  - `PutAlert(key string, sentAt time.Time) error`
-  - `DeleteAlert(key string) error`
-  - Define `AlertsStore` interface
+- [x] **DAL Methods**: Add to `internal/dal/bolt.go`
+  - `GetAlert(key AlertKey) (time.Time, bool, error)`
+  - `PutAlert(key AlertKey, sentAt time.Time) error`
+  - `DeleteAlert(key AlertKey) error`
+  - `DeleteAlerts(chatID int64) error`
+  - `BuildAlertKey()` helper function
+  - `AlertKey` type for compile-time safety
 
-- [ ] **Settings Helpers**: Add to `internal/dal/bolt.go`
-  - `GetSetting(settings map[string]interface{}, key string, defaultValue interface{}) interface{}`
-  - `GetBoolSetting(settings, key string, defaultBool bool) bool`
-  - `GetIntSetting(settings, key string, defaultInt int) int`
+- [x] **Settings Helpers**: Add to `internal/dal/bolt.go`
+  - `GetBoolSetting(settings, key SettingKey, defaultBool bool) bool`
+  - `GetIntSetting(settings, key SettingKey, defaultInt int) int`
+  - `GetStringSetting(settings, key SettingKey, defaultString string) string`
+  - `SettingKey` type with constants for type safety
+
+- [x] **Additional**:
+  - Updated `PurgeSubscriptions()` to delete alerts
+  - Added `DB()` method for migrations access
 
 **Files to modify**:
 - `internal/dal/bolt.go`
@@ -512,11 +519,11 @@ Placement: Below "Керувати групами" / "Підписатись н�
 ### Completed ✅
 
 - [x] Design document created
-- [ ] All phases pending
+- [x] Phase 1: Data Layer (Migration v5, DAL methods, type safety)
 
 ### In Progress 🚧
 
-- [ ] Phase 1: Data Layer
+- [ ] Phase 2: Service Layer
 
 ### Blocked 🚫
 
