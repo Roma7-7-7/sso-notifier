@@ -14,7 +14,7 @@ type SubscriptionsStore interface {
 	GetAllSubscriptions() ([]dal.Subscription, error)
 	GetSubscription(chatID int64) (dal.Subscription, bool, error)
 	PutSubscription(sub dal.Subscription) error
-	PurgeSubscriptions(chatID int64) error
+	Purge(chatID int64) error
 }
 
 type Subscriptions struct {
@@ -144,7 +144,7 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 }
 
 func (s *Subscriptions) Unsubscribe(chatID int64) error {
-	if err := s.store.PurgeSubscriptions(chatID); err != nil {
+	if err := s.store.Purge(chatID); err != nil {
 		return fmt.Errorf("purge subscriptions: %w", err)
 	}
 	return nil
