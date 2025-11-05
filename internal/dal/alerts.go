@@ -44,7 +44,10 @@ func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 		found = true
 		var parseErr error
 		sentAt, parseErr = time.Parse(time.RFC3339, string(data))
-		return parseErr
+		if parseErr != nil {
+			return fmt.Errorf("parse data: %w", parseErr)
+		}
+		return nil
 	})
 
 	return sentAt, found, err
