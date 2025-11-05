@@ -412,27 +412,28 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ---
 
-### Phase 3: Telegram Bot UI ✅ / ❌
+### Phase 3: Telegram Bot UI ✅
 
-- [ ] **Settings Handlers**: Add to `internal/telegram/telegram.go`
+- [x] **Settings Handlers**: Add to `internal/telegram/telegram.go`
   - `SettingsHandler(c tb.Context) error`
   - `ToggleSettingHandler(c tb.Context, key string) error`
   - Register in callback router:
     - `"settings"` → `SettingsHandler`
-    - `"toggle_notify_off"` → `ToggleSettingHandler("notify_off_10min")`
-    - `"toggle_notify_maybe"` → `ToggleSettingHandler("notify_maybe_10min")`
-    - `"toggle_notify_on"` → `ToggleSettingHandler("notify_on_10min")`
+    - `"toggle_notify_off"` → `ToggleSettingHandler(dal.SettingNotifyOff)`
+    - `"toggle_notify_maybe"` → `ToggleSettingHandler(dal.SettingNotifyMaybe)`
+    - `"toggle_notify_on"` → `ToggleSettingHandler(dal.SettingNotifyOn)`
     - `"back_from_settings"` → `StartHandler`
 
-- [ ] **Markup Updates**: Extend `internal/telegram/telegram.go` (markups section)
+- [x] **Markup Updates**: Extend `internal/telegram/telegram.go` (markups section)
   - Update `subscribed` main menu: Add "⚙️ Налаштування" button
-  - Update `unsubscribed` main menu: Add "⚙️ Налаштування" button (if makes sense)
-  - Create `buildSettingsMarkup(settings map[string]interface{}) *tb.ReplyMarkup`
+  - Update `unsubscribed` main menu: ~~Add "⚙️ Налаштування" button~~ (decided NOT to show - settings only for subscribed users)
+  - Create `buildSettingsMarkup(settings map[dal.SettingKey]interface{}) *tb.ReplyMarkup`
 
-- [ ] **Command Registration**: Add to `Start()` method
+- [x] **Command Registration**: Add to `Start()` method
   - `/settings` → `SettingsHandler`
+  - Added subscription check to prevent unsubscribed users from accessing settings
 
-**Files to modify**:
+**Files modified**:
 - `internal/telegram/telegram.go`
 
 ---
@@ -525,10 +526,12 @@ Placement: Below "Керувати групами" / "Підписатись н�
 - [x] Design document created
 - [x] Phase 1: Data Layer (Migration v5, DAL methods, type safety)
 - [x] Phase 2: Service Layer (Alerts service, subscription settings methods)
+- [x] Phase 3: Telegram Bot UI (Settings handlers, markups, subscription checks)
 
 ### In Progress 🚧
 
-- [ ] Phase 3: Telegram Bot UI
+- [ ] Phase 4: Scheduler Integration
+- [ ] Phase 5: Message Templates
 
 ### Blocked 🚫
 
@@ -697,7 +700,7 @@ func isWithinNotificationWindow(hour int) bool {
 
 - [x] Notifications sent 10 minutes before outage starts (logic implemented)
 - [x] No duplicate notifications for same outage (alerts bucket deduplication)
-- [ ] Settings UI works correctly (Phase 3)
+- [x] Settings UI works correctly (Phase 3 complete)
 - [x] 6 AM - 11 PM window enforced (isWithinNotificationWindow)
 - [x] Multiple groups merged into single message (renderUpcomingMessage grouping)
 
