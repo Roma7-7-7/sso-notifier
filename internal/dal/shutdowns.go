@@ -37,8 +37,8 @@ type (
 	}
 
 	ShutdownGroup struct {
-		Number int
-		Items  []Status
+		Number int      `json:"number"`
+		Items  []Status `json:"items"`
 	}
 )
 
