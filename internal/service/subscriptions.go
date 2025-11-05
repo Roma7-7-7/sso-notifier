@@ -48,6 +48,70 @@ func (s *Subscriptions) GetSubscriptions() ([]dal.Subscription, error) {
 	return subs, nil
 }
 
+func (s *Subscriptions) GetSubscribedGroups(chatID int64) ([]string, error) {
+	sub, exists, err := s.store.GetSubscription(chatID)
+	if err != nil {
+		return nil, fmt.Errorf("get subscription: %w", err)
+	}
+	if !exists {
+		return []string{}, nil
+	}
+
+	groups := make([]string, 0, len(sub.Groups))
+	for groupNum := range sub.Groups {
+		groups = append(groups, groupNum)
+	}
+
+	return groups, nil
+}
+
+func (s *Subscriptions) ToggleGroupSubscription(chatID int64, groupNum string) error {
+	sub, exists, err := s.store.GetSubscription(chatID)
+	if err != nil {
+		return fmt.Errorf("get subscription: %w", err)
+	}
+
+	if !exists {
+		sub = dal.Subscription{
+			ChatID:    chatID,
+			CreatedAt: time.Now(),
+			Groups:    make(map[string]struct{}),
+		}
+	}
+
+	if sub.Groups == nil {
+		sub.Groups = make(map[string]struct{})
+	}
+
+	// Toggle: if exists, remove; if not, add
+	if _, subscribed := sub.Groups[groupNum]; subscribed {
+		delete(sub.Groups, groupNum)
+		s.log.Debug("unsubscribed from group", "chatID", chatID, "groupNum", groupNum)
+	} else {
+		sub.Groups[groupNum] = struct{}{}
+		s.log.Debug("subscribed to group", "chatID", chatID, "groupNum", groupNum)
+	}
+
+	// If no groups left, delete the entire subscription
+	if len(sub.Groups) == 0 {
+		if exists {
+			return s.Unsubscribe(chatID)
+		}
+		return nil
+	}
+
+	err = s.store.PutSubscription(sub)
+	if err != nil {
+		return fmt.Errorf("put subscription: %w", err)
+	}
+
+	if !exists {
+		s.log.Debug("new subscriber", "chatID", chatID)
+	}
+
+	return nil
+}
+
 func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 	sub, exists, err := s.store.GetSubscription(chatID)
 	if err != nil {
@@ -58,12 +122,15 @@ func (s *Subscriptions) SubscribeToGroup(chatID int64, groupNum string) error {
 		sub = dal.Subscription{
 			ChatID:    chatID,
 			CreatedAt: time.Now(),
+			Groups:    make(map[string]struct{}),
 		}
 	}
 
-	sub.Groups = map[string]struct{}{
-		groupNum: {},
+	if sub.Groups == nil {
+		sub.Groups = make(map[string]struct{})
 	}
+
+	sub.Groups[groupNum] = struct{}{}
 	err = s.store.PutSubscription(sub)
 	if err != nil {
 		return fmt.Errorf("put subscription: %w", err)
