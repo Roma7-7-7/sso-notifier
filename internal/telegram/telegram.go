@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -144,14 +145,25 @@ func (b *Bot) handleCallbackRouter(c tb.Context) error {
 		return nil
 	}
 
-	data := callback.Data
 	chatID := c.Sender().ID
-	b.log.Debug("callback router called", "callbackData", data, "chatID", chatID)
+	b.log.Debug("callback received",
+		"chatID", chatID,
+		"data", callback.Data,
+		"unique", callback.Unique,
+		"messageID", callback.MessageID)
 
 	// Respond to callback first to remove loading state
 	if err := c.Respond(); err != nil {
 		b.log.Warn("failed to respond to callback", "error", err, "chatID", chatID)
 	}
+
+	// Use Data field and trim the prefix if present
+	data := callback.Data
+	if len(data) > 0 && data[0] == '\f' {
+		data = data[1:]
+	}
+
+	b.log.Debug("routing callback", "processedData", data)
 
 	// Route based on callback data
 	switch {
@@ -262,13 +274,6 @@ func (b *Bot) sendOrDelete(c tb.Context, text string, markup *tb.ReplyMarkup) er
 
 	// Send new message (for both callbacks and commands)
 	return c.Send(text, markup)
-}
-
-// registerButtonHandlers registers the same handler for multiple buttons
-func (b *Bot) registerButtonHandlers(buttons []tb.Btn, handler tb.HandlerFunc) {
-	for i := range buttons {
-		b.bot.Handle(&buttons[i], handler)
-	}
 }
 
 type (
@@ -385,27 +390,6 @@ func buildGroupsMarkup(groupsCount int) groupsMarkup {
 	}
 }
 
-func (m *markups) manageGroupsBtns() []tb.Btn {
-	return []tb.Btn{
-		m.main.subscribed.manageGroups,
-		m.main.unsubscribed.subscribe,
-	}
-}
-
-func (m *markups) unsubscribeBtns() []tb.Btn {
-	return []tb.Btn{
-		m.main.subscribed.unsubscribe,
-	}
-}
-
-func (m *markups) subscribeToGroupBtns() map[string]tb.Btn {
-	return m.groups.subscribeGroupBtns
-}
-
-func (m *markups) backToMainBtns() []tb.Btn {
-	return []tb.Btn{m.groups.backBtn}
-}
-
 // buildDynamicGroupsMarkup creates group selection keyboard with checkmarks for subscribed groups
 func (m *markups) buildDynamicGroupsMarkup(subscribedGroups map[string]bool) *tb.ReplyMarkup {
 	const (
@@ -469,14 +453,18 @@ func formatGroupsList(groups []string) string {
 		}
 	}
 
-	// Convert back to strings
-	result := ""
-	for i, num := range sortedGroups {
-		if i > 0 {
-			result += ", "
-		}
-		result += strconv.Itoa(num)
+	// Convert back to strings using strings.Builder for performance
+	if len(sortedGroups) == 0 {
+		return ""
 	}
 
-	return result
+	var builder strings.Builder
+	for i, num := range sortedGroups {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(strconv.Itoa(num))
+	}
+
+	return builder.String()
 }
