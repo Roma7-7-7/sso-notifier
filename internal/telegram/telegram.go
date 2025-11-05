@@ -296,17 +296,9 @@ type (
 		unsubscribed unsubscribedMarkup
 	}
 
-	// groupsMarkup contains the group selection markup
-	groupsMarkup struct {
-		*tb.ReplyMarkup
-		subscribeGroupBtns map[string]tb.Btn
-		backBtn            tb.Btn
-	}
-
 	// markups aggregates all keyboard markups used by the bot
 	markups struct {
 		main        mainMarkups
-		groups      groupsMarkup
 		groupsCount int
 	}
 )
@@ -327,7 +319,6 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 	mainUnsubscribed.Inline(mainUnsubscribed.Row(subscribeBtn))
 
 	// Create group selection markup (static structure, will be rebuilt dynamically)
-	groupsMarkup := buildGroupsMarkup(subscriptionGroupsCount)
 
 	return &markups{
 		main: mainMarkups{
@@ -341,59 +332,14 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 				subscribe:   subscribeBtn,
 			},
 		},
-		groups:      groupsMarkup,
 		groupsCount: subscriptionGroupsCount,
-	}
-}
-
-// buildGroupsMarkup creates the group selection keyboard with configurable number of groups
-func buildGroupsMarkup(groupsCount int) groupsMarkup {
-	const (
-		buttonsPerRow        = 5
-		additionalRowsBuffer = 2 // Buffer for potential partial row and back button
-	)
-
-	markup := &tb.ReplyMarkup{}
-	groupBtns := make(map[string]tb.Btn, groupsCount)
-	rows := make([]tb.Row, 0, groupsCount/buttonsPerRow+additionalRowsBuffer)
-
-	// Build group selection buttons
-	currentRow := tb.Row{}
-	for i := range groupsCount {
-		groupNum := strconv.Itoa(i + 1)
-		btn := markup.Data(groupNum, "subscribe_group_"+groupNum)
-		groupBtns[groupNum] = btn
-		currentRow = append(currentRow, btn)
-
-		// Create new row when we reach buttonsPerRow
-		if len(currentRow) == buttonsPerRow {
-			rows = append(rows, currentRow)
-			currentRow = tb.Row{}
-		}
-	}
-
-	// Add remaining buttons if any
-	if len(currentRow) > 0 {
-		rows = append(rows, currentRow)
-	}
-
-	// Add back button
-	backBtn := markup.Data("Назад", "back")
-	rows = append(rows, markup.Row(backBtn))
-
-	markup.Inline(rows...)
-
-	return groupsMarkup{
-		ReplyMarkup:        markup,
-		subscribeGroupBtns: groupBtns,
-		backBtn:            backBtn,
 	}
 }
 
 // buildDynamicGroupsMarkup creates group selection keyboard with checkmarks for subscribed groups
 func (m *markups) buildDynamicGroupsMarkup(subscribedGroups map[string]bool) *tb.ReplyMarkup {
 	const (
-		buttonsPerRow        = 5
+		buttonsPerRow        = 4
 		additionalRowsBuffer = 2
 	)
 
