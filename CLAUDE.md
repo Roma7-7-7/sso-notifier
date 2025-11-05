@@ -260,22 +260,36 @@ See `internal/service/TEMPLATES.md` for detailed documentation on the template s
 
 ### `/internal/service/subscriptions.go`
 
-Subscription management service.
+Subscription management service with multi-group subscription support.
 
 **Key Methods:**
 
 1. `IsSubscribed(chatID)` - Check if user exists
-2. `SubscribeToGroup(chatID, groupNum)` - Add/update subscription
-3. `Unsubscribe(chatID)` - Remove all user data
+2. `GetSubscribedGroups(chatID)` - Returns list of group numbers user is subscribed to
+3. `ToggleGroupSubscription(chatID, groupNum)` - Add or remove a group subscription
+   - If group exists in subscription, removes it
+   - If group doesn't exist, adds it
+   - Creates subscription if user doesn't exist
+   - Deletes entire subscription if no groups remain
+4. `SubscribeToGroup(chatID, groupNum)` - Add subscription to a group (appends to existing)
+5. `Unsubscribe(chatID)` - Remove all user data
 
-**Important Note** (line 62-64):
-When subscribing to a new group, the entire `Groups` map is replaced:
+**Toggle Logic** (lines 68-112):
 ```go
-sub.Groups = map[string]string{
-    groupNum: "",  // Empty hash triggers first notification
+// Toggle: if exists, remove; if not, add
+if _, subscribed := sub.Groups[groupNum]; subscribed {
+    delete(sub.Groups, groupNum)
+} else {
+    sub.Groups[groupNum] = struct{}{}
+}
+
+// If no groups left, delete the entire subscription
+if len(sub.Groups) == 0 {
+    return s.Unsubscribe(chatID)
 }
 ```
-This means users can only subscribe to one group at a time (potential feature limitation).
+
+Users can now subscribe to multiple groups simultaneously. The toggle pattern provides a clean UX for managing subscriptions.
 
 ### `/internal/telegram/telegram.go`
 
@@ -299,70 +313,108 @@ type Bot struct {
 - Initializes markups based on configurable group count
 - Adds "component: bot" to logger for context
 
-**Lifecycle: `Start(ctx context.Context)`** (lines 52-76)
+**Lifecycle: `Start(ctx context.Context)`** (lines 55-72)
 - Accepts context for graceful shutdown
 - Registers all command handlers (`/start`, `/subscribe`, `/unsubscribe`)
-- Uses helper method `registerButtonHandlers()` for cleaner code
+- Registers catch-all callback router using `tb.OnCallback`
 - Listens for context cancellation in goroutine
 - Stops bot gracefully on shutdown signal
 - Returns error for better error propagation
 
+**Callback Routing Architecture:**
+
+The bot uses a centralized callback router pattern instead of registering individual handlers:
+
+```go
+b.bot.Handle(tb.OnCallback, b.handleCallbackRouter)
+```
+
+**handleCallbackRouter** (lines 141-191):
+- Receives all inline button callbacks
+- Strips Telebot's internal `\f` prefix from `callback.Data`
+- Routes to appropriate handler based on callback string
+- Supports patterns: exact match and prefix matching
+- Logs detailed callback information for debugging
+
+Callback routing logic:
+- `"subscribe"`, `"manage_groups"` → `ManageGroupsHandler`
+- `"unsubscribe"` → `UnsubscribeHandler`
+- `"back"` → `StartHandler`
+- `"toggle_group_{N}"` → `ToggleGroupHandler(N)`
+
 **Handlers:**
 
-1. **StartHandler** (lines 58-76)
-   - Extracts chatID for logging
-   - Shows main menu
+1. **StartHandler** (lines 75-112)
+   - Shows main menu with personalized message
+   - For subscribed users: displays list of subscribed groups
+   - For unsubscribed users: shows invitation to subscribe
+   - Dynamically builds group list using `formatGroupsList()`
    - Different markup for subscribed/unsubscribed users
-   - Logs with chatID and subscription status
-   - Structured error handling with context
 
-2. **ChooseGroupHandler** (lines 78-81)
-   - Shows group selection buttons
-   - Logs chatID for debugging
+2. **ManageGroupsHandler** (lines 115-138)
+   - Shows group selection interface with checkmarks
+   - Fetches current subscriptions using `GetSubscribedGroups()`
+   - Builds dynamic markup with `buildDynamicGroupsMarkup()`
+   - Groups with checkmark (✅) indicate active subscriptions
+   - Users can tap to toggle subscription state
 
-3. **SetGroupHandler** (lines 83-101)
-   - Subscribes user to selected group
-   - Logs success at Info level with chatID and group
-   - Logs errors with full context
-   - Returns success message with dynamic group number
+3. **ToggleGroupHandler** (lines 193-234)
+   - Toggles subscription for selected group
+   - Fetches updated subscription list after toggle
+   - Rebuilds markup to reflect new state
+   - Shows feedback message (✅ Підписано / ❌ Відписано)
+   - Returns to main menu if all groups are removed
 
-4. **UnsubscribeHandler** (lines 103-114)
+4. **UnsubscribeHandler** (lines 236-248)
    - Removes all subscriptions
    - Logs unsubscribe events at Info level
-   - Returns appropriate markup based on state
+   - Returns to unsubscribed main menu
 
-**Helper Method: `registerButtonHandlers()`** (lines 116-120)
-- Registers same handler for multiple buttons
-- Cleaner than manual iteration
-- Avoids variable capture issues
-
-**Markup Generation** (lines 214-261):
+**Markup Generation:**
 
 Creates inline keyboards with configurable group count:
-- Main menu: Subscribe/Unsubscribe buttons
-- Group selection: Dynamic number of buttons (default 12, 5 per row)
-- Navigation: Back button
-- All button text and callbacks in one place
 
-**Key Improvements in Refactor:**
-- Context-aware shutdown instead of blocking `Start()`
+1. **Static Main Menus** (`newMarkups()`, lines 306-345):
+   - Subscribed: "Керувати групами" + "Відписатись від усіх"
+   - Unsubscribed: "Підписатись на оновлення"
+
+2. **Dynamic Group Selection** (`buildDynamicGroupsMarkup()`, lines 348-409):
+   - Built on-demand with current subscription state
+   - Shows buttons 1-12 (configurable) with 4 per row
+   - Adds checkmark (✅) to subscribed groups
+   - Callback format: `"toggle_group_{N}"`
+   - Back button returns to main menu
+
+**Helper Functions:**
+
+- `formatGroupsList()` (lines 412-459): Formats subscribed groups as comma-separated string with numeric sorting
+- `sendOrDelete()` (lines 251-265): Deletes previous message for callbacks, sends new message
+
+**Key Features:**
+- Multi-group subscription support
+- Toggle-based UX (tap to add/remove)
+- Visual feedback with checkmarks
+- Centralized callback routing
+- Context-aware shutdown
 - Structured logging with chatID throughout
-- Error propagation instead of panics
-- Configurable group count (not hardcoded constant)
-- Cleaner handler registration pattern
-- Better separation of concerns (no MessageSender in this file)
+- Configurable group count (not hardcoded)
 
 ## Data Flow Examples
 
-### New User Subscribes
+### New User Subscribes to Multiple Groups
 
 1. User sends `/start` → `StartHandler`
 2. Bot shows "Підписатись на оновлення" button
-3. User clicks → `ChooseGroupHandler`
-4. Bot shows groups 1-12
-5. User clicks "5" → `SetGroupHandler("5")`
-6. Service creates subscription: `{ChatID: 123, Groups: {"5": ""}}`
-7. Bot confirms: "Ви підписались на групу 5"
+3. User clicks → routed to `ManageGroupsHandler` via callback router
+4. Bot shows groups 1-12 (no checkmarks yet)
+5. User clicks "5" → routed to `ToggleGroupHandler("5")` via callback router
+6. Service creates subscription: `{ChatID: 123, Groups: {"5": struct{}{}}}`
+7. Bot shows updated view with "5 ✅" and feedback message
+8. User clicks "7" → `ToggleGroupHandler("7")`
+9. Service updates subscription: `{ChatID: 123, Groups: {"5": struct{}{}, "7": struct{}{}}}`
+10. Bot shows both "5 ✅" and "7 ✅"
+11. User can toggle any group to remove it (delete removes checkmark)
+12. User clicks "Назад" to return to main menu showing "Ви підписані на групи: 5, 7"
 
 ### Schedule Update Notification
 
@@ -726,20 +778,15 @@ All configuration via environment variables using `envconfig`:
 
 ### Known Limitations
 
-1. **Single Group Subscription** (subscriptions.go:62)
-   - Current implementation overwrites `Groups` map
-   - Users can only subscribe to one group
-   - Should append to existing map
-
-2. **No Retry Logic**
+1. **No Retry Logic**
    - HTTP failures are logged but not retried
    - Could add exponential backoff
 
-3. **No Rate Limiting**
+2. **No Rate Limiting**
    - Telegram API has rate limits
    - No protection against hitting them
 
-4. **Timezone Hardcoded**
+3. **Timezone Hardcoded**
    - `Europe/Kyiv` hardcoded (notifications.go:32)
    - Could be configurable
 
