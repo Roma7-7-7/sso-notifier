@@ -22,6 +22,9 @@ type SubscriptionService interface {
 	GetSubscribedGroups(chatID int64) ([]string, error)
 	ToggleGroupSubscription(chatID int64, number string) error
 	Unsubscribe(chatID int64) error
+	GetSettings(chatID int64) (map[dal.SettingKey]interface{}, error)
+	ToggleSetting(chatID int64, key dal.SettingKey, defaultValue bool) error
+	GetBoolSetting(chatID int64, key dal.SettingKey, defaultValue bool) (bool, error)
 }
 
 type Bot struct {
@@ -57,6 +60,7 @@ func (b *Bot) Start(ctx context.Context) error {
 	b.bot.Handle("/start", b.StartHandler)
 	b.bot.Handle("/subscribe", b.ManageGroupsHandler)
 	b.bot.Handle("/unsubscribe", b.UnsubscribeHandler)
+	b.bot.Handle("/settings", b.SettingsHandler)
 
 	// Register catch-all callback handler FIRST
 	b.bot.Handle(tb.OnCallback, b.handleCallbackRouter)
@@ -174,6 +178,26 @@ func (b *Bot) handleCallbackRouter(c tb.Context) error {
 		b.log.Debug("routing to UnsubscribeHandler")
 		return b.UnsubscribeHandler(c)
 
+	case data == "settings":
+		b.log.Debug("routing to SettingsHandler")
+		return b.SettingsHandler(c)
+
+	case data == "toggle_notify_off":
+		b.log.Debug("routing to ToggleSettingHandler for notify_off")
+		return b.ToggleSettingHandler(dal.SettingNotifyOff)(c)
+
+	case data == "toggle_notify_maybe":
+		b.log.Debug("routing to ToggleSettingHandler for notify_maybe")
+		return b.ToggleSettingHandler(dal.SettingNotifyMaybe)(c)
+
+	case data == "toggle_notify_on":
+		b.log.Debug("routing to ToggleSettingHandler for notify_on")
+		return b.ToggleSettingHandler(dal.SettingNotifyOn)(c)
+
+	case data == "back_from_settings":
+		b.log.Debug("routing to StartHandler from settings")
+		return b.StartHandler(c)
+
 	case data == "back":
 		b.log.Debug("routing to StartHandler")
 		return b.StartHandler(c)
@@ -258,6 +282,73 @@ func (b *Bot) UnsubscribeHandler(c tb.Context) error {
 	return b.sendOrDelete(c, "Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
 }
 
+func (b *Bot) SettingsHandler(c tb.Context) error {
+	chatID := c.Sender().ID
+	b.log.Debug("settings handler called", "chatID", chatID)
+
+	subscribed, err := b.svc.IsSubscribed(chatID)
+	if err != nil {
+		b.log.Error("failed to check subscription status",
+			"error", err,
+			"chatID", chatID)
+		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+	}
+
+	if !subscribed {
+		return b.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", b.markups.main.unsubscribed.ReplyMarkup)
+	}
+
+	settings, err := b.svc.GetSettings(chatID)
+	if err != nil {
+		b.log.Error("failed to get settings",
+			"error", err,
+			"chatID", chatID)
+		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+	}
+
+	markup := b.markups.buildSettingsMarkup(settings)
+
+	message := "⚙️ Налаштування сповіщень\n\n" +
+		"Попереджати за 10 хвилин до:\n\n" +
+		"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
+
+	return b.sendOrDelete(c, message, markup)
+}
+
+func (b *Bot) ToggleSettingHandler(settingKey dal.SettingKey) func(c tb.Context) error {
+	return func(c tb.Context) error {
+		chatID := c.Sender().ID
+
+		if err := b.svc.ToggleSetting(chatID, settingKey, true); err != nil {
+			b.log.Error("failed to toggle setting",
+				"error", err,
+				"chatID", chatID,
+				"settingKey", settingKey)
+			return b.sendOrDelete(c, "Не вдалось оновити налаштування. Будь ласка, спробуйте пізніше.", nil)
+		}
+
+		b.log.Info("user toggled setting",
+			"chatID", chatID,
+			"settingKey", settingKey)
+
+		settings, err := b.svc.GetSettings(chatID)
+		if err != nil {
+			b.log.Error("failed to get settings after toggle",
+				"error", err,
+				"chatID", chatID)
+			return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		}
+
+		markup := b.markups.buildSettingsMarkup(settings)
+
+		message := "⚙️ Налаштування сповіщень\n\n" +
+			"Попереджати за 10 хвилин до:\n\n" +
+			"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
+
+		return b.sendOrDelete(c, message, markup)
+	}
+}
+
 // sendOrDelete deletes the previous message for callbacks and sends a new one
 func (b *Bot) sendOrDelete(c tb.Context, text string, markup *tb.ReplyMarkup) error {
 	// Check if this is a callback query (button press)
@@ -280,6 +371,7 @@ type (
 	subscribedMarkup struct {
 		*tb.ReplyMarkup
 		manageGroups tb.Btn
+		settings     tb.Btn
 		unsubscribe  tb.Btn
 	}
 
@@ -306,9 +398,11 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 	// Create markup for subscribed users
 	mainSubscribed := &tb.ReplyMarkup{}
 	manageGroupsBtn := mainSubscribed.Data("Керувати групами", "manage_groups")
+	subscribedSettingsBtn := mainSubscribed.Data("⚙️ Налаштування", "settings")
 	unsubscribeBtn := mainSubscribed.Data("Відписатись від усіх", "unsubscribe")
 	mainSubscribed.Inline(
 		mainSubscribed.Row(manageGroupsBtn),
+		mainSubscribed.Row(subscribedSettingsBtn),
 		mainSubscribed.Row(unsubscribeBtn),
 	)
 
@@ -324,6 +418,7 @@ func newMarkups(subscriptionGroupsCount int) *markups {
 			subscribed: subscribedMarkup{
 				ReplyMarkup:  mainSubscribed,
 				manageGroups: manageGroupsBtn,
+				settings:     subscribedSettingsBtn,
 				unsubscribe:  unsubscribeBtn,
 			},
 			unsubscribed: unsubscribedMarkup{
@@ -371,6 +466,50 @@ func (m *markups) buildDynamicGroupsMarkup(subscribedGroups map[string]bool) *tb
 	backBtn := markup.Data("Назад", "back")
 	rows = append(rows, markup.Row(backBtn))
 	markup.Inline(rows...)
+
+	return markup
+}
+
+// buildSettingsMarkup creates settings keyboard with checkmarks for enabled settings
+func (m *markups) buildSettingsMarkup(settings map[dal.SettingKey]interface{}) *tb.ReplyMarkup {
+	markup := &tb.ReplyMarkup{}
+
+	notifyOff := dal.GetBoolSetting(settings, dal.SettingNotifyOff, false)
+	notifyMaybe := dal.GetBoolSetting(settings, dal.SettingNotifyMaybe, false)
+	notifyOn := dal.GetBoolSetting(settings, dal.SettingNotifyOn, false)
+
+	offText := "Відключення"
+	if notifyOff {
+		offText = "✅ " + offText
+	} else {
+		offText = "❌ " + offText
+	}
+
+	maybeText := "Можливих відключень"
+	if notifyMaybe {
+		maybeText = "✅ " + maybeText
+	} else {
+		maybeText = "❌ " + maybeText
+	}
+
+	onText := "Відновлення"
+	if notifyOn {
+		onText = "✅ " + onText
+	} else {
+		onText = "❌ " + onText
+	}
+
+	offBtn := markup.Data(offText, "toggle_notify_off")
+	maybeBtn := markup.Data(maybeText, "toggle_notify_maybe")
+	onBtn := markup.Data(onText, "toggle_notify_on")
+	backBtn := markup.Data("◀️ Назад", "back_from_settings")
+
+	markup.Inline(
+		markup.Row(offBtn),
+		markup.Row(maybeBtn),
+		markup.Row(onBtn),
+		markup.Row(backBtn),
+	)
 
 	return markup
 }
