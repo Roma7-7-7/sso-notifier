@@ -30,7 +30,7 @@ func main() {
 	cancel()
 }
 
-func run(ctx context.Context) int {
+func run(ctx context.Context) int { //nolint:funlen // refactoring planned in #34
 	conf, err := telegram.NewConfig(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to create configuration", "error", err) //nolint:sloglint // not initialized yet
@@ -69,6 +69,7 @@ func run(ctx context.Context) int {
 	shutdownsSvc := service.NewShutdowns(store, provider, loc, log)
 	subscriptionsSvc := service.NewSubscription(store, log)
 	notificationsSvc := service.NewNotifications(store, store, store, sender, loc, log)
+	alertsSvc := service.NewAlerts(store, store, store, sender, loc, log)
 
 	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
 	if err != nil {
@@ -86,6 +87,11 @@ func run(ctx context.Context) int {
 	go func() {
 		defer wg.Done()
 		notifyShutdownUpdates(ctx, notificationsSvc, conf.NotifyInterval, log.With("component", "schedule").With("action", "notify"))
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		notifyUpcomingShutdowns(ctx, alertsSvc, conf.NotifyUpcomingInterval, log.With("component", "schedule").With("action", "notify_upcoming"))
 	}()
 
 	log.InfoContext(ctx, "Starting bot")
@@ -150,6 +156,33 @@ func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, dela
 				}
 
 				log.ErrorContext(ctx, "Error notifying shutdowns schedule", "error", err)
+			}
+		}
+	}
+}
+
+func notifyUpcomingShutdowns(ctx context.Context, svc *service.Alerts, delay time.Duration, log *slog.Logger) {
+	defer func() {
+		log.InfoContext(ctx, "Stopped notify upcoming shutdowns schedule")
+	}()
+
+	log.InfoContext(ctx, "Starting notify upcoming shutdowns schedule")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+			err := svc.NotifyUpcomingShutdowns(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				if errors.Is(err, context.DeadlineExceeded) {
+					log.WarnContext(ctx, "Error notifying upcoming shutdowns", "error", err)
+					continue
+				}
+
+				log.ErrorContext(ctx, "Error notifying upcoming shutdowns", "error", err)
 			}
 		}
 	}
