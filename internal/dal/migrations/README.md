@@ -8,9 +8,9 @@ The migration system manages schema changes to the BoltDB database in a versione
 
 ## Current Database Schema
 
-### Latest Schema Version: v4 (active in production)
+### Latest Schema Version: v5 (active in production)
 
-**Note:** This schema separates subscription metadata from notification tracking state.
+**Note:** This schema includes support for 10-minute advance notifications.
 
 ### Buckets
 
@@ -136,6 +136,32 @@ Tracks applied database migrations.
   - Key: `"v1"`
   - Value: `"2025-10-31T14:23:45Z"`
 
+#### 5. `alerts`
+Tracks 10-minute advance notification alerts to prevent duplicates.
+
+- **Key Format:** `<chatID>_<date>_<startTime>_<status>_<group>` (e.g., `"123456_20 жовтня_08:00_MAYBE_5"`)
+- **Value Format:** RFC3339 timestamp when notification was sent (e.g., `"2025-10-20T07:50:00Z"`)
+- **Structure (v5):**
+  - **chatID:** Telegram chat ID (e.g., `123456`)
+  - **date:** Schedule date in Ukrainian format (e.g., `20 жовтня`)
+  - **startTime:** Start time of the outage (e.g., `08:00`)
+  - **status:** Status type (`OFF`, `MAYBE`, `ON`)
+  - **group:** Group number (e.g., `5`)
+
+- **Example Entries:**
+  - Key: `"123456_20 жовтня_08:00_MAYBE_5"`
+  - Value: `"2025-10-20T07:50:00Z"`
+
+  - Key: `"123456_20 жовтня_08:30_OFF_5"`
+  - Value: `"2025-10-20T08:20:00Z"`
+
+- **Purpose:**
+  - Track which advance notifications have been sent
+  - Prevent duplicate notifications for the same outage start
+  - Support notification window (6 AM - 11 PM)
+
+- **Cleanup Strategy:** Currently no automatic cleanup (entries are small, ~100 bytes each)
+
 ## Migration System Architecture
 
 ### Principles
@@ -180,6 +206,7 @@ Continue with application startup
 | v2 | Create shutdowns and subscriptions buckets | ✅ Active | 2025-10-31 |
 | v3 | Add CreatedAt to subscriptions | ✅ Active | 2025-10-31 |
 | v4 | Split subscription metadata from notification state | ✅ Active | 2025-10-31 |
+| v5 | Create alerts bucket for 10-minute advance alerts | ✅ Active | 2025-11-05 |
 
 ## How to Create a New Migration
 
@@ -432,6 +459,13 @@ go test ./internal/dal/migrations -integration
 - Enables multi-group subscriptions and notification history
 - Status: ✅ Deployed
 
+### v5 - Create Alerts Bucket (2025-11-05)
+- Creates `alerts` bucket for 10-minute advance alerts
+- Tracks sent notifications to prevent duplicates
+- Supports OFF, MAYBE, and ON status notifications
+- Enables notification window (6 AM - 11 PM)
+- Status: ✅ Deployed
+
 ## Resources
 
 - [BoltDB Documentation](https://github.com/etcd-io/bbolt)
@@ -449,6 +483,6 @@ If you encounter issues with migrations:
 
 ---
 
-**Last Updated:** 2025-10-31
-**Schema Version:** v4 (active)
+**Last Updated:** 2025-11-05
+**Schema Version:** v5 (active)
 **Maintainer:** @rsav

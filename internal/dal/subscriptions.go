@@ -95,3 +95,65 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 
 	return err
 }
+
+// GetBoolSetting retrieves a boolean setting from the settings map with a default value
+func GetBoolSetting(settings map[string]interface{}, key SettingKey, defaultValue bool) bool {
+	if settings == nil {
+		return defaultValue
+	}
+
+	val, exists := settings[string(key)]
+	if !exists {
+		return defaultValue
+	}
+
+	boolVal, ok := val.(bool)
+	if !ok {
+		return defaultValue
+	}
+
+	return boolVal
+}
+
+// GetIntSetting retrieves an integer setting from the settings map with a default value
+func GetIntSetting(settings map[string]interface{}, key SettingKey, defaultValue int) int {
+	if settings == nil {
+		return defaultValue
+	}
+
+	val, exists := settings[string(key)]
+	if !exists {
+		return defaultValue
+	}
+
+	// Handle both int and float64 (JSON unmarshaling uses float64 for numbers)
+	switch v := val.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	case int64:
+		return int(v)
+	default:
+		return defaultValue
+	}
+}
+
+// GetStringSetting retrieves a string setting from the settings map with a default value
+func GetStringSetting(settings map[string]interface{}, key SettingKey, defaultValue string) string {
+	if settings == nil {
+		return defaultValue
+	}
+
+	val, exists := settings[string(key)]
+	if !exists {
+		return defaultValue
+	}
+
+	strVal, ok := val.(string)
+	if !ok {
+		return defaultValue
+	}
+
+	return strVal
+}

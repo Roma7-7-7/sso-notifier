@@ -38,6 +38,17 @@ func (s *BoltDB) Purge(chatID int64) error {
 			}
 		}
 
+		// Delete all alerts for this user
+		alertsBucket := tx.Bucket([]byte(alertsBucket))
+		if alertsBucket != nil {
+			c := alertsBucket.Cursor()
+			for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
+				if err := alertsBucket.Delete(k); err != nil {
+					return fmt.Errorf("delete alert for key %s: %w", k, err)
+				}
+			}
+		}
+
 		return nil
 	})
 }
