@@ -224,7 +224,7 @@ func isOutageStart(items []dal.Status, index int, status dal.Status) bool {
 func findPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
 	targetHour := targetTime.Hour()
 	targetMin := targetTime.Minute()
-	targetMinutes := targetHour*60 + targetMin
+	targetMinutes := targetHour*60 + targetMin //nolint:mnd // hours to minutes
 
 	for i, period := range periods {
 		fromMinutes, err := parseTimeToMinutes(period.From)
@@ -250,7 +250,7 @@ func findPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
 // "24:00" is treated as 1440 minutes (end of day)
 func parseTimeToMinutes(timeStr string) (int, error) {
 	parts := strings.Split(timeStr, ":")
-	if len(parts) != 2 {
+	if len(parts) != 2 { //nolint:mnd // HH:mm
 		return 0, fmt.Errorf("invalid time format: %s", timeStr)
 	}
 
@@ -259,17 +259,17 @@ func parseTimeToMinutes(timeStr string) (int, error) {
 		return 0, fmt.Errorf("invalid hour: %w", err)
 	}
 
-	min, err := strconv.Atoi(parts[1])
+	minute, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return 0, fmt.Errorf("invalid minute: %w", err)
 	}
 
 	// Handle "24:00" as end of day (1440 minutes)
-	if hour == 24 && min == 0 {
-		return 24 * 60, nil
+	if hour == 24 && minute == 0 {
+		return 24 * 60, nil //nolint:mnd // hours to minutes
 	}
 
-	return hour*60 + min, nil
+	return hour*60 + minute, nil
 }
 
 // isWithinNotificationWindow checks if the hour is within the notification window (6 AM - 11 PM)
