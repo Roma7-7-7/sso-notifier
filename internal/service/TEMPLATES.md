@@ -171,6 +171,160 @@ This makes it easy to:
 - Add new status types
 - Sort/filter status lines
 
+## Upcoming Notification Template
+
+### Overview
+
+The upcoming notification template is used for 10-minute advance alerts before power status changes. It follows the same template-based approach as the main notification system but with simpler structure since it only deals with future events.
+
+### Location
+
+`internal/service/upcoming_messages.go`
+
+### Data Structure
+
+```go
+UpcomingMessage
+  └── IsRestoration bool          // true if any alert is for ON status
+  └── Alerts []UpcomingAlert
+        └── Status dal.Status     // OFF, MAYBE, or ON
+        └── StartTime string      // e.g., "08:30"
+        └── Groups []string       // Group numbers (e.g., ["5", "7"])
+        └── Emoji string          // Status emoji (🟢/🟡/🔴)
+        └── Label string          // Ukrainian status label
+```
+
+### Template
+
+```
+{{if .IsRestoration}}⚡ Гарні новини! Через 10 хвилин:{{else}}⚠️ Увага! Через 10 хвилин:{{end}}
+
+{{range .Alerts}}
+{{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
+{{.Emoji}} {{.Label}} об {{.StartTime}}
+{{end}}
+```
+
+### Template Features
+
+- **Conditional Header**: Shows "⚡ Гарні новини!" for power restoration, "⚠️ Увага!" for outages
+- **Group Formatting**: Automatically handles singular ("Група 5") vs plural ("Групи 5, 7")
+- **Custom Function**: `joinGroups` - joins group numbers with comma+space
+- **Emoji Support**: Status-specific emojis for quick visual recognition
+- **Sorted Output**: Groups are numerically sorted, alerts sorted by time then status priority
+
+### Example Outputs
+
+#### Single Group, Single Status
+
+```
+⚠️ Увага! Через 10 хвилин:
+
+Група 5:
+🔴 Відключення електроенергії об 08:30
+```
+
+#### Multiple Groups, Same Time and Status
+
+```
+⚠️ Увага! Через 10 хвилин:
+
+Групи 5, 7:
+🔴 Відключення електроенергії об 08:30
+```
+
+#### Multiple Groups, Different Times
+
+```
+⚠️ Увага! Через 10 хвилин:
+
+Група 5:
+🔴 Відключення електроенергії об 08:30
+
+Група 7:
+🟡 Можливе відключення електроенергії об 09:00
+```
+
+#### Multiple Groups, Mixed Statuses Same Time
+
+```
+⚠️ Увага! Через 10 хвилин:
+
+Групи 5, 7:
+🔴 Відключення електроенергії об 08:30
+
+Група 9:
+🟡 Можливе відключення електроенергії об 08:30
+```
+
+#### Power Restoration
+
+```
+⚡ Гарні новини! Через 10 хвилин:
+
+Групи 3, 5:
+🟢 Відновлення електроенергії об 14:00
+```
+
+### Status Labels and Emojis
+
+| Status | Emoji | Label |
+|--------|-------|-------|
+| ON | 🟢 | Відновлення електроенергії |
+| OFF | 🔴 | Відключення електроенергії |
+| MAYBE | 🟡 | Можливе відключення електроенергії |
+
+### Implementation Notes
+
+#### Grouping Logic
+
+Alerts are grouped by `(Status, StartTime)` to merge multiple groups with the same event:
+
+```go
+type groupKey struct {
+    Status    dal.Status
+    StartTime string
+}
+```
+
+This produces cleaner messages:
+- Instead of: 3 separate messages for groups 5, 7, 9 at 08:30
+- Shows: "Групи 5, 7, 9: 🔴 Відключення електроенергії об 08:30"
+
+#### Sorting
+
+1. **Groups within alerts**: Sorted numerically (1, 2, 11 not 1, 11, 2)
+2. **Alerts**: Sorted by start time, then by status priority (OFF > MAYBE > ON)
+
+This ensures consistent output and prioritizes more critical alerts.
+
+#### Error Handling
+
+If template execution fails, a fallback message is shown:
+```
+⚠️ Увага! Через 10 хвилин змінюється статус електроенергії
+```
+
+This prevents notification failures due to template errors.
+
+### Comparison with Main Notification Template
+
+| Feature | Main Notification | Upcoming Notification |
+|---------|------------------|----------------------|
+| **Scope** | Past + future periods | Only future (10 min ahead) |
+| **Structure** | Multi-date, multi-group, multi-period | Single-event alerts |
+| **Header** | "Графік стабілізаційних відключень:" | "⚠️ Увага!" or "⚡ Гарні новини!" |
+| **Grouping** | By date → group → status | By status+time → groups |
+| **Time format** | Period ranges (08:00 - 11:00) | Single time (об 08:00) |
+| **Use case** | Schedule change notifications | Advance warnings |
+
+### Maintenance Notes
+
+**If you modify the template or rendering logic**, update:
+1. This file (TEMPLATES.md) - examples and documentation
+2. CLAUDE.md - "Alerts Service" section
+3. ALERTS_DESIGN.md (if still present) - message format examples
+
 ## Future Enhancements
 
 ### Possible Extensions

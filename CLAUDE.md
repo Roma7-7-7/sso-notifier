@@ -375,13 +375,6 @@ Uses `alerts` bucket to track sent notifications:
 - Value: ISO 8601 timestamp when notification was sent
 - Prevents duplicate alerts even if goroutine runs multiple times
 
-**Message Format**
-
-Renders merged messages for multiple groups:
-- Single group: "Група 5: 🔴 Відключення електроенергії об 08:00"
-- Multiple groups: "Групи 5, 7: 🔴 Відключення електроенергії об 08:00"
-- Power restoration: "⚡ Гарні новини! Через 10 хвилин: ..."
-
 **Settings Integration**
 
 Respects user preferences from subscription settings:
@@ -392,6 +385,87 @@ Respects user preferences from subscription settings:
 Only sends notifications for enabled status types.
 
 **Thread Safety**: Uses mutex to prevent concurrent execution.
+
+### `/internal/service/upcoming_messages.go`
+
+Template-based message rendering for upcoming (10-minute advance) notifications.
+
+**Purpose**: Separate rendering logic from business logic, using text/template for maintainability.
+
+**Data Structures:**
+
+```go
+type UpcomingAlert struct {
+    Status    dal.Status // OFF, MAYBE, or ON
+    StartTime string     // e.g., "08:30"
+    Groups    []string   // Group numbers (e.g., ["5", "7"])
+    Emoji     string     // Status emoji (🟢/🟡/🔴)
+    Label     string     // Ukrainian label
+}
+
+type UpcomingMessage struct {
+    IsRestoration bool            // true if any ON status
+    Alerts        []UpcomingAlert // Grouped by status+time
+}
+```
+
+**Template** (upcomingMessageTemplate):
+
+> **IMPORTANT:** If you change the template or rendering logic, you MUST also update:
+> - `internal/service/TEMPLATES.md` - Update "Upcoming Notification Template" section
+> - This section in CLAUDE.md
+
+```
+{{if .IsRestoration}}⚡ Гарні новини! Через 10 хвилин:{{else}}⚠️ Увага! Через 10 хвилин:{{end}}
+
+{{range .Alerts}}
+{{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
+{{.Emoji}} {{.Label}} об {{.StartTime}}
+{{end}}
+```
+
+**Key Function: `renderUpcomingMessage()` (lines 45-104)**
+
+Flow:
+1. Group alerts by (Status, StartTime)
+2. Create `UpcomingAlert` structs with emoji and label
+3. Sort groups numerically within each alert
+4. Sort alerts by time, then status priority (OFF > MAYBE > ON)
+5. Execute template with data
+6. Return trimmed result
+
+**Message Examples:**
+
+Single group:
+```
+⚠️ Увага! Через 10 хвилин:
+
+Група 5:
+🔴 Відключення електроенергії об 08:30
+```
+
+Multiple groups, same time:
+```
+⚠️ Увага! Через 10 хвилин:
+
+Групи 5, 7:
+🔴 Відключення електроенергії об 08:30
+```
+
+Power restoration:
+```
+⚡ Гарні новини! Через 10 хвилин:
+
+Групи 3, 5:
+🟢 Відновлення електроенергії об 14:00
+```
+
+**Helper Functions:**
+- `getEmojiForStatus()` - Maps status to emoji
+- `getLabelForStatus()` - Maps status to Ukrainian label
+- `statusPriority()` - Returns sort priority for status
+
+See `internal/service/TEMPLATES.md` for complete documentation on the template system.
 
 ### `/internal/telegram/telegram.go`
 
