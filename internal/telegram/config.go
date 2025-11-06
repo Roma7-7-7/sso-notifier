@@ -18,6 +18,7 @@ type Config struct {
 	DBPath                   string        `envconfig:"DB_PATH" default:"data/sso-notifier.db"`
 	RefreshShutdownsInterval time.Duration `envconfig:"REFRESH_SHUTDOWNS_INTERVAL" default:"5m"`
 	NotifyInterval           time.Duration `envconfig:"NOTIFY_INTERVAL" default:"5m"`
+	NotifyUpcomingInterval   time.Duration `envconfig:"NOTIFY_UPCOMING_INTERVAL" default:"1m"`
 	ScheduleURL              string        `envconfig:"SCHEDULE_URL" default:"https://oblenergo.cv.ua/shutdowns/"`
 	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN"`
 }

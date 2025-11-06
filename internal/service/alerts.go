@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -81,8 +82,7 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 	}
 
 	targetTime := now.Add(defaultAlertWindowMinutes * time.Minute)
-	targetTimeStr := targetTime.Format("15:04")
-	s.log.DebugContext(ctx, "checking for events", "targetTime", targetTimeStr)
+	s.log.DebugContext(ctx, "checking for events", "targetTime", targetTime.Format("15:04"))
 
 	today := dal.TodayDate(s.loc)
 	shutdowns, ok, err := s.shutdowns.GetShutdowns(today)
@@ -97,9 +97,10 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 	pendingAlerts := make([]PendingAlert, 0)
 
 	for groupNum, group := range shutdowns.Groups {
-		periodIndex := findPeriodIndex(shutdowns.Periods, targetTimeStr)
-		if periodIndex == -1 {
-			continue // No matching period
+		periodIndex, err := findPeriodIndex(shutdowns.Periods, targetTime)
+		if err != nil {
+			s.log.ErrorContext(ctx, "failed to find period index", "groupNum", groupNum, "targetTime", targetTime, "err", err)
+			continue
 		}
 
 		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
@@ -218,14 +219,57 @@ func isOutageStart(items []dal.Status, index int, status dal.Status) bool {
 	return previousStatus != currentStatus
 }
 
-// findPeriodIndex finds the index of the period that contains the given time string
-func findPeriodIndex(periods []dal.Period, timeStr string) int {
+// findPeriodIndex finds the index of the period that contains the given time
+// A period contains a time if: period.From <= time < period.To
+func findPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
+	targetHour := targetTime.Hour()
+	targetMin := targetTime.Minute()
+	targetMinutes := targetHour*60 + targetMin //nolint:mnd // hours to minutes
+
 	for i, period := range periods {
-		if period.From == timeStr {
-			return i
+		fromMinutes, err := parseTimeToMinutes(period.From)
+		if err != nil {
+			return 0, fmt.Errorf("parse period from: %w", err)
+		}
+
+		toMinutes, err := parseTimeToMinutes(period.To)
+		if err != nil {
+			return 0, fmt.Errorf("parse period to: %w", err)
+		}
+
+		// Check if targetTime falls within this period: [From, To)
+		// Note: To is exclusive to avoid overlap between periods
+		if targetMinutes >= fromMinutes && targetMinutes < toMinutes {
+			return i, nil
 		}
 	}
-	return -1
+	return 0, errors.New("no matching period")
+}
+
+// parseTimeToMinutes parses a time string (e.g., "10:30" or "24:00") to total minutes since midnight
+// "24:00" is treated as 1440 minutes (end of day)
+func parseTimeToMinutes(timeStr string) (int, error) {
+	parts := strings.Split(timeStr, ":")
+	if len(parts) != 2 { //nolint:mnd // HH:mm
+		return 0, fmt.Errorf("invalid time format: %s", timeStr)
+	}
+
+	hour, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, fmt.Errorf("invalid hour: %w", err)
+	}
+
+	minute, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid minute: %w", err)
+	}
+
+	// Handle "24:00" as end of day (1440 minutes)
+	if hour == 24 && minute == 0 {
+		return 24 * 60, nil //nolint:mnd // hours to minutes
+	}
+
+	return hour*60 + minute, nil
 }
 
 // isWithinNotificationWindow checks if the hour is within the notification window (6 AM - 11 PM)
@@ -286,7 +330,7 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 			sb.WriteString(fmt.Sprintf("Групи %s:\n", strings.Join(groups, ", ")))
 		}
 
-		sb.WriteString(fmt.Sprintf("%s %s о %s\n", emoji, label, key.StartTime))
+		sb.WriteString(fmt.Sprintf("%s %s об %s\n", emoji, label, key.StartTime))
 		sb.WriteString("\n")
 	}
 
