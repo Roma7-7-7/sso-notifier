@@ -144,11 +144,11 @@ func getEmojiForStatus(status dal.Status) string {
 func getLabelForStatus(status dal.Status) string {
 	switch status {
 	case dal.ON:
-		return "Відновлення електроенергії"
+		return "Відновлення електропостачання"
 	case dal.OFF:
-		return "Відключення електроенергії"
+		return "Відключення електропостачання"
 	case dal.MAYBE:
-		return "Можливе відключення/відновлення електроенергії"
+		return "Можливе відключення/відновлення електропостачання"
 	default:
 		return "Невідомий статус"
 	}

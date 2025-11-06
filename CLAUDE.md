@@ -109,14 +109,16 @@ type Shutdowns struct {
 }
 
 type Subscription struct {
-    ChatID int64             // Telegram chat ID
-    Groups map[string]string // {"1": "hash123", "2": "hash456"}
+    ChatID   int64                  // Telegram chat ID
+    Groups   map[string]string      // {"1": "hash123", "2": "hash456"}
+    Settings map[string]interface{} // User preferences (e.g., "notify_off_10min": true)
 }
 ```
 
 **BoltDB Buckets:**
 - `shutdowns`: Stores current schedule (single key: "table")
 - `subscriptions`: Stores user subscriptions (key: chatID)
+- `alerts`: Tracks sent 10-minute advance notifications (key: "{chatID}_{date}_{time}_{status}_{group}")
 
 **Key Methods:**
 - `GetShutdowns()` / `PutShutdowns()`: Schedule CRUD
@@ -441,7 +443,7 @@ Single group:
 ⚠️ Увага! Через 10 хвилин:
 
 Група 5:
-🔴 Відключення електроенергії об 08:30
+🔴 Відключення електропостачання об 08:30
 ```
 
 Multiple groups, same time:
@@ -449,7 +451,7 @@ Multiple groups, same time:
 ⚠️ Увага! Через 10 хвилин:
 
 Групи 5, 7:
-🔴 Відключення електроенергії об 08:30
+🔴 Відключення електропостачання об 08:30
 ```
 
 Power restoration:
@@ -457,7 +459,7 @@ Power restoration:
 ⚡ Гарні новини! Через 10 хвилин:
 
 Групи 3, 5:
-🟢 Відновлення електроенергії об 14:00
+🟢 Відновлення електропостачання об 14:00
 ```
 
 **Helper Functions:**
@@ -704,9 +706,15 @@ internal/dal/migrations/
 ├── v2/
 │   ├── README.md      # v2 migration docs
 │   └── migration.go   # Creates shutdowns and subscriptions buckets
-└── v3/
-    ├── README.md      # v3 migration docs
-    └── migration.go   # Adds CreatedAt to subscriptions (not yet enabled)
+├── v3/
+│   ├── README.md      # v3 migration docs
+│   └── migration.go   # Adds CreatedAt to subscriptions (not yet enabled)
+├── v4/
+│   ├── README.md      # v4 migration docs
+│   └── migration.go   # Adds Settings map to subscriptions
+└── v5/
+    ├── README.md      # v5 migration docs
+    └── migration.go   # Creates alerts bucket for 10-minute advance notifications
 ```
 
 ### Migration Storage
