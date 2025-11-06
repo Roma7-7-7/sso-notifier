@@ -462,24 +462,37 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ---
 
-### Phase 5: Message Templates ✅ / ❌
+### Phase 5: Message Templates ✅
 
-- [ ] **Create Template File**: `internal/service/upcoming_messages.go`
+- [x] **Create Template File**: `internal/service/upcoming_messages.go`
   - Define `upcomingMessageTemplate` (text/template)
-  - Implement `renderUpcomingNotification(data UpcomingData) (string, error)`
+  - Implement `renderUpcomingMessage(alerts []PendingAlert) string`
   - Support multiple groups with same/different times
   - Support ON/OFF/MAYBE status emojis and labels
+  - Moved rendering logic from `alerts.go` to separate file
+  - Added proper data structures (UpcomingAlert, UpcomingMessage)
+  - Template-based rendering with custom function `joinGroups`
+  - Sorting and grouping logic for clean output
 
-- [ ] **Update TEMPLATES.md**: Document new template
+- [x] **Update TEMPLATES.md**: Document new template
   - Add section: "Upcoming Notification Template"
-  - Include examples for all scenarios
-  - Document data structure
+  - Include examples for all scenarios (single/multiple groups, different times, power restoration)
+  - Document data structure and template features
+  - Added comparison table with main notification template
+  - Documented maintenance notes
 
-**Files to create**:
+- [x] **Update CLAUDE.md**: Document new file and template system
+  - Added section for `/internal/service/upcoming_messages.go`
+  - Documented data structures, template, and message examples
+  - Added reminder to update both docs when changing template
+
+**Files created**:
 - `internal/service/upcoming_messages.go`
 
-**Files to modify**:
+**Files modified**:
 - `internal/service/TEMPLATES.md`
+- `internal/service/alerts.go` (removed old rendering code)
+- `CLAUDE.md`
 
 ---
 
@@ -529,10 +542,11 @@ Placement: Below "Керувати групами" / "Підписатись н�
 - [x] Phase 2: Service Layer (Alerts service, subscription settings methods)
 - [x] Phase 3: Telegram Bot UI (Settings handlers, markups, subscription checks)
 - [x] Phase 4: Scheduler Integration (Goroutine, config, lifecycle management)
+- [x] Phase 5: Message Templates (Template-based rendering, documentation)
 
 ### In Progress 🚧
 
-- [ ] Phase 5: Message Templates
+- [ ] Phase 6: Testing & Polish
 
 ### Blocked 🚫
 
