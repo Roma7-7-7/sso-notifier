@@ -36,7 +36,7 @@ var upcomingMessageTemplate = template.Must(
 		"joinGroups": func(groups []string) string {
 			return strings.Join(groups, ", ")
 		},
-	}).Parse(`⚠️ Увага! Через 10 хвилин:
+	}).Parse(`⚠️ Увага! Незабаром зміниться електропостачання:
 {{range .Alerts}}
 {{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
 {{.Emoji}} {{.Label}} об {{.StartTime}}
@@ -100,7 +100,7 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 	var buf bytes.Buffer
 	if err := upcomingMessageTemplate.Execute(&buf, msg); err != nil {
 		// Fallback to simple message on template error
-		return "⚠️ Увага! Через 10 хвилин змінюється статус електроенергії"
+		return "⚠️ Увага! Незабаром зміниться електропостачання"
 	}
 
 	return strings.TrimSpace(buf.String())
