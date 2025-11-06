@@ -41,11 +41,12 @@ External Provider Layer (HTML Scraping)
 
 ### Concurrency Model
 
-Three concurrent goroutines:
+Four concurrent goroutines:
 
 1. **Main Thread**: Telegram bot event loop
 2. **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
-3. **Notification Thread**: Checks for updates (configurable, default: 5 minutes)
+3. **Notification Thread**: Checks for schedule updates (configurable, default: 5 minutes)
+4. **Alerts Thread**: Checks for upcoming outages (configurable, default: 1 minute)
 
 ## Code Structure
 
@@ -65,9 +66,10 @@ Entry point with configuration and lifecycle management:
    - Creates separate Telegram clients for bot UI and notifications
    - Wires up services with dependency injection
 
-3. **Goroutine Management & Lifecycle** (lines 66-87)
+3. **Goroutine Management & Lifecycle** (lines 80-95)
    - Spawns refresh schedule goroutine
    - Spawns notification goroutine
+   - Spawns alerts goroutine (for upcoming outage notifications)
    - Uses context cancellation for graceful shutdown
    - Listens for SIGINT/SIGTERM signals
    - Waits for all goroutines to complete
@@ -75,7 +77,8 @@ Entry point with configuration and lifecycle management:
 4. **Interval Functions**
    - `refreshShutdowns()`: Fetches new schedule at configured interval
    - `notifyShutdownUpdates()`: Checks and sends notifications at configured interval
-   - Both use configurable delays passed as parameters
+   - `notifyUpcomingShutdowns()`: Checks for upcoming outages and sends 10-minute advance alerts
+   - All use configurable delays passed as parameters
 
 **Configuration Struct:**
 ```go
@@ -85,6 +88,7 @@ type Config struct {
     DBPath                   string        // Database path
     RefreshShutdownsInterval time.Duration // Schedule fetch interval
     NotifyInterval           time.Duration // Notification check interval
+    NotifyUpcomingInterval   time.Duration // Upcoming alerts check interval (default: 1m)
     TelegramToken            string        // Bot token (required)
 }
 ```
@@ -323,6 +327,72 @@ if len(sub.Groups) == 0 {
 
 Users can now subscribe to multiple groups simultaneously. The toggle pattern provides a clean UX for managing subscriptions.
 
+### `/internal/service/alerts.go`
+
+Service for sending 10-minute advance notifications for upcoming power outages.
+
+**Purpose**: Notify users 10 minutes before power status changes (OFF, MAYBE, or ON) so they can prepare.
+
+**Main Method: `NotifyUpcomingShutdowns()` (lines 70-140)**
+
+Flow:
+1. Check if within notification window (6 AM - 11 PM)
+2. Calculate target time (now + 10 minutes)
+3. Fetch current schedule from DB
+4. For each group, find period containing target time
+5. Check if period is start of outage/restoration (`isOutageStart()`)
+6. Get all subscriptions and process alerts per user
+7. Send merged notifications and mark as sent in alerts bucket
+
+**Key Algorithm: `findPeriodIndex()` (lines 220-245)**
+
+Finds which period contains a given time by checking if time falls within period range:
+- `period.From <= targetTime < period.To`
+- Works at any minute (not just 30-minute boundaries)
+- Handles "24:00" as end of day (1440 minutes)
+- Returns error if no matching period found
+
+**Key Algorithm: `isOutageStart()` (lines 201-219)**
+
+Detects if a period is the START of a new status change:
+- First period of day → always a start
+- Previous period has different status → this is a start
+- Previous period has same status → continuation (not a start)
+
+This prevents duplicate notifications for the same outage.
+
+**Time Window: `isWithinNotificationWindow()` (lines 273-276)**
+
+Only sends notifications between 6 AM and 11 PM to avoid waking users:
+- `hour >= 6 && hour < 23`
+- Checks current time, not target time
+
+**Deduplication**
+
+Uses `alerts` bucket to track sent notifications:
+- Key format: `{chatID}_{date}_{startTime}_{status}_{group}`
+- Example: `123456_20 жовтня_08:00_OFF_5`
+- Value: ISO 8601 timestamp when notification was sent
+- Prevents duplicate alerts even if goroutine runs multiple times
+
+**Message Format**
+
+Renders merged messages for multiple groups:
+- Single group: "Група 5: 🔴 Відключення електроенергії об 08:00"
+- Multiple groups: "Групи 5, 7: 🔴 Відключення електроенергії об 08:00"
+- Power restoration: "⚡ Гарні новини! Через 10 хвилин: ..."
+
+**Settings Integration**
+
+Respects user preferences from subscription settings:
+- `notify_off_10min` - Notify before OFF (default: false)
+- `notify_maybe_10min` - Notify before MAYBE (default: false)
+- `notify_on_10min` - Notify before ON (default: false)
+
+Only sends notifications for enabled status types.
+
+**Thread Safety**: Uses mutex to prevent concurrent execution.
+
 ### `/internal/telegram/telegram.go`
 
 Telegram bot integration using telebot.v3 library.
@@ -459,6 +529,31 @@ Creates inline keyboards with configurable group count:
 7. Renders message with emoji indicators
 8. Sends via separate Telegram client to each subscriber
 9. Updates subscription hashes
+
+### Upcoming Outage Alert
+
+1. `notifyUpcomingShutdowns()` runs at configured interval (default: 1 minute)
+2. Checks if within notification window (6 AM - 11 PM)
+3. Calculates target time (now + 10 minutes), e.g., 8:20 → checks for 8:30
+4. Fetches schedule from DB
+5. For each group, finds period containing target time using `findPeriodIndex()`
+6. Checks if period is start of outage using `isOutageStart()`
+7. Gets all subscriptions and filters by:
+   - User subscribed to group
+   - User enabled notification type (OFF/MAYBE/ON)
+   - Alert not already sent (checks alerts bucket)
+8. Groups alerts by user, status, and time
+9. Renders merged message (e.g., "Групи 5, 7: 🔴 Відключення об 08:30")
+10. Sends via Telegram client
+11. Marks as sent in alerts bucket using period start time (e.g., "08:00") for deduplication
+
+**Example Timeline:**
+- 8:00 AM: Schedule shows group 5 OFF from 8:30-11:00
+- 8:20 AM: Goroutine runs, finds period 8:30-9:00 contains target time 8:30
+- 8:20 AM: Detects this is start of OFF (previous period was ON)
+- 8:20 AM: Sends notification "⚠️ Увага! Через 10 хвилин: Група 5: 🔴 Відключення об 08:30"
+- 8:21 AM: Goroutine runs again, finds same period, but alert key already exists → skipped
+- 8:30 AM: Power actually goes off
 
 ### User Blocks Bot
 
@@ -800,6 +895,7 @@ All configuration via environment variables using `envconfig`:
 - `DB_PATH` (default: "data/sso-notifier.db"): Database file path
 - `REFRESH_SHUTDOWNS_INTERVAL` (default: 5m): Schedule fetch frequency
 - `NOTIFY_INTERVAL` (default: 5m): Notification check frequency
+- `NOTIFY_UPCOMING_INTERVAL` (default: 1m): Upcoming alerts check frequency (10-minute advance notifications)
 - `SCHEDULE_URL` (default: "https://oblenergo.cv.ua/shutdowns/"): Schedule provider URL (for testing)
 
 ### Timeouts

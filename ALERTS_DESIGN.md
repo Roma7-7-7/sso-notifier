@@ -438,15 +438,15 @@ Placement: Below "Керувати групами" / "Підписатись н�
 
 ---
 
-### Phase 4: Scheduler Integration ✅ / ❌
+### Phase 4: Scheduler Integration ✅
 
-- [ ] **Main Entry Point**: Update `cmd/bot/main.go`
+- [x] **Main Entry Point**: Update `cmd/bot/main.go`
   - Add `NotifyUpcomingInterval` to `Config` struct (default: 1 minute)
   - Wire up `Alerts` service
   - Add goroutine: `notifyUpcomingShutdowns()`
   - Pass cancellation context
 
-- [ ] **Interval Function**: Add to `cmd/bot/main.go`
+- [x] **Interval Function**: Add to `cmd/bot/main.go`
   ```go
   func notifyUpcomingShutdowns(
       ctx context.Context,
@@ -456,8 +456,9 @@ Placement: Below "Керувати групами" / "Підписатись н�
   )
   ```
 
-**Files to modify**:
+**Files modified**:
 - `cmd/bot/main.go`
+- `internal/telegram/config.go` (added `NotifyUpcomingInterval` field)
 
 ---
 
@@ -527,10 +528,10 @@ Placement: Below "Керувати групами" / "Підписатись н�
 - [x] Phase 1: Data Layer (Migration v5, DAL methods, type safety)
 - [x] Phase 2: Service Layer (Alerts service, subscription settings methods)
 - [x] Phase 3: Telegram Bot UI (Settings handlers, markups, subscription checks)
+- [x] Phase 4: Scheduler Integration (Goroutine, config, lifecycle management)
 
 ### In Progress 🚧
 
-- [ ] Phase 4: Scheduler Integration
 - [ ] Phase 5: Message Templates
 
 ### Blocked 🚫
