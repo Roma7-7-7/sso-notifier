@@ -20,6 +20,11 @@ This bot automatically:
 
 - Subscribe to one or more power outage groups (1-12)
 - Automatic notifications when schedules change
+- **10-minute advance alerts** for upcoming outages (configurable per user)
+  - Alert before power OFF
+  - Alert before power MAYBE goes off
+  - Alert before power restoration (ON)
+  - Respects quiet hours (6 AM - 11 PM only)
 - Messages in Ukrainian with emoji indicators:
   - 🟢 Power is on
   - 🟡 Power might be off
@@ -112,6 +117,7 @@ TELEGRAM_TOKEN=your_token DEV=true ./bin/sso-notifier
 - `/start` - Show main menu and subscription status
 - `/subscribe` - Choose a group to subscribe to
 - `/unsubscribe` - Remove all subscriptions
+- `/settings` - Configure 10-minute advance alerts (OFF/MAYBE/ON notifications)
 
 The bot also provides inline buttons for easy navigation.
 
@@ -128,17 +134,24 @@ All configuration is done via environment variables:
 
 ## Data Storage
 
-The bot uses BoltDB for persistent storage in `data/sso-notifier.db` (configurable via `DB_PATH`) with two buckets:
+The bot uses BoltDB for persistent storage in `data/sso-notifier.db` (configurable via `DB_PATH`) with the following buckets:
 
 - `shutdowns` - Current power outage schedule
-- `subscriptions` - User subscriptions with group hashes
+- `subscriptions` - User subscriptions with group hashes and alert settings
+- `alerts` - Tracks sent 10-minute advance notifications (deduplication)
 
 Data structure:
 ```go
 type Subscription struct {
-    ChatID int64             // Telegram chat ID
-    Groups map[string]string // Group number -> schedule hash
+    ChatID   int64                       // Telegram chat ID
+    Groups   map[string]string           // Group number -> schedule hash
+    Settings map[string]interface{}      // User preferences (optional)
 }
+
+// Settings keys:
+// "notify_off_10min"   - Alert before power OFF (bool, default: false)
+// "notify_maybe_10min" - Alert before power MAYBE (bool, default: false)
+// "notify_on_10min"    - Alert before power ON (bool, default: false)
 
 type Shutdowns struct {
     Date    string                   // Schedule date
@@ -197,6 +210,24 @@ The notification system (`internal/service/notifications.go`):
 4. Filters out past time periods using Kyiv timezone
 5. Renders message with emoji indicators
 6. Updates subscription hash to prevent duplicates
+
+### Upcoming Alerts (10-Minute Advance)
+
+The alerts system (`internal/service/alerts.go`):
+
+1. Runs every minute to check for upcoming status changes
+2. Calculates target time (now + 10 minutes)
+3. Finds the period containing target time
+4. Detects if it's the **start** of a new outage/restoration (not continuation)
+5. Checks user settings and notification window (6 AM - 11 PM)
+6. Sends merged notifications for multiple groups
+7. Tracks sent alerts in database to prevent duplicates
+
+**Key Algorithm**: Only notifies at the **beginning** of an outage, not for every 30-minute continuation. Example:
+- 08:00-08:30: ON
+- 08:30-11:00: OFF ← Start of outage
+- At 08:20: ✅ Send alert "Power OFF at 08:30"
+- At 08:50, 09:20, etc.: ❌ Skip (continuation of same outage)
 
 ### Message Format
 
