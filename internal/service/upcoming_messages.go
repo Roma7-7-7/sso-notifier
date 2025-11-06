@@ -36,7 +36,7 @@ var upcomingMessageTemplate = template.Must(
 		"joinGroups": func(groups []string) string {
 			return strings.Join(groups, ", ")
 		},
-	}).Parse(`{{if .IsRestoration}}⚡ Гарні новини! Через 10 хвилин:{{else}}⚠️ Увага! Через 10 хвилин:{{end}}
+	}).Parse(`⚠️ Увага! Незабаром зміниться електропостачання:
 {{range .Alerts}}
 {{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
 {{.Emoji}} {{.Label}} об {{.StartTime}}
@@ -58,13 +58,8 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 
 	// Convert to UpcomingAlert structs
 	upcomingAlerts := make([]UpcomingAlert, 0, len(grouped))
-	hasRestoration := false
 
 	for key, groups := range grouped {
-		if key.Status == dal.ON {
-			hasRestoration = true
-		}
-
 		// Sort groups numerically
 		sort.Slice(groups, func(i, j int) bool {
 			numI, _ := strconv.Atoi(groups[i])
@@ -81,23 +76,31 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 		})
 	}
 
-	// Sort alerts by start time, then by status priority (OFF > MAYBE > ON)
+	// Sort alerts by start time, then by minimum group number, then by status priority
 	sort.Slice(upcomingAlerts, func(i, j int) bool {
 		if upcomingAlerts[i].StartTime != upcomingAlerts[j].StartTime {
 			return upcomingAlerts[i].StartTime < upcomingAlerts[j].StartTime
 		}
+
+		// Get minimum group number for each alert (groups are already sorted)
+		minGroupI, _ := strconv.Atoi(upcomingAlerts[i].Groups[0])
+		minGroupJ, _ := strconv.Atoi(upcomingAlerts[j].Groups[0])
+
+		if minGroupI != minGroupJ {
+			return minGroupI < minGroupJ
+		}
+
 		return statusPriority(upcomingAlerts[i].Status) < statusPriority(upcomingAlerts[j].Status)
 	})
 
 	msg := UpcomingMessage{
-		IsRestoration: hasRestoration,
-		Alerts:        upcomingAlerts,
+		Alerts: upcomingAlerts,
 	}
 
 	var buf bytes.Buffer
 	if err := upcomingMessageTemplate.Execute(&buf, msg); err != nil {
 		// Fallback to simple message on template error
-		return "⚠️ Увага! Через 10 хвилин змінюється статус електроенергії"
+		return "⚠️ Увага! Незабаром зміниться електропостачання"
 	}
 
 	return strings.TrimSpace(buf.String())
@@ -145,7 +148,7 @@ func getLabelForStatus(status dal.Status) string {
 	case dal.OFF:
 		return "Відключення електроенергії"
 	case dal.MAYBE:
-		return "Можливе відключення електроенергії"
+		return "Можливе відключення/відновлення електроенергії"
 	default:
 		return "Невідомий статус"
 	}
