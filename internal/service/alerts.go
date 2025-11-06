@@ -113,7 +113,7 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 			continue
 		}
 
-		nowMinutes := now.Hour()*60 + now.Minute()
+		nowMinutes := now.Hour()*60 + now.Minute() //nolint:mnd // hours to minutes
 		periodStartAbsoluteMinutes := nowMinutes + defaultAlertWindowMinutes
 
 		// Allow some tolerance (±5 minutes) since periods are 30-min intervals
