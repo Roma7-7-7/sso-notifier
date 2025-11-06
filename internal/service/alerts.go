@@ -103,18 +103,44 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 			continue
 		}
 
+		period := shutdowns.Periods[periodIndex]
+
+		// Check if the period's start time is close to our target time
+		// This prevents notifying about periods that already started in the past
+		periodStartMinutes, err := parseTimeToMinutes(period.From)
+		if err != nil {
+			s.log.ErrorContext(ctx, "failed to parse period start time", "time", period.From, "err", err)
+			continue
+		}
+
+		nowMinutes := now.Hour()*60 + now.Minute()
+		periodStartAbsoluteMinutes := nowMinutes + defaultAlertWindowMinutes
+
+		// Allow some tolerance (±5 minutes) since periods are 30-min intervals
+		// and we check every minute
+		const toleranceMinutes = 5
+		if periodStartMinutes < periodStartAbsoluteMinutes-toleranceMinutes ||
+			periodStartMinutes > periodStartAbsoluteMinutes+toleranceMinutes {
+			s.log.DebugContext(ctx, "period start time not within notification window",
+				"group", groupNum,
+				"periodStart", period.From,
+				"periodStartMinutes", periodStartMinutes,
+				"targetMinutes", periodStartAbsoluteMinutes)
+			continue
+		}
+
 		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
 			if isOutageStart(group.Items, periodIndex, status) {
 				pendingAlerts = append(pendingAlerts, PendingAlert{
 					GroupNum:  groupNum,
 					Date:      shutdowns.Date,
-					StartTime: shutdowns.Periods[periodIndex].From,
+					StartTime: period.From,
 					Status:    status,
 				})
 				s.log.DebugContext(ctx, "found outage start",
 					"group", groupNum,
 					"status", status,
-					"time", shutdowns.Periods[periodIndex].From)
+					"time", period.From)
 			}
 		}
 	}
