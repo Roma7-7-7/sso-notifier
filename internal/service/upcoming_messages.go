@@ -76,11 +76,20 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 		})
 	}
 
-	// Sort alerts by start time, then by status priority (OFF > MAYBE > ON)
+	// Sort alerts by start time, then by minimum group number, then by status priority
 	sort.Slice(upcomingAlerts, func(i, j int) bool {
 		if upcomingAlerts[i].StartTime != upcomingAlerts[j].StartTime {
 			return upcomingAlerts[i].StartTime < upcomingAlerts[j].StartTime
 		}
+
+		// Get minimum group number for each alert (groups are already sorted)
+		minGroupI, _ := strconv.Atoi(upcomingAlerts[i].Groups[0])
+		minGroupJ, _ := strconv.Atoi(upcomingAlerts[j].Groups[0])
+
+		if minGroupI != minGroupJ {
+			return minGroupI < minGroupJ
+		}
+
 		return statusPriority(upcomingAlerts[i].Status) < statusPriority(upcomingAlerts[j].Status)
 	})
 
