@@ -36,7 +36,7 @@ var upcomingMessageTemplate = template.Must(
 		"joinGroups": func(groups []string) string {
 			return strings.Join(groups, ", ")
 		},
-	}).Parse(`{{if .IsRestoration}}⚡ Гарні новини! Через 10 хвилин:{{else}}⚠️ Увага! Через 10 хвилин:{{end}}
+	}).Parse(`⚠️ Увага! Через 10 хвилин:
 {{range .Alerts}}
 {{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
 {{.Emoji}} {{.Label}} об {{.StartTime}}
@@ -58,13 +58,8 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 
 	// Convert to UpcomingAlert structs
 	upcomingAlerts := make([]UpcomingAlert, 0, len(grouped))
-	hasRestoration := false
 
 	for key, groups := range grouped {
-		if key.Status == dal.ON {
-			hasRestoration = true
-		}
-
 		// Sort groups numerically
 		sort.Slice(groups, func(i, j int) bool {
 			numI, _ := strconv.Atoi(groups[i])
@@ -90,8 +85,7 @@ func renderUpcomingMessage(alerts []PendingAlert) string {
 	})
 
 	msg := UpcomingMessage{
-		IsRestoration: hasRestoration,
-		Alerts:        upcomingAlerts,
+		Alerts: upcomingAlerts,
 	}
 
 	var buf bytes.Buffer
@@ -145,7 +139,7 @@ func getLabelForStatus(status dal.Status) string {
 	case dal.OFF:
 		return "Відключення електроенергії"
 	case dal.MAYBE:
-		return "Можливе відключення електроенергії"
+		return "Можливе відключення/відновлення електроенергії"
 	default:
 		return "Невідомий статус"
 	}
