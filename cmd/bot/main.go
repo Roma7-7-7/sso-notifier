@@ -30,7 +30,7 @@ func main() {
 	cancel()
 }
 
-func run(ctx context.Context) int { //nolint:funlen // refactoring planned in #34
+func run(ctx context.Context) int {
 	conf, err := telegram.NewConfig(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to create configuration", "error", err) //nolint:sloglint // not initialized yet
@@ -81,17 +81,7 @@ func run(ctx context.Context) int { //nolint:funlen // refactoring planned in #3
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		refreshShutdowns(ctx, shutdownsSvc, conf.RefreshShutdownsInterval, log.With("component", "schedule").With("action", "refresh"))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		notifyShutdownUpdates(ctx, notificationsSvc, conf.NotifyInterval, log.With("component", "schedule").With("action", "notify"))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		notifyUpcomingShutdowns(ctx, alertsSvc, conf.NotifyUpcomingInterval, log.With("component", "schedule").With("action", "notify_upcoming"))
+		service.NewScheduler(conf, shutdownsSvc, notificationsSvc, alertsSvc, log).Start(ctx)
 	}()
 
 	log.InfoContext(ctx, "Starting bot")
@@ -103,89 +93,9 @@ func run(ctx context.Context) int { //nolint:funlen // refactoring planned in #3
 	}
 
 	wg.Wait()
+
 	log.InfoContext(ctx, "Stopped bot")
 	return 0
-}
-
-func refreshShutdowns(ctx context.Context, svc *service.Shutdowns, delay time.Duration, log *slog.Logger) {
-	defer func() {
-		log.InfoContext(ctx, "Stopped refresh shutdowns schedule")
-	}()
-
-	log.InfoContext(ctx, "Starting refresh shutdowns schedule")
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
-			err := svc.Refresh(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				if errors.Is(err, context.DeadlineExceeded) {
-					log.WarnContext(ctx, "Error refreshing shutdowns", "error", err)
-					continue
-				}
-
-				log.ErrorContext(ctx, "Error refreshing shutdowns", "error", err)
-			}
-		}
-	}
-}
-
-func notifyShutdownUpdates(ctx context.Context, svc *service.Notifications, delay time.Duration, log *slog.Logger) {
-	defer func() {
-		log.InfoContext(ctx, "Stopped notify shutdown updates schedule")
-	}()
-
-	log.InfoContext(ctx, "Starting notify shutdown updates schedule")
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
-			err := svc.NotifyShutdownUpdates(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				if errors.Is(err, context.DeadlineExceeded) {
-					log.WarnContext(ctx, "Error notifying shutdown updates", "error", err)
-					continue
-				}
-
-				log.ErrorContext(ctx, "Error notifying shutdowns schedule", "error", err)
-			}
-		}
-	}
-}
-
-func notifyUpcomingShutdowns(ctx context.Context, svc *service.Alerts, delay time.Duration, log *slog.Logger) {
-	defer func() {
-		log.InfoContext(ctx, "Stopped notify upcoming shutdowns schedule")
-	}()
-
-	log.InfoContext(ctx, "Starting notify upcoming shutdowns schedule")
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
-			err := svc.NotifyUpcomingShutdowns(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				if errors.Is(err, context.DeadlineExceeded) {
-					log.WarnContext(ctx, "Error notifying upcoming shutdowns", "error", err)
-					continue
-				}
-
-				log.ErrorContext(ctx, "Error notifying upcoming shutdowns", "error", err)
-			}
-		}
-	}
 }
 
 func mustLogger(dev bool) *slog.Logger {
