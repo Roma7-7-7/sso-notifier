@@ -41,12 +41,15 @@ External Provider Layer (HTML Scraping)
 
 ### Concurrency Model
 
-Four concurrent goroutines:
+Two main concurrent paths:
 
-1. **Main Thread**: Telegram bot event loop
-2. **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
-3. **Notification Thread**: Checks for schedule updates (configurable, default: 5 minutes)
-4. **Alerts Thread**: Checks for upcoming outages (configurable, default: 1 minute)
+1. **Main Thread**: Telegram bot event loop (handles user interaction)
+2. **Scheduler Service**: Manages three background scheduled tasks:
+   - **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
+   - **Notification Thread**: Checks for schedule updates (configurable, default: 5 minutes)
+   - **Alerts Thread**: Checks for upcoming outages (configurable, default: 1 minute)
+
+The `Scheduler` service (`internal/service/schedules.go`) centralizes all scheduled tasks with features like heartbeat logging, panic recovery, and graceful shutdown coordination.
 
 ## Code Structure
 
@@ -54,31 +57,26 @@ Four concurrent goroutines:
 
 Entry point with configuration and lifecycle management:
 
-1. **Configuration** (lines 20-26)
+1. **Configuration**
    - Uses `envconfig` to load environment variables into `Config` struct
    - Supports development mode, custom intervals, group count, DB path
    - All settings have sensible defaults
    - `TELEGRAM_TOKEN` is the only required variable
 
-2. **Initialization** (lines 38-64)
+2. **Initialization**
    - Creates BoltDB store at configurable path (default: `data/sso-notifier.db`)
    - Initializes logger (JSON for prod, text for dev based on `DEV` flag)
    - Creates separate Telegram clients for bot UI and notifications
    - Wires up services with dependency injection
 
-3. **Goroutine Management & Lifecycle** (lines 80-95)
-   - Spawns refresh schedule goroutine
-   - Spawns notification goroutine
-   - Spawns alerts goroutine (for upcoming outage notifications)
+3. **Lifecycle Management**
+   - Spawns single goroutine for `Scheduler.Start()` which manages all background tasks
+   - Starts Telegram bot in main goroutine
    - Uses context cancellation for graceful shutdown
    - Listens for SIGINT/SIGTERM signals
-   - Waits for all goroutines to complete
+   - Waits for scheduler to complete before exiting
 
-4. **Interval Functions**
-   - `refreshShutdowns()`: Fetches new schedule at configured interval
-   - `notifyShutdownUpdates()`: Checks and sends notifications at configured interval
-   - `notifyUpcomingShutdowns()`: Checks for upcoming outages and sends 10-minute advance alerts
-   - All use configurable delays passed as parameters
+**Key Simplification**: The refactoring consolidated three separate goroutine spawns and scheduling functions into a single `Scheduler` service, reducing complexity in main.go from ~190 lines to ~100 lines.
 
 **Configuration Struct:**
 ```go
@@ -93,7 +91,7 @@ type Config struct {
 }
 ```
 
-### `/internal/dal/bolt.go`
+### `/internal/dal/`
 
 Data Access Layer using BoltDB (embedded key-value database).
 
@@ -213,6 +211,93 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 ```
 
 **Thread Safety**: Uses mutex to prevent concurrent refreshes.
+
+### `/internal/service/schedules.go`
+
+Centralized scheduler service that manages all background scheduled tasks.
+
+**Purpose**: Consolidates scheduling logic into a single, maintainable service with built-in features like heartbeat logging, panic recovery, and graceful shutdown.
+
+**Dependencies:**
+- `*telegram.Config`: Configuration containing all intervals
+- `*Shutdowns`: Service for refreshing schedules
+- `*Notifications`: Service for sending update notifications
+- `*Alerts`: Service for 10-minute advance alerts
+- `*slog.Logger`: Structured logger
+
+**Structure:**
+```go
+type Scheduler struct {
+    conf *telegram.Config
+
+    shutdowns     *Shutdowns
+    notifications *Notifications
+    alerts        *Alerts
+
+    log *slog.Logger
+}
+```
+
+**Key Method: `Start(ctx context.Context)` (lines 37-55)**
+
+Orchestrates three concurrent scheduled processes:
+1. Refresh shutdowns at configured interval (default: 5m)
+2. Notify shutdown updates at configured interval (default: 5m)
+3. Notify upcoming changes at configured interval (default: 1m)
+
+Each process runs in its own goroutine managed by a WaitGroup. The method blocks until all processes complete (on context cancellation).
+
+**Core Scheduling Logic: `run()` (lines 58-88)**
+
+Generic scheduler runner with advanced features:
+
+```go
+func (s *Scheduler) run(ctx context.Context, interval time.Duration, process string, fn processFn)
+```
+
+**Features:**
+
+1. **Heartbeat Logging**: Logs "Process is still running" every 5 minutes
+   - Helps detect stuck or slow processes
+   - Provides operational visibility without spamming logs
+   - Tracks last heartbeat time to avoid log spam
+
+2. **Panic Recovery**: Wraps function execution with `withRecovery()`
+   - Catches panics and logs them instead of crashing
+   - Allows scheduler to continue running after panic
+   - Critical for production stability
+
+3. **Error Handling**: Distinguishes between fatal and transient errors
+   - Context cancellation/timeout → logs and continues (expected)
+   - Other errors → logs as ERROR (unexpected)
+   - Never crashes the entire application
+
+4. **Clean Shutdown**: Respects context cancellation
+   - Logs "Stopped scheduler" on exit
+   - Returns immediately on `ctx.Done()`
+   - No zombie goroutines
+
+**Helper Function: `withRecovery()` (lines 90-98)**
+
+Wraps function execution with panic recovery:
+```go
+defer func() {
+    if r := recover(); r != nil {
+        log.ErrorContext(ctx, "Recovered from panic", "error", r)
+    }
+}()
+```
+
+**Benefits of This Architecture:**
+
+1. **Separation of Concerns**: Scheduling logic isolated from business logic
+2. **Code Reuse**: Single `run()` function handles all scheduling patterns
+3. **Maintainability**: Easy to add new scheduled tasks
+4. **Observability**: Consistent logging across all scheduled processes
+5. **Reliability**: Panic recovery prevents cascading failures
+6. **Testability**: Clear interface for mocking and testing
+
+**Migration from main.go**: This refactoring removed ~90 lines of duplicated scheduling code from `cmd/bot/main.go`, consolidating three nearly-identical functions (`refreshShutdowns`, `notifyShutdownUpdates`, `notifyUpcomingShutdowns`) into a single, well-tested service.
 
 ### `/internal/service/notifications.go`
 
@@ -596,19 +681,20 @@ Creates inline keyboards with configurable group count:
 
 ### Schedule Update Notification
 
-1. `refreshShutdowns()` runs at configured interval (default: 5 minutes)
-2. Fetches HTML from oblenergo.cv.ua
-3. Parses and stores in BoltDB
-4. `notifyShutdownUpdates()` runs at configured interval (default: 5 minutes)
-5. Detects hash change for group 5
-6. Finds all subscriptions with group 5
-7. Renders message with emoji indicators
-8. Sends via separate Telegram client to each subscriber
-9. Updates subscription hashes
+1. `Scheduler.Start()` spawns background goroutines for all scheduled tasks
+2. Refresh task calls `Shutdowns.Refresh()` at configured interval (default: 5 minutes)
+3. Fetches HTML from oblenergo.cv.ua
+4. Parses and stores in BoltDB
+5. Notification task calls `Notifications.NotifyShutdownUpdates()` at configured interval (default: 5 minutes)
+6. Detects hash change for group 5
+7. Finds all subscriptions with group 5
+8. Renders message with emoji indicators
+9. Sends via separate Telegram client to each subscriber
+10. Updates subscription hashes
 
 ### Upcoming Outage Alert
 
-1. `notifyUpcomingShutdowns()` runs at configured interval (default: 1 minute)
+1. `Scheduler` alerts task calls `Alerts.NotifyUpcomingShutdowns()` at configured interval (default: 1 minute)
 2. Checks if within notification window (6 AM - 11 PM)
 3. Calculates target time (now + 10 minutes), e.g., 8:20 → checks for 8:30
 4. Fetches schedule from DB
@@ -625,10 +711,10 @@ Creates inline keyboards with configurable group count:
 
 **Example Timeline:**
 - 8:00 AM: Schedule shows group 5 OFF from 8:30-11:00
-- 8:20 AM: Goroutine runs, finds period 8:30-9:00 contains target time 8:30
+- 8:20 AM: Scheduler runs alerts task, finds period 8:30-9:00 contains target time 8:30
 - 8:20 AM: Detects this is start of OFF (previous period was ON)
 - 8:20 AM: Sends notification "⚠️ Увага! Через 10 хвилин: Група 5: 🔴 Відключення об 08:30"
-- 8:21 AM: Goroutine runs again, finds same period, but alert key already exists → skipped
+- 8:21 AM: Scheduler runs again, finds same period, but alert key already exists → skipped
 - 8:30 AM: Power actually goes off
 
 ### User Blocks Bot
@@ -1219,8 +1305,16 @@ go mod vendor
 3. Update markups if needed
 
 **Change refresh interval:**
-1. Edit constants in `cmd/bot/main.go`
-2. Consider impact on server load
+1. Update environment variable (e.g., `REFRESH_SHUTDOWNS_INTERVAL=10m`)
+2. Configuration is passed through to `Scheduler` via `telegram.Config`
+3. Consider impact on server load
+
+**Add new scheduled task:**
+1. Create service method in appropriate service file (e.g., `internal/service/myservice.go`)
+2. Add method call to `Scheduler.Start()` with new goroutine
+3. Pass interval from `telegram.Config` to `Scheduler.run()`
+4. Add configuration to environment variables if needed
+5. Update documentation
 
 **Add new data field (requires migration):**
 1. Create new migration version in `internal/dal/migrations/vN/`

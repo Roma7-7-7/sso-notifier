@@ -43,25 +43,37 @@ internal/
   ├── dal/bolt.go               - Data access layer (BoltDB)
   ├── providers/chernivtsi.go   - HTML parser for power outage schedule
   ├── service/
+  │   ├── schedules.go          - Centralized scheduler for background tasks
   │   ├── shutdowns.go          - Schedule refresh logic
   │   ├── notifications.go      - Notification logic
+  │   ├── alerts.go             - 10-minute advance alerts
   │   └── subscriptions.go      - Subscription management
   └── telegram/telegram.go      - Telegram bot handlers
 ```
 
 ### Data Flow
 
-1. **Schedule Refresh** (configurable, default: 5 minutes)
+1. **Background Scheduler** (`service.Scheduler`)
+   - Manages three concurrent scheduled tasks with configurable intervals
+   - Provides heartbeat logging and panic recovery
+   - Coordinates all background operations
+
+2. **Schedule Refresh** (configurable, default: 5 minutes)
    - `ChernivtsiProvider.Shutdowns()` fetches and parses HTML
    - Stores schedule in BoltDB via `service.Shutdowns`
 
-2. **Notification Check** (configurable, default: 5 minutes)
+3. **Notification Check** (configurable, default: 5 minutes)
    - `service.Notifications` compares current schedule with stored hashes
    - Generates messages for changed groups
    - Sends via Telegram to affected subscribers
    - Updates subscription hashes to prevent duplicate notifications
 
-3. **User Interaction**
+4. **Upcoming Alerts** (configurable, default: 1 minute)
+   - `service.Alerts` checks for status changes happening in 10 minutes
+   - Sends advance notifications based on user preferences
+   - Respects quiet hours (6 AM - 11 PM)
+
+5. **User Interaction**
    - Users interact with bot via Telegram commands
    - Bot manages subscriptions through `service.Subscriptions`
    - Data persisted in BoltDB
