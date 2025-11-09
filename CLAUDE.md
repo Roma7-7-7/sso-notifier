@@ -1,1341 +1,212 @@
-# SSO Notifier - Codebase Overview for Claude
+# SSO Notifier - Architecture Overview
 
-This document provides a comprehensive overview of the SSO Notifier codebase for AI assistants and developers.
+Essential context for AI assistants working with this codebase.
 
 ## Project Purpose
 
-SSO Notifier is a Telegram bot that monitors electricity power outage schedules in Chernivtsi, Ukraine. It scrapes HTML from the local power provider's website, detects schedule changes, and notifies subscribers via Telegram.
+Telegram bot monitoring electricity outage schedules in Chernivtsi, Ukraine. Scrapes HTML from power provider, detects changes via hash comparison, notifies subscribers with:
+- Change notifications (when schedule updates)
+- 10-minute advance alerts (before power status changes)
 
 ## Core Concepts
 
-### Power Outage Schedule Structure
+**Power Outage Structure**: 12 groups, 30-minute intervals, three statuses: OFF (`В`), ON (`З`), MAYBE (`МЗ`)
 
-- **City Division**: Chernivtsi is divided into 12 groups
-- **Time Intervals**: Schedule uses 30-minute intervals (00:00, 00:30, 01:00, etc.)
-- **Status Types**:
-  - `В` (Ukrainian) → OFF (power is off)
-  - `З` (Ukrainian) → ON (power is on)
-  - `МЗ` (Ukrainian) → MAYBE (power might be off)
-
-### Change Detection
-
-The bot uses a hash-based system to detect schedule changes:
-- Each group's schedule is hashed (date + status sequence)
-- Hash is stored per user subscription
-- When hash changes → notification sent
-- Hash updated after successful notification
+**Change Detection**: Hash-based (`hash(date + status_sequence)`) stored per user/group. Hash mismatch → notification → update hash.
 
 ## Architecture
 
-### Layered Architecture
-
 ```
-Presentation Layer (Telegram Bot)
-    ↓
-Service Layer (Business Logic)
-    ↓
-Data Access Layer (BoltDB)
-    ↓
-External Provider Layer (HTML Scraping)
+Telegram Bot → Service Layer → DAL (BoltDB) → Provider (HTML scraping)
 ```
 
-### Concurrency Model
+**Concurrency Model**:
+- Main thread: Telegram bot event loop
+- Background: Single `Scheduler` service spawns 3 goroutines:
+  - Refresh schedule (default: 5m)
+  - Notify on changes (default: 5m) 
+  - Alert 10min before outages (default: 1m)
+- Built-in: heartbeat logging, panic recovery, graceful shutdown
 
-Two main concurrent paths:
-
-1. **Main Thread**: Telegram bot event loop (handles user interaction)
-2. **Scheduler Service**: Manages three background scheduled tasks:
-   - **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
-   - **Notification Thread**: Checks for schedule updates (configurable, default: 5 minutes)
-   - **Alerts Thread**: Checks for upcoming outages (configurable, default: 1 minute)
-
-The `Scheduler` service (`internal/service/schedules.go`) centralizes all scheduled tasks with features like heartbeat logging, panic recovery, and graceful shutdown coordination.
-
-## Code Structure
+## Code Organization
 
 ### `/cmd/bot/main.go`
+Entry point: configuration (envconfig), initialization (DB, logger, services), lifecycle (spawns Scheduler, handles shutdown).
 
-Entry point with configuration and lifecycle management:
-
-1. **Configuration**
-   - Uses `envconfig` to load environment variables into `Config` struct
-   - Supports development mode, custom intervals, group count, DB path
-   - All settings have sensible defaults
-   - `TELEGRAM_TOKEN` is the only required variable
-
-2. **Initialization**
-   - Creates BoltDB store at configurable path (default: `data/sso-notifier.db`)
-   - Initializes logger (JSON for prod, text for dev based on `DEV` flag)
-   - Creates separate Telegram clients for bot UI and notifications
-   - Wires up services with dependency injection
-
-3. **Lifecycle Management**
-   - Spawns single goroutine for `Scheduler.Start()` which manages all background tasks
-   - Starts Telegram bot in main goroutine
-   - Uses context cancellation for graceful shutdown
-   - Listens for SIGINT/SIGTERM signals
-   - Waits for scheduler to complete before exiting
-
-**Key Simplification**: The refactoring consolidated three separate goroutine spawns and scheduling functions into a single `Scheduler` service, reducing complexity in main.go from ~190 lines to ~100 lines.
-
-**Configuration Struct:**
-```go
-type Config struct {
-    Dev                      bool          // Development mode flag
-    GroupsCount              int           // Number of groups (default: 12)
-    DBPath                   string        // Database path
-    RefreshShutdownsInterval time.Duration // Schedule fetch interval
-    NotifyInterval           time.Duration // Notification check interval
-    NotifyUpcomingInterval   time.Duration // Upcoming alerts check interval (default: 1m)
-    TelegramToken            string        // Bot token (required)
-}
-```
+**Key Design**: Single `Scheduler` service manages all background goroutines instead of spawning them individually in main.
 
 ### `/internal/dal/`
-
 Data Access Layer using BoltDB (embedded key-value database).
 
-**Data Types:**
-
-```go
-type Status string  // "Y" (ON), "N" (OFF), "M" (MAYBE)
-
-type Shutdowns struct {
-    Date    string                   // e.g., "20 жовтня"
-    Periods []Period                 // [{From: "00:00", To: "00:30"}, ...]
-    Groups  map[string]ShutdownGroup // {"1": {...}, "2": {...}}
-}
-
-type Subscription struct {
-    ChatID   int64                  // Telegram chat ID
-    Groups   map[string]string      // {"1": "hash123", "2": "hash456"}
-    Settings map[string]interface{} // User preferences (e.g., "notify_off_10min": true)
-}
-```
-
 **BoltDB Buckets:**
-- `shutdowns`: Stores current schedule (single key: "table")
-- `subscriptions`: Stores user subscriptions (key: chatID)
-- `alerts`: Tracks sent 10-minute advance notifications (key: "{chatID}_{date}_{time}_{status}_{group}")
+- `shutdowns`: Current schedule (key: date string)
+- `subscriptions`: User subscriptions (key: chatID, value: groups map + hashes + settings)
+- `alerts`: Deduplication for 10-min alerts (key: `{chatID}_{date}_{time}_{status}_{group}`)
+- `migrations`: Migration tracking (key: version, value: timestamp)
 
-**Key Methods:**
-- `GetShutdowns()` / `PutShutdowns()`: Schedule CRUD
-- `GetSubscription()` / `PutSubscription()`: User subscription CRUD
-- `GetAllSubscriptions()`: Fetch all users (for notifications)
-- `PurgeSubscriptions()`: Remove user (when blocked)
+See `dal/bolt.go` for type definitions. See `dal/migrations/README.md` for schema details.
 
 ### `/internal/providers/chernivtsi.go`
+HTML scraper for https://oblenergo.cv.ua/shutdowns/ (configurable via `SCHEDULE_URL` env var).
 
-HTML scraper for https://oblenergo.cv.ua/shutdowns/
-
-**Provider Structure:**
-
-```go
-type ChernivtsiProvider struct {
-    baseURL string  // Configurable schedule URL
-}
-
-func NewChernivtsiProvider(baseURL string) *ChernivtsiProvider
-```
-
-**Public Methods:**
-- `Shutdowns(ctx)` - Fetches current schedule, returns (schedule, nextDayAvailable, error)
-- `ShutdownsNext(ctx)` - Fetches next day schedule by appending `?next` to base URL
-
-**Configuration:**
-- Base URL is configurable via `SCHEDULE_URL` environment variable
-- Default: `https://oblenergo.cv.ua/shutdowns/`
-- For testing: Can point to local test server (see `cmd/testserver`)
-
-**Parsing Logic:**
-
-1. **Date Extraction** (line 68)
-   - Selector: `div#gsv ul p`
-   - Extracts date string (e.g., "20 жовтня")
-
-2. **Time Periods** (lines 147-183)
-   - Selector: `div > p u`
-   - Parses time strings like "00:00", "00:30"
-   - Handles edge case: "23:0000:00" → ["23:00", "24:00"]
-
-3. **Groups** (lines 121-144)
-   - Selector: `ul > li[data-id]`
-   - Extracts 12 groups (data-id="1" through "12")
-
-4. **Status Items** (lines 186-208)
-   - Selector: `div[data-id='N']` for each group
-   - Finds child nodes: `o`, `u`, `s` tags
-   - Text mapping:
-     - `В` → OFF
-     - `З` → ON
-     - Other → MAYBE
-
-**Error Handling:**
-- Validates all extracted data (lines 96-119)
-- Ensures groups have correct number of items (matching periods)
+Extracts: date, time periods (30-min intervals), 12 groups, statuses (В/З/МЗ → OFF/ON/MAYBE). Handles edge case "23:0000:00" → ["23:00", "24:00"].
 
 ### `/internal/service/shutdowns.go`
-
-Service for refreshing schedule from external provider.
-
-**Dependencies:**
-- `ShutdownsStore`: Interface for database operations
-- `ShutdownsProvider`: Interface for fetching schedules (implemented by `ChernivtsiProvider`)
-- Uses dependency injection for testability
-
-**Key Method: `Refresh()` (lines 44-85)**
-
-```go
-func (s *Shutdowns) Refresh(ctx context.Context) error {
-    s.mx.Lock()  // Prevent concurrent refreshes
-    defer s.mx.Unlock()
-
-    // 1-minute timeout for HTTP request
-    ctx, cancel := context.WithTimeout(ctx, time.Minute)
-    defer cancel()
-
-    // Fetch today's schedule from provider
-    today := dal.TodayDate(s.loc)
-    todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
-
-    // Store today's schedule
-    s.store.PutShutdowns(today, todayTable)
-
-    // Optionally fetch tomorrow's schedule if available
-    if nextDayAvailable {
-        tomorrow := dal.TomorrowDate(s.loc)
-        tomorrowTable, err := s.provider.ShutdownsNext(ctx)
-        s.store.PutShutdowns(tomorrow, tomorrowTable)
-    }
-}
-```
-
-**Thread Safety**: Uses mutex to prevent concurrent refreshes.
+Fetches schedules from provider and stores in DB. `Refresh()` uses mutex for thread safety, 1-minute timeout, fetches today + tomorrow (if available).
 
 ### `/internal/service/schedules.go`
-
-Centralized scheduler service that manages all background scheduled tasks.
-
-**Purpose**: Consolidates scheduling logic into a single, maintainable service with built-in features like heartbeat logging, panic recovery, and graceful shutdown.
-
-**Dependencies:**
-- `*telegram.Config`: Configuration containing all intervals
-- `*Shutdowns`: Service for refreshing schedules
-- `*Notifications`: Service for sending update notifications
-- `*Alerts`: Service for 10-minute advance alerts
-- `*slog.Logger`: Structured logger
-
-**Structure:**
-```go
-type Scheduler struct {
-    conf *telegram.Config
-
-    shutdowns     *Shutdowns
-    notifications *Notifications
-    alerts        *Alerts
-
-    log *slog.Logger
-}
-```
-
-**Key Method: `Start(ctx context.Context)` (lines 37-55)**
-
-Orchestrates three concurrent scheduled processes:
-1. Refresh shutdowns at configured interval (default: 5m)
-2. Notify shutdown updates at configured interval (default: 5m)
-3. Notify upcoming changes at configured interval (default: 1m)
-
-Each process runs in its own goroutine managed by a WaitGroup. The method blocks until all processes complete (on context cancellation).
-
-**Core Scheduling Logic: `run()` (lines 58-88)**
-
-Generic scheduler runner with advanced features:
-
-```go
-func (s *Scheduler) run(ctx context.Context, interval time.Duration, process string, fn processFn)
-```
-
-**Features:**
-
-1. **Heartbeat Logging**: Logs "Process is still running" every 5 minutes
-   - Helps detect stuck or slow processes
-   - Provides operational visibility without spamming logs
-   - Tracks last heartbeat time to avoid log spam
-
-2. **Panic Recovery**: Wraps function execution with `withRecovery()`
-   - Catches panics and logs them instead of crashing
-   - Allows scheduler to continue running after panic
-   - Critical for production stability
-
-3. **Error Handling**: Distinguishes between fatal and transient errors
-   - Context cancellation/timeout → logs and continues (expected)
-   - Other errors → logs as ERROR (unexpected)
-   - Never crashes the entire application
-
-4. **Clean Shutdown**: Respects context cancellation
-   - Logs "Stopped scheduler" on exit
-   - Returns immediately on `ctx.Done()`
-   - No zombie goroutines
-
-**Helper Function: `withRecovery()` (lines 90-98)**
-
-Wraps function execution with panic recovery:
-```go
-defer func() {
-    if r := recover(); r != nil {
-        log.ErrorContext(ctx, "Recovered from panic", "error", r)
-    }
-}()
-```
-
-**Benefits of This Architecture:**
-
-1. **Separation of Concerns**: Scheduling logic isolated from business logic
-2. **Code Reuse**: Single `run()` function handles all scheduling patterns
-3. **Maintainability**: Easy to add new scheduled tasks
-4. **Observability**: Consistent logging across all scheduled processes
-5. **Reliability**: Panic recovery prevents cascading failures
-6. **Testability**: Clear interface for mocking and testing
-
-**Migration from main.go**: This refactoring removed ~90 lines of duplicated scheduling code from `cmd/bot/main.go`, consolidating three nearly-identical functions (`refreshShutdowns`, `notifyShutdownUpdates`, `notifyUpcomingShutdowns`) into a single, well-tested service.
+Centralized scheduler managing all background goroutines. `Start()` spawns 3 processes with configurable intervals. `run()` provides: heartbeat logging (every 5min), panic recovery, error handling, clean shutdown. Prevents duplicated scheduling code in main.
 
 ### `/internal/service/notifications.go`
+Change detection and notifications. Compares hashes per user/group, on change: filters past periods (`cutByKyivTime()`), joins consecutive periods (`join()`), renders message, sends, updates hash.
 
-Core notification logic with sophisticated time handling.
+**Critical**: Uses `Europe/Kyiv` timezone for filtering. Messages rendered via templates in `messages.go`.
 
-**Main Method: `NotifyShutdownUpdates()` (lines 49-78)**
-
-Flow:
-1. Fetch current schedule from DB
-2. Get all subscriptions
-3. For each subscription, call `processSubscription()`
-
-**Key Function: `processSubscription()` (lines 80-121)**
-
-For each subscribed group:
-1. Calculate new hash: `shutdownGroupHash(group, date)`
-2. Compare with stored hash
-3. If changed:
-   - Join consecutive periods with same status
-   - Cut past time periods
-   - Render message
-   - Send via Telegram
-   - Update subscription hash
-
-**Time Filtering: `cutByKyivTime()` (lines 157-169)**
-
-Critical for user experience:
-- Uses `Europe/Kyiv` timezone
-- Filters out past periods
-- Only shows future events
-
-Example:
-```
-Current time: 14:30 Kyiv
-Original: [00:00-12:00 OFF, 12:00-18:00 ON, 18:00-24:00 OFF]
-Filtered: [12:00-18:00 ON, 18:00-24:00 OFF]
-```
-
-**Period Joining: `join()` (lines 133-154)**
-
-Merges consecutive periods with same status for cleaner messages:
-```
-Before: [00:00-00:30 OFF, 00:30-01:00 OFF, 01:00-01:30 OFF]
-After:  [00:00-01:30 OFF]
-```
-
-**Message Templates** (messages.go:164-174):
-
-> **IMPORTANT:** If you change the template or rendering logic in `messages.go`, you MUST also update:
-> - `internal/service/TEMPLATES.md` - Update all examples
-> - This section in CLAUDE.md
-
-Current template structure (supports multiple dates and groups):
-
-```go
-messageTemplate = `Графік стабілізаційних відключень:
-{{range .Dates}}
-📅 {{.Date}}:
-{{range .Groups}}Група {{.GroupNum}}:
-{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
-{{end}}{{end}}
-{{end}}{{end}}`
-
-// Status line configuration (messages.go:185-189):
-statusLines := []StatusLine{
-    {Emoji: "🟢", Label: "Заживлено", Periods: grouped[dal.ON]},
-    {Emoji: "🟡", Label: "Можливо заживлено", Periods: grouped[dal.MAYBE]},
-    {Emoji: "🔴", Label: "Відключено", Periods: grouped[dal.OFF]},
-}
-```
-
-Example output:
-```
-Графік стабілізаційних відключень:
-
-📅 20 жовтня:
-Група 5:
-  🟢 Заживлено:  14:00 - 18:00; 20:00 - 24:00;
-  🔴 Відключено:  18:00 - 20:00;
-```
-
-See `internal/service/TEMPLATES.md` for detailed documentation on the template system.
+> **Template Changes**: When modifying templates in `messages.go`, update `internal/service/TEMPLATES.md` documentation.
 
 ### `/internal/service/subscriptions.go`
-
-Subscription management service with multi-group subscription support.
-
-**Key Methods:**
-
-1. `IsSubscribed(chatID)` - Check if user exists
-2. `GetSubscribedGroups(chatID)` - Returns list of group numbers user is subscribed to
-3. `ToggleGroupSubscription(chatID, groupNum)` - Add or remove a group subscription
-   - If group exists in subscription, removes it
-   - If group doesn't exist, adds it
-   - Creates subscription if user doesn't exist
-   - Deletes entire subscription if no groups remain
-4. `SubscribeToGroup(chatID, groupNum)` - Add subscription to a group (appends to existing)
-5. `Unsubscribe(chatID)` - Remove all user data
-
-**Toggle Logic** (lines 68-112):
-```go
-// Toggle: if exists, remove; if not, add
-if _, subscribed := sub.Groups[groupNum]; subscribed {
-    delete(sub.Groups, groupNum)
-} else {
-    sub.Groups[groupNum] = struct{}{}
-}
-
-// If no groups left, delete the entire subscription
-if len(sub.Groups) == 0 {
-    return s.Unsubscribe(chatID)
-}
-```
-
-Users can now subscribe to multiple groups simultaneously. The toggle pattern provides a clean UX for managing subscriptions.
+Multi-group subscription management. `ToggleGroupSubscription()` adds if not exists, removes if exists. Deletes entire subscription when last group removed.
 
 ### `/internal/service/alerts.go`
+10-minute advance alerts before status changes. Flow: check time window (6AM-11PM), calculate target time (+10min), find matching period, check if outage start (`isOutageStart()`), send per user settings, deduplicate via alerts bucket.
 
-Service for sending 10-minute advance notifications for upcoming power outages.
+**Key Algorithms:**
+- `findPeriodIndex()`: Finds period containing time (works at any minute, not just 30-min boundaries)
+- `isOutageStart()`: Detects if period is START of status change (prevents duplicate notifications)
 
-**Purpose**: Notify users 10 minutes before power status changes (OFF, MAYBE, or ON) so they can prepare.
-
-**Main Method: `NotifyUpcomingShutdowns()` (lines 70-140)**
-
-Flow:
-1. Check if within notification window (6 AM - 11 PM)
-2. Calculate target time (now + 10 minutes)
-3. Fetch current schedule from DB
-4. For each group, find period containing target time
-5. Check if period is start of outage/restoration (`isOutageStart()`)
-6. Get all subscriptions and process alerts per user
-7. Send merged notifications and mark as sent in alerts bucket
-
-**Key Algorithm: `findPeriodIndex()` (lines 220-245)**
-
-Finds which period contains a given time by checking if time falls within period range:
-- `period.From <= targetTime < period.To`
-- Works at any minute (not just 30-minute boundaries)
-- Handles "24:00" as end of day (1440 minutes)
-- Returns error if no matching period found
-
-**Key Algorithm: `isOutageStart()` (lines 201-219)**
-
-Detects if a period is the START of a new status change:
-- First period of day → always a start
-- Previous period has different status → this is a start
-- Previous period has same status → continuation (not a start)
-
-This prevents duplicate notifications for the same outage.
-
-**Time Window: `isWithinNotificationWindow()` (lines 273-276)**
-
-Only sends notifications between 6 AM and 11 PM to avoid waking users:
-- `hour >= 6 && hour < 23`
-- Checks current time, not target time
-
-**Deduplication**
-
-Uses `alerts` bucket to track sent notifications:
-- Key format: `{chatID}_{date}_{startTime}_{status}_{group}`
-- Example: `123456_20 жовтня_08:00_OFF_5`
-- Value: ISO 8601 timestamp when notification was sent
-- Prevents duplicate alerts even if goroutine runs multiple times
-
-**Settings Integration**
-
-Respects user preferences from subscription settings:
-- `notify_off_10min` - Notify before OFF (default: false)
-- `notify_maybe_10min` - Notify before MAYBE (default: false)
-- `notify_on_10min` - Notify before ON (default: false)
-
-Only sends notifications for enabled status types.
-
-**Thread Safety**: Uses mutex to prevent concurrent execution.
+**Settings**: `notify_off_10min`, `notify_maybe_10min`, `notify_on_10min` (all default false).
 
 ### `/internal/service/upcoming_messages.go`
+Template-based rendering for 10-min alerts. Groups alerts by status+time, sorts groups, renders with emoji/labels.
 
-Template-based message rendering for upcoming (10-minute advance) notifications.
-
-**Purpose**: Separate rendering logic from business logic, using text/template for maintainability.
-
-**Data Structures:**
-
-```go
-type UpcomingAlert struct {
-    Status    dal.Status // OFF, MAYBE, or ON
-    StartTime string     // e.g., "08:30"
-    Groups    []string   // Group numbers (e.g., ["5", "7"])
-    Emoji     string     // Status emoji (🟢/🟡/🔴)
-    Label     string     // Ukrainian label
-}
-
-type UpcomingMessage struct {
-    IsRestoration bool            // true if any ON status
-    Alerts        []UpcomingAlert // Grouped by status+time
-}
-```
-
-**Template** (upcomingMessageTemplate):
-
-> **IMPORTANT:** If you change the template or rendering logic, you MUST also update:
-> - `internal/service/TEMPLATES.md` - Update "Upcoming Notification Template" section
-> - This section in CLAUDE.md
-
-```
-{{if .IsRestoration}}⚡ Гарні новини! Через 10 хвилин:{{else}}⚠️ Увага! Через 10 хвилин:{{end}}
-
-{{range .Alerts}}
-{{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
-{{.Emoji}} {{.Label}} об {{.StartTime}}
-{{end}}
-```
-
-**Key Function: `renderUpcomingMessage()` (lines 45-104)**
-
-Flow:
-1. Group alerts by (Status, StartTime)
-2. Create `UpcomingAlert` structs with emoji and label
-3. Sort groups numerically within each alert
-4. Sort alerts by time, then status priority (OFF > MAYBE > ON)
-5. Execute template with data
-6. Return trimmed result
-
-**Message Examples:**
-
-Single group:
-```
-⚠️ Увага! Через 10 хвилин:
-
-Група 5:
-🔴 Відключення електропостачання об 08:30
-```
-
-Multiple groups, same time:
-```
-⚠️ Увага! Через 10 хвилин:
-
-Групи 5, 7:
-🔴 Відключення електропостачання об 08:30
-```
-
-Power restoration:
-```
-⚡ Гарні новини! Через 10 хвилин:
-
-Групи 3, 5:
-🟢 Відновлення електропостачання об 14:00
-```
-
-**Helper Functions:**
-- `getEmojiForStatus()` - Maps status to emoji
-- `getLabelForStatus()` - Maps status to Ukrainian label
-- `statusPriority()` - Returns sort priority for status
-
-See `internal/service/TEMPLATES.md` for complete documentation on the template system.
+> **Template Changes**: When modifying, update `internal/service/TEMPLATES.md` documentation.
 
 ### `/internal/telegram/telegram.go`
+Bot UI using telebot.v3. Centralized callback router for all inline buttons. Handlers: `/start`, manage groups (toggle with ✅), unsubscribe. Dynamic markup with configurable group count. Context-aware shutdown.
 
-Telegram bot integration using telebot.v3 library.
+## Key Data Flows
 
-**Bot Structure:**
+**Schedule Update Notification:**
+1. Scheduler → Shutdowns.Refresh() → fetch HTML → store in DB
+2. Scheduler → Notifications.NotifyShutdownUpdates() → compare hashes → filter/join periods → send → update hashes
 
-```go
-type Bot struct {
-    svc     SubscriptionService  // Subscription management
-    bot     *tb.Bot             // Telegram bot instance
-    markups *markups            // Inline keyboard layouts
-    log     *slog.Logger        // Structured logger
-}
-```
+**10-Minute Alert:**
+1. Scheduler (every 1min) → Alerts.NotifyUpcomingShutdowns() → check time window (6-23h)
+2. Calculate target time (+10min) → find period → check isOutageStart()
+3. Filter by user settings → deduplicate (alerts bucket) → send merged message
 
-**Constructor: `NewBot()`** (lines 33-50)
-- Takes token, subscription service, group count, and logger
-- Returns error instead of panicking (better error handling)
-- Creates bot instance with 5-second polling timeout
-- Initializes markups based on configurable group count
-- Adds "component: bot" to logger for context
+**User Subscription:**
+User → `/start` → "Підписатись" → ManageGroupsHandler → tap group → ToggleGroupHandler → DB update → show ✅
 
-**Lifecycle: `Start(ctx context.Context)`** (lines 55-72)
-- Accepts context for graceful shutdown
-- Registers all command handlers (`/start`, `/subscribe`, `/unsubscribe`)
-- Registers catch-all callback router using `tb.OnCallback`
-- Listens for context cancellation in goroutine
-- Stops bot gracefully on shutdown signal
-- Returns error for better error propagation
+## Key Design Patterns & Conventions
 
-**Callback Routing Architecture:**
+**Repository Pattern**: Services depend on interfaces (ShutdownsStore, SubscriptionsStore), not concrete BoltDB.
 
-The bot uses a centralized callback router pattern instead of registering individual handlers:
+**Dependency Injection**: All dependencies via constructors. Enables testing with mocks.
 
-```go
-b.bot.Handle(tb.OnCallback, b.handleCallbackRouter)
-```
+**Thread Safety**: All services use mutexes for concurrent access protection.
 
-**handleCallbackRouter** (lines 141-191):
-- Receives all inline button callbacks
-- Strips Telebot's internal `\f` prefix from `callback.Data`
-- Routes to appropriate handler based on callback string
-- Supports patterns: exact match and prefix matching
-- Logs detailed callback information for debugging
-
-Callback routing logic:
-- `"subscribe"`, `"manage_groups"` → `ManageGroupsHandler`
-- `"unsubscribe"` → `UnsubscribeHandler`
-- `"back"` → `StartHandler`
-- `"toggle_group_{N}"` → `ToggleGroupHandler(N)`
-
-**Handlers:**
-
-1. **StartHandler** (lines 75-112)
-   - Shows main menu with personalized message
-   - For subscribed users: displays list of subscribed groups
-   - For unsubscribed users: shows invitation to subscribe
-   - Dynamically builds group list using `formatGroupsList()`
-   - Different markup for subscribed/unsubscribed users
-
-2. **ManageGroupsHandler** (lines 115-138)
-   - Shows group selection interface with checkmarks
-   - Fetches current subscriptions using `GetSubscribedGroups()`
-   - Builds dynamic markup with `buildDynamicGroupsMarkup()`
-   - Groups with checkmark (✅) indicate active subscriptions
-   - Users can tap to toggle subscription state
-
-3. **ToggleGroupHandler** (lines 193-234)
-   - Toggles subscription for selected group
-   - Fetches updated subscription list after toggle
-   - Rebuilds markup to reflect new state
-   - Shows feedback message (✅ Підписано / ❌ Відписано)
-   - Returns to main menu if all groups are removed
-
-4. **UnsubscribeHandler** (lines 236-248)
-   - Removes all subscriptions
-   - Logs unsubscribe events at Info level
-   - Returns to unsubscribed main menu
-
-**Markup Generation:**
-
-Creates inline keyboards with configurable group count:
-
-1. **Static Main Menus** (`newMarkups()`, lines 306-345):
-   - Subscribed: "Керувати групами" + "Відписатись від усіх"
-   - Unsubscribed: "Підписатись на оновлення"
-
-2. **Dynamic Group Selection** (`buildDynamicGroupsMarkup()`, lines 348-409):
-   - Built on-demand with current subscription state
-   - Shows buttons 1-12 (configurable) with 4 per row
-   - Adds checkmark (✅) to subscribed groups
-   - Callback format: `"toggle_group_{N}"`
-   - Back button returns to main menu
-
-**Helper Functions:**
-
-- `formatGroupsList()` (lines 412-459): Formats subscribed groups as comma-separated string with numeric sorting
-- `sendOrDelete()` (lines 251-265): Deletes previous message for callbacks, sends new message
-
-**Key Features:**
-- Multi-group subscription support
-- Toggle-based UX (tap to add/remove)
-- Visual feedback with checkmarks
-- Centralized callback routing
-- Context-aware shutdown
-- Structured logging with chatID throughout
-- Configurable group count (not hardcoded)
-
-## Data Flow Examples
-
-### New User Subscribes to Multiple Groups
-
-1. User sends `/start` → `StartHandler`
-2. Bot shows "Підписатись на оновлення" button
-3. User clicks → routed to `ManageGroupsHandler` via callback router
-4. Bot shows groups 1-12 (no checkmarks yet)
-5. User clicks "5" → routed to `ToggleGroupHandler("5")` via callback router
-6. Service creates subscription: `{ChatID: 123, Groups: {"5": struct{}{}}}`
-7. Bot shows updated view with "5 ✅" and feedback message
-8. User clicks "7" → `ToggleGroupHandler("7")`
-9. Service updates subscription: `{ChatID: 123, Groups: {"5": struct{}{}, "7": struct{}{}}}`
-10. Bot shows both "5 ✅" and "7 ✅"
-11. User can toggle any group to remove it (delete removes checkmark)
-12. User clicks "Назад" to return to main menu showing "Ви підписані на групи: 5, 7"
-
-### Schedule Update Notification
-
-1. `Scheduler.Start()` spawns background goroutines for all scheduled tasks
-2. Refresh task calls `Shutdowns.Refresh()` at configured interval (default: 5 minutes)
-3. Fetches HTML from oblenergo.cv.ua
-4. Parses and stores in BoltDB
-5. Notification task calls `Notifications.NotifyShutdownUpdates()` at configured interval (default: 5 minutes)
-6. Detects hash change for group 5
-7. Finds all subscriptions with group 5
-8. Renders message with emoji indicators
-9. Sends via separate Telegram client to each subscriber
-10. Updates subscription hashes
-
-### Upcoming Outage Alert
-
-1. `Scheduler` alerts task calls `Alerts.NotifyUpcomingShutdowns()` at configured interval (default: 1 minute)
-2. Checks if within notification window (6 AM - 11 PM)
-3. Calculates target time (now + 10 minutes), e.g., 8:20 → checks for 8:30
-4. Fetches schedule from DB
-5. For each group, finds period containing target time using `findPeriodIndex()`
-6. Checks if period is start of outage using `isOutageStart()`
-7. Gets all subscriptions and filters by:
-   - User subscribed to group
-   - User enabled notification type (OFF/MAYBE/ON)
-   - Alert not already sent (checks alerts bucket)
-8. Groups alerts by user, status, and time
-9. Renders merged message (e.g., "Групи 5, 7: 🔴 Відключення об 08:30")
-10. Sends via Telegram client
-11. Marks as sent in alerts bucket using period start time (e.g., "08:00") for deduplication
-
-**Example Timeline:**
-- 8:00 AM: Schedule shows group 5 OFF from 8:30-11:00
-- 8:20 AM: Scheduler runs alerts task, finds period 8:30-9:00 contains target time 8:30
-- 8:20 AM: Detects this is start of OFF (previous period was ON)
-- 8:20 AM: Sends notification "⚠️ Увага! Через 10 хвилин: Група 5: 🔴 Відключення об 08:30"
-- 8:21 AM: Scheduler runs again, finds same period, but alert key already exists → skipped
-- 8:30 AM: Power actually goes off
-
-### User Blocks Bot
-
-1. External Telegram client tries to send notification
-2. Telegram API returns "Forbidden: bot was blocked by the user"
-3. Client handles error and purges subscription
-4. User data removed from database
-5. No further messages sent to that user
-
-## Key Design Patterns
-
-### 1. Repository Pattern
-
-Services depend on interfaces, not concrete implementations:
-```go
-type ShutdownsStore interface {
-    GetShutdowns() (dal.Shutdowns, bool, error)
-    PutShutdowns(s dal.Shutdowns) error
-}
-```
-Allows easy testing and swapping storage backends.
-
-### 2. Dependency Injection
-
-All dependencies injected via constructors:
-```go
-func NewNotifications(
-    shutdowns ShutdownsStore,
-    subscriptions SubscriptionsStore,
-    telegram TelegramClient,
-    log *slog.Logger,
-) *Notifications
-```
-
-### 3. Constructor Pattern
-
-Telegram bot and services use simple constructor functions:
-```go
-bot, err := telegram.NewBot(token, subscriptionsSvc, groupCount, log)
-shutdownsSvc := service.NewShutdowns(store, log)
-```
-Returns errors instead of panicking for better error handling.
-
-### 4. Mutex for Thread Safety
-
-All services use mutexes to prevent concurrent access:
-```go
-func (s *Shutdowns) Refresh(ctx context.Context) error {
-    s.mx.Lock()
-    defer s.mx.Unlock()
-    // ... critical section
-}
-```
+**Error Handling**: Constructors return errors (not panic). Context cancellation respected everywhere.
 
 ## Database Migrations
 
-The codebase uses a custom migration system for managing BoltDB schema changes.
+**Location**: `internal/dal/migrations/` - See `migrations/README.md` for complete documentation.
 
-### Migration System Architecture
+**Key Principle**: Migrations are self-contained. NEVER import from `internal/dal`. Copy-paste old and new type definitions into migration code.
 
-**Location:** `internal/dal/migrations/`
+**Creating New Migration**:
+1. Create `vN/` directory with `migration.go` and `README.md`
+2. Copy old types, define new types (both in migration file)
+3. Implement transformation logic
+4. Test on production DB copy
+5. Update `dal/bolt.go` types AFTER migration is tested
 
-**Key Principle:** Migrations are completely independent from the `dal` package. They work directly with raw `*bbolt.DB` and contain their own type definitions.
-
-### Package Structure
-
-```
-internal/dal/migrations/
-├── README.md           # Latest DB schema + migration system overview
-├── migrations.go       # Core migration runner and interfaces
-├── v1/
-│   ├── README.md      # Bootstrap migration docs
-│   └── migration.go   # Creates migrations bucket
-├── v2/
-│   ├── README.md      # v2 migration docs
-│   └── migration.go   # Creates shutdowns and subscriptions buckets
-├── v3/
-│   ├── README.md      # v3 migration docs
-│   └── migration.go   # Adds CreatedAt to subscriptions (not yet enabled)
-├── v4/
-│   ├── README.md      # v4 migration docs
-│   └── migration.go   # Adds Settings map to subscriptions
-└── v5/
-    ├── README.md      # v5 migration docs
-    └── migration.go   # Creates alerts bucket for 10-minute advance notifications
-```
-
-### Migration Storage
-
-Migrations are tracked in BoltDB itself:
-
-- **Bucket:** `migrations`
-- **Key Format:** `"v1"`, `"v2"`, `"v3"`, etc.
-- **Value Format:** ISO 8601 timestamp (RFC3339) of when migration was applied
-- **Example:** Key: `"v3"`, Value: `"2025-10-31T14:23:45Z"`
-
-### Migration Interface
-
-```go
-type Migration interface {
-    // Version returns migration version (1, 2, 3, etc.)
-    Version() int
-
-    // Description returns human-readable description
-    Description() string
-
-    // Up performs the migration
-    Up(db *bbolt.DB) error
-}
-```
-
-### Migration Execution Flow
-
-1. Open/create `migrations` bucket in BoltDB
-2. Load all registered migrations
-3. Read applied migrations from DB
-4. Filter out already-applied migrations
-5. Sort remaining by version (ascending)
-6. Execute each migration sequentially
-7. Record execution timestamp after successful completion
-8. Fail fast if any migration errors
-
-### Creating a New Migration
-
-**CRITICAL RULES:**
-
-1. **Never import from `internal/dal`** - Migrations must be self-contained
-2. **Copy-paste old types** - Include both old and new structures in migration code
-3. **Write README first** - Document what changes and why
-4. **Test on production data copy** - Never test migrations on live DB
-5. **Never modify existing migrations** - Once deployed, migrations are immutable
-
-**Step-by-Step Checklist:**
-
-- [ ] Create `internal/dal/migrations/vN/` directory (N = next version)
-- [ ] Copy old type definitions from `dal/bolt.go` to `vN/migration.go`
-- [ ] Define new type structures in `vN/migration.go`
-- [ ] Implement `Migration` interface with transformation logic
-- [ ] Write `vN/README.md` with:
-  - Date
-  - Description of what changed and why
-  - Schema before/after
-  - Data transformation details
-  - Rollback strategy (or "not possible")
-- [ ] Update core `migrations/README.md` with latest schema
-- [ ] Test migration on copy of production DB
-- [ ] Verify idempotency (running twice doesn't break)
-- [ ] Update `dal/bolt.go` types (after migration is tested)
-- [ ] Register migration in `migrations.go`
-
-### Example Migration Structure
-
-**Scenario:** Add `CreatedAt` timestamp to subscriptions (v3 migration)
-
-```go
-// internal/dal/migrations/v3/migration.go
-package v3
-
-import (
-    "encoding/json"
-    "fmt"
-    "time"
-    "go.etcd.io/bbolt"
-)
-
-// SubscriptionV2 is the OLD structure (copy-pasted from dal at time of v2)
-type SubscriptionV2 struct {
-    ChatID int64             `json:"chat_id"`
-    Groups map[string]string `json:"groups"`
-}
-
-// SubscriptionV3 is the NEW structure
-type SubscriptionV3 struct {
-    ChatID    int64             `json:"chat_id"`
-    Groups    map[string]string `json:"groups"`
-    CreatedAt time.Time         `json:"created_at"`
-}
-
-type MigrationV3 struct{}
-
-func (m *MigrationV3) Version() int {
-    return 3
-}
-
-func (m *MigrationV3) Description() string {
-    return "Add CreatedAt timestamp to subscriptions"
-}
-
-func (m *MigrationV3) Up(db *bbolt.DB) error {
-    return db.Update(func(tx *bbolt.Tx) error {
-        b := tx.Bucket([]byte("subscriptions"))
-        if b == nil {
-            return nil // No subscriptions to migrate
-        }
-
-        c := b.Cursor()
-        now := time.Now()
-
-        for k, v := c.First(); k != nil; k, v = c.Next() {
-            // Unmarshal old structure
-            var oldSub SubscriptionV2
-            if err := json.Unmarshal(v, &oldSub); err != nil {
-                return fmt.Errorf("unmarshal old subscription: %w", err)
-            }
-
-            // Transform to new structure
-            newSub := SubscriptionV3{
-                ChatID:    oldSub.ChatID,
-                Groups:    oldSub.Groups,
-                CreatedAt: now, // Set to migration time
-            }
-
-            // Marshal and write back
-            newData, err := json.Marshal(newSub)
-            if err != nil {
-                return fmt.Errorf("marshal new subscription: %w", err)
-            }
-
-            if err := b.Put(k, newData); err != nil {
-                return fmt.Errorf("put new subscription: %w", err)
-            }
-        }
-
-        return nil
-    })
-}
-```
-
-### Migration Best Practices
-
-**DO:**
-- ✅ Copy-paste type definitions to migration package
-- ✅ Document every change in README
-- ✅ Test on production data snapshot
-- ✅ Handle errors gracefully
-- ✅ Use transactions for data integrity
-- ✅ Log migration progress
-- ✅ Verify idempotency
-- ✅ Consider data volume (may need batching)
-
-**DON'T:**
-- ❌ Import types from `internal/dal`
-- ❌ Modify existing migrations
-- ❌ Skip documentation
-- ❌ Test on live database
-- ❌ Assume migration succeeds
-- ❌ Forget about rollback strategy
-- ❌ Ignore backward compatibility during deployment
-
-### Integration with Application
-
-**In `cmd/bot/main.go`:**
-
-```go
-// After creating BoltDB instance, before services
-if err := migrations.RunMigrations(store.DB()); err != nil {
-    log.Error("Failed to run database migrations", "error", err)
-    os.Exit(1)
-}
-```
-
-**Expose raw DB access in `internal/dal/bolt.go`:**
-
-```go
-// DB returns the underlying BoltDB instance for migrations
-func (s *BoltDB) DB() *bbolt.DB {
-    return s.db
-}
-```
-
-### Migration README Template
-
-```markdown
-# Migration v{N}: {Brief Title}
-
-## Date
-{YYYY-MM-DD}
-
-## Description
-{Detailed explanation of what this migration does and why it's needed}
-
-## Schema Changes
-
-### Before
-{Old structure with field descriptions}
-
-### After
-{New structure with field descriptions}
-
-## Data Transformation
-{How existing data is migrated. Include examples.}
-
-## Rollback Strategy
-{How to rollback if needed, or explicitly state "Not possible - breaking change"}
-
-## Testing Notes
-{Any special considerations for testing this migration}
-```
-
-### Troubleshooting
-
-**Migration fails midway:**
-- Migrations run in transactions when possible
-- Check logs for specific error
-- Restore from backup if needed
-- Fix migration code and retry
-
-**Migration marked as applied but data unchanged:**
-- Check migration logic
-- Verify bucket names are correct
-- Ensure transaction committed
-
-**Need to rollback migration:**
-- Restore database from backup
-- Remove migration from registry
-- Fix migration code
-
-### Version 1 (Bootstrap)
-
-The first migration (v1) is special - it creates the migrations bucket itself:
-
-```go
-func (m *MigrationV1) Up(db *bbolt.DB) error {
-    return db.Update(func(tx *bbolt.Tx) error {
-        _, err := tx.CreateBucketIfNotExists([]byte("migrations"))
-        return err
-    })
-}
-```
-
-This ensures the migration system can track itself from the start.
+**Critical Rules**:
+- ❌ Never import from `internal/dal`
+- ❌ Never modify existing migrations
+- ✅ Document everything in README
+- ✅ Test on copy, not live DB
 
 ## Configuration
 
-All configuration via environment variables using `envconfig`:
+All via environment variables (envconfig):
 
-### Required Variables
+**Required**: `TELEGRAM_TOKEN`
 
-- `TELEGRAM_TOKEN`: Telegram bot token from @BotFather
+**Optional** (defaults): `DEV` (false), `GROUPS_COUNT` (12), `DB_PATH` (data/sso-notifier.db), `REFRESH_SHUTDOWNS_INTERVAL` (5m), `NOTIFY_INTERVAL` (5m), `NOTIFY_UPCOMING_INTERVAL` (1m), `SCHEDULE_URL` (https://oblenergo.cv.ua/shutdowns/)
 
-### Optional Variables (with defaults)
+**Timeouts**: HTTP 1min, Telegram polling 5s
 
-- `DEV` (default: false): Set to "true" for text logging instead of JSON
-- `GROUPS_COUNT` (default: 12): Number of power outage groups
-- `DB_PATH` (default: "data/sso-notifier.db"): Database file path
-- `REFRESH_SHUTDOWNS_INTERVAL` (default: 5m): Schedule fetch frequency
-- `NOTIFY_INTERVAL` (default: 5m): Notification check frequency
-- `NOTIFY_UPCOMING_INTERVAL` (default: 1m): Upcoming alerts check frequency (10-minute advance notifications)
-- `SCHEDULE_URL` (default: "https://oblenergo.cv.ua/shutdowns/"): Schedule provider URL (for testing)
+## Known Limitations
 
-### Timeouts
+- No retry logic for HTTP failures (logged only)
+- No rate limiting protection for Telegram API
+- `Europe/Kyiv` timezone hardcoded (notifications.go)
 
-- HTTP request: 1 minute (line 39, shutdowns.go)
-- Telegram polling: 5 seconds (telegram.go:65)
+## Testing & Performance
 
-## Potential Issues & TODOs
+**Testable**: All services use interfaces for mocking. Key test areas: HTML parsing (edge case: "23:0000:00"), hash detection, period filtering/joining, timezone handling.
 
-### Known Limitations
-
-1. **No Retry Logic**
-   - HTTP failures are logged but not retried
-   - Could add exponential backoff
-
-2. **No Rate Limiting**
-   - Telegram API has rate limits
-   - No protection against hitting them
-
-3. **Timezone Hardcoded**
-   - `Europe/Kyiv` hardcoded (notifications.go:32)
-   - Could be configurable
-
-### TODOs in Code
-
-- `main.go:29` - "todo use my own lib" (referring to telebot)
-
-## Testing Considerations
-
-### Testable Components
-
-All services use interfaces, making them mockable:
-
-```go
-// Mock for testing
-type MockStore struct {
-    shutdowns dal.Shutdowns
-    subs      []dal.Subscription
-}
-
-func (m *MockStore) GetShutdowns() (dal.Shutdowns, bool, error) {
-    return m.shutdowns, true, nil
-}
-```
-
-### Critical Test Cases
-
-1. **HTML Parsing**
-   - Malformed HTML
-   - Missing elements
-   - Invalid time formats
-   - Edge case: "23:0000:00"
-
-2. **Notification Logic**
-   - Hash changes correctly detected
-   - Past periods filtered
-   - Consecutive periods joined
-   - Timezone handling
-
-3. **Subscription Management**
-   - Multiple subscriptions per user
-   - Blocked user cleanup
-   - Concurrent access
-
-4. **Error Handling**
-   - Network failures
-   - Telegram API errors
-   - Database corruption
-
-## Performance Characteristics
-
-### Memory Usage
-
-- BoltDB: Memory-mapped file (efficient)
-- Vendor directory: ~3MB (libraries included)
-- Runtime: Minimal (single binary, no GC pressure)
-
-### Network Usage
-
-- HTTP: One request per 5 minutes
-- Telegram: Variable (depends on subscriber count)
-- Average: Very low bandwidth
-
-### Scalability
-
-- **Current Design**: Single instance
-- **Bottleneck**: Notification loop processes subscriptions serially
-- **Improvement**: Parallel notification processing with goroutine pool
-
-### Database
-
-- BoltDB: Single file, no maintenance required
-- Backup: Simple file copy (when not running)
-- Growth: ~1KB per subscriber + schedule (~5KB)
+**Performance**: BoltDB memory-mapped, minimal runtime overhead. Network: ~1 HTTP req/5min + Telegram messages. Current bottleneck: serial notification processing (could parallelize).
 
 ## Deployment
 
-### Binary
+**Binary**: Static (`CGO_ENABLED=0`), single file, no dependencies.
 
-- CGO disabled (`CGO_ENABLED=0`) for static linking
-- Single binary with no dependencies
-- Cross-platform compatible
+**Storage**: BoltDB at `data/sso-notifier.db`, logs to stdout (JSON/text).
 
-### Storage
+**Backups**: Automated S3 backups via `deployment/backup.sh` (cron daily 8PM). Local safety backups during setup. See `deployment/README.md`.
 
-- Database: `data/app.db`
-- Logs: stdout (JSON or text)
+**Monitoring**: Structured logging (slog) with context: service, chatID, group, errors.
 
-### Backup System
+## Development
 
-The project includes automated backup functionality for the BoltDB database:
+**Build**: `make build` → `bin/sso-notifier`
 
-**Scripts:**
-- `deployment/backup.sh`: Uploads database to S3 with timestamp
-- `deployment/setup-ec2.sh`: Configures automated backups during initial setup
+**Run**: `ENV=dev TOKEN=xxx ./bin/sso-notifier`
 
-**Key Features:**
-1. **Automated S3 Backups**
-   - Schedule: Daily at 8 PM (20:00) via cron job
-   - Naming: `sso-notifier-db-YYYY-MM-DD_HH-MM-SS.db`
-   - Configuration: `/opt/sso-notifier/backup.env`
-   - Logs: `/opt/sso-notifier/backups/backup.log`
+**Linting**: `make lint:changed` (only check modified files). Don't run `make lint` or fix unrelated files.
 
-2. **Local Safety Backups**
-   - Created automatically when re-running `setup-ec2.sh` on existing installation
-   - Naming: `sso-notifier.db.backup.YYYYMMDD_HHMMSS`
-   - Location: `/opt/sso-notifier/backups/`
-   - Purpose: Protects database during script re-runs
+**Dependencies**: All vendored (`go mod vendor`).
 
-3. **Environment Variables** (backup.sh)
-   - `DB_PATH`: Database file location (default: `/opt/sso-notifier/data/sso-notifier.db`)
-   - `S3_BACKUP_URI`: S3 destination (e.g., `s3://bucket/backups`)
-   - `AWS_DEFAULT_REGION`: AWS region for S3 (default: `eu-central-1`)
+## Code Style & Conventions
 
-**IAM Requirements:**
-```json
-{
-  "Effect": "Allow",
-  "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-  "Resource": "arn:aws:s3:::your-bucket/*"
-}
-```
+**Logging**: Use `slog`, not `log`. Error wrapping: `fmt.Errorf("context: %w", err)`
 
-**Setup Process:**
-- During `setup-ec2.sh` execution, user is prompted to enable S3 backups
-- If enabled, creates cron job running `/opt/sso-notifier/backup-wrapper.sh`
-- Wrapper sources environment variables from `backup.env` for cron context
-- Manual backups can be triggered: `/opt/sso-notifier/backup.sh`
+**Context**: Pass to all I/O operations.
 
-**Safety Guarantees:**
-- Re-running `setup-ec2.sh` never overwrites existing database
-- Local backup created before any setup modifications
-- Only binary files and scripts are updated during setup
-- `deploy.sh` never touches the database
+**Messages**: Ukrainian for user-facing text.
 
-See `deployment/README.md` for detailed backup/restore procedures.
+**Comments**: Only explain WHY or non-obvious behavior. Never repeat what code obviously does.
+- ✅ Good: `// Check notification window (6 AM - 11 PM)` (business context)
+- ❌ Bad: `// Save to store` before `store.Put()` (obvious)
 
-### Monitoring
+## Common Tasks
 
-Structured logging with slog:
-```go
-log.InfoContext(ctx, "refreshing shutdowns")
-log.ErrorContext(ctx, "Error refreshing", "error", err)
-```
+**Change templates**: Update `messages.go` or `upcoming_messages.go`, then update `TEMPLATES.md` docs.
 
-Fields for observability:
-- Service name
-- Chat IDs
-- Group numbers
-- Error details
+**Add bot command**: Handler in `telegram.go`, register in `Start()`, update markups.
 
-## Development Workflow
+**Add scheduled task**: Method in service, spawn in `Scheduler.Start()`, add env config.
 
-### Build
+**Schema change**: Create migration in `migrations/vN/`, copy old/new types, test on DB copy, update `dal/bolt.go` after.
 
-```bash
-make build
-# Produces: bin/sso-notifier
-```
+**Deployment scripts**: `setup-ec2.sh` (initial), `deploy.sh` (binary only), `backup.sh` (S3). Never touch DB in scripts.
 
-### Run Locally
+## Critical Gotchas
 
-```bash
-ENV=dev TOKEN=your_token ./bin/sso-notifier
-```
+- HTML parsing handles edge case: "23:0000:00" → ["23:00", "24:00"]
+- Timezone is `Europe/Kyiv` (hardcoded in `notifications.go`)
+- Alerts dedupe by period START time, not target time
+- Migration types NEVER import from `internal/dal`
+- Template changes require updating `TEMPLATES.md`
 
-### Linting
+## Where to Find Things
 
-**IMPORTANT**: When making code changes, only lint the files you've modified, not the entire codebase.
-
-```bash
-# Lint only changed files (recommended during development)
-make lint:changed
-
-# Lint entire codebase (use sparingly, only when fixing all issues)
-make lint
-```
-
-**Best Practice for AI Assistants:**
-- After modifying code, run `make lint:changed` to check only your changes
-- Do NOT run `make lint` or fix linting issues in files you didn't modify
-- Only address linting issues in code you've actually changed
-- This prevents scope creep and keeps changes focused
-
-### Dependencies
-
-All vendored (no network required for builds):
-```bash
-go mod vendor
-```
-
-## Useful Context for AI Assistants
-
-### When Making Changes
-
-1. **HTML Structure Changes**: Update selectors in `chernivtsi.go`
-2. **Message Format**: Edit templates in `notifications.go:172-183`
-3. **Bot Commands**: Add handlers in `telegram.go`
-4. **Storage Schema**: Update structs in `dal/bolt.go`
-
-### Code Style
-
-- Uses `slog` for structured logging (not `log`)
-- Error wrapping with `fmt.Errorf("context: %w", err)`
-- Context passed to all I/O operations
-- Ukrainian strings for user-facing messages
-- **Comments**: Only add comments that explain WHY or provide context (business rules, corner cases, non-obvious behavior). Never add comments that just repeat what the code obviously does.
-  - ✅ Good: `// use !defaultValue because we inverse it below` (explains non-obvious logic)
-  - ✅ Good: `// Check if we're within notification window (6 AM - 11 PM)` (provides business context)
-  - ❌ Bad: `// Check if user is subscribed` before `if _, subscribed := sub.Groups[groupNum]` (obvious from code)
-  - ❌ Bad: `// Save` before `store.Put()` (completely useless)
-  - ❌ Bad: `// Toggle it` before `newValue := !currentValue` (obvious from code)
-
-### Common Operations
-
-**Add new bot command:**
-1. Add handler method to `SSOBot`
-2. Register in `Start()` method
-3. Update markups if needed
-
-**Change refresh interval:**
-1. Update environment variable (e.g., `REFRESH_SHUTDOWNS_INTERVAL=10m`)
-2. Configuration is passed through to `Scheduler` via `telegram.Config`
-3. Consider impact on server load
-
-**Add new scheduled task:**
-1. Create service method in appropriate service file (e.g., `internal/service/myservice.go`)
-2. Add method call to `Scheduler.Start()` with new goroutine
-3. Pass interval from `telegram.Config` to `Scheduler.run()`
-4. Add configuration to environment variables if needed
-5. Update documentation
-
-**Add new data field (requires migration):**
-1. Create new migration version in `internal/dal/migrations/vN/`
-2. Copy-paste old and new structs to migration package
-3. Implement transformation logic in migration
-4. Write vN/README.md with change description
-5. Update core migrations/README.md with latest schema
-6. Test migration on copy of production DB
-7. Update structs in `dal/bolt.go` (after migration is ready)
-8. Update parsing in `providers/chernivtsi.go` (if needed)
-9. Update templates in `notifications.go` (if needed)
-
-**Modify deployment scripts:**
-- `deployment/setup-ec2.sh`: Initial EC2 setup and configuration
-- `deployment/deploy.sh`: Binary deployment only (never touches DB)
-- `deployment/backup.sh`: S3 backup script
-- Note: Always preserve database during script modifications
-
-## Resources
-
-- Telegram Bot API: https://core.telegram.org/bots/api
-- goquery docs: https://pkg.go.dev/github.com/PuerkitoBio/goquery
-- BoltDB: https://github.com/etcd-io/bbolt
-- Schedule source: https://oblenergo.cv.ua/shutdowns/
+- Bot commands & UI: `telegram.go`
+- Message templates: `messages.go`, `upcoming_messages.go`, `TEMPLATES.md`
+- Schedule parsing: `providers/chernivtsi.go`
+- Change detection: `notifications.go` (hash comparison)
+- 10-min alerts: `alerts.go` (time window, isOutageStart)
+- Scheduling: `schedules.go` (heartbeat, panic recovery)
+- Data access: `dal/bolt.go`, `dal/migrations/README.md`
