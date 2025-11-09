@@ -36,7 +36,7 @@ var upcomingMessageTemplate = template.Must(
 		"joinGroups": func(groups []string) string {
 			return strings.Join(groups, ", ")
 		},
-	}).Parse(`⚠️ Увага! Незабаром зміниться електропостачання:
+	}).Parse(`⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
 {{range .Alerts}}
 {{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
 {{.Emoji}} {{.Label}} об {{.StartTime}}
