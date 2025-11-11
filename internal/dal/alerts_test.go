@@ -23,7 +23,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 		}
 	}
 
-	sentAt := time.Now()
+	sentAt := time.Now().UTC()
 	for i, key := range allKeys {
 		s.Require().NoErrorf(s.store.PutAlert(key, sentAt.Add(time.Duration(i)*time.Hour)), "PutAlert err for key: %s", key)
 	}
@@ -32,7 +32,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 		alert, ok, err := s.store.GetAlert(key)
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
 		if s.Truef(ok, "Alert should be present for key: %s", key) {
-			s.Equalf(sentAt.Add(time.Duration(i)*time.Hour).Truncate(time.Second), alert, "Invalid alert for key: %s", key)
+			s.Equalf(sentAt.Add(time.Duration(i)*time.Hour).Truncate(time.Second), alert.UTC(), "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -47,7 +47,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 			if key3 == key {
 				expected = sentAt.Add(7 * time.Hour).Truncate(time.Second)
 			}
-			s.Equalf(expected, alert, "Invalid alert for key: %s", key)
+			s.Equalf(expected, alert.UTC(), "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -77,7 +77,7 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 	key5 := BuildAlertKey(3, "2025-11-25", "11:30", string(OFF), "3")
 	key6 := BuildAlertKey(3, "2025-11-25", "11:30", string(MAYBE), "3")
 
-	sentAt := time.Now()
+	sentAt := time.Now().UTC()
 	allKeys := []AlertKey{key1, key2, key3, key4, key5, key6}
 	for i, key := range allKeys {
 		s.Require().NoErrorf(s.store.PutAlert(key, sentAt.Add(time.Duration(i)*time.Hour)), "PutAlert err for key: %s", key)
@@ -88,7 +88,7 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
 		if s.Truef(ok, "Alert should be present for key: %s", key) {
 			expected := sentAt.Add(time.Duration(i) * time.Hour).Truncate(time.Second)
-			s.Equalf(expected, alert, "Invalid alert for key: %s", key)
+			s.Equalf(expected, alert.UTC(), "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -104,7 +104,7 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 			expectedAlert = time.Time{}
 		}
 		if s.Equal(expectedOk, ok, "Invalid ok for key: %s", key) {
-			s.Equal(expectedAlert, alert, "Invalid alert for key: %s", key)
+			s.Equal(expectedAlert, alert.UTC(), "Invalid alert for key: %s", key)
 		}
 	}
 }
