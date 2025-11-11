@@ -108,10 +108,3 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 		}
 	}
 }
-
-func (s *BoltDBTestSuite) mustGetAlert(key AlertKey) time.Time {
-	alert, ok, err := s.store.GetAlert(key)
-	s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
-	s.Require().Truef(ok, "Alert should be present for key: %s", key)
-	return alert
-}

@@ -55,6 +55,7 @@ func (s *BoltDBTestSuite) TestBoltDB_GetSubscription() {
 	actual, ok, err = s.store.GetSubscription(2)
 	s.Require().NoError(err, "error getting subscription")
 	s.False(ok)
+	s.Empty(actual)
 }
 
 func (s *BoltDBTestSuite) TestBoltDB_GetAllSubscriptions() {
