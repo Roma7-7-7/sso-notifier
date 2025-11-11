@@ -23,7 +23,6 @@ const (
 	SettingNotifyOn    SettingKey = "notify_on_10min"
 	SettingNotifyOff   SettingKey = "notify_off_10min"
 	SettingNotifyMaybe SettingKey = "notify_maybe_10min"
-	SettingWindowMins  SettingKey = "notification_window_minutes"
 )
 
 // GetAlert checks if an alert was already sent for the given key
