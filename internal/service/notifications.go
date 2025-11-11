@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/telegram"
 )
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
@@ -134,7 +135,15 @@ func (s *Notifications) processSubscriptionNotification(
 	}
 
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), msg.Text); err != nil {
-		log.ErrorContext(ctx, "failed to send message", "error", err)
+		if !errors.Is(err, telegram.ErrForbidden) {
+			log.ErrorContext(ctx, "failed to send message", "error", err)
+			return
+		}
+
+		s.log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
+		if err := s.subscriptions.Purge(chatID); err != nil {
+			s.log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
+		}
 		return
 	}
 

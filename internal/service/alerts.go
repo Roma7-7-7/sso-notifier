@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/telegram"
 )
 
 const (
@@ -209,7 +210,15 @@ func (s *Alerts) processSubscriptionAlert(
 
 	message := renderUpcomingMessage(userAlerts)
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), message); err != nil {
-		return fmt.Errorf("send telegram message: %w", err)
+		if !errors.Is(err, telegram.ErrForbidden) {
+			return fmt.Errorf("send telegram message: %w", err)
+		}
+
+		s.log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
+		if err := s.subscriptions.Purge(chatID); err != nil {
+			s.log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
+		}
+		return nil
 	}
 
 	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(userAlerts))
