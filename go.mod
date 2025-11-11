@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
-	github.com/Roma7-7-7/telegram v0.0.0-20251019173429-87c209129a30
+	github.com/Roma7-7-7/telegram v0.0.0-20251111115938-e5cc638d5740
 	github.com/aws/aws-sdk-go-v2 v1.39.6
 	github.com/aws/aws-sdk-go-v2/config v1.31.17
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.0
