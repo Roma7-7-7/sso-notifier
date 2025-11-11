@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.17
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.0
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/stretchr/testify v1.11.1
 	go.etcd.io/bbolt v1.4.3
 	gopkg.in/telebot.v3 v3.3.8
 )
@@ -26,7 +27,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.39.1 // indirect
 	github.com/aws/smithy-go v1.23.2 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
