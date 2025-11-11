@@ -54,7 +54,7 @@ type ShutdownsBuilder struct {
 func NewShutdowns() *ShutdownsBuilder {
 	return &ShutdownsBuilder{
 		shutdowns: Shutdowns{
-			Date: "1 листопада",
+			Date: "2025-11-23",
 			Periods: []Period{
 				{"00:00", "00:30"},
 				{"00:30", "01:00"},

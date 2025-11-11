@@ -1,7 +1,6 @@
 package dal
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -31,10 +30,6 @@ func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 	found := false
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			return nil
-		}
-
 		data := b.Get([]byte(key))
 		if data == nil {
 			return nil
@@ -56,10 +51,6 @@ func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 func (s *BoltDB) PutAlert(key AlertKey, sentAt time.Time) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			return errors.New("alerts bucket not found")
-		}
-
 		timestamp := []byte(sentAt.Format(time.RFC3339))
 		if err := b.Put([]byte(key), timestamp); err != nil {
 			return fmt.Errorf("put alert for key %s: %w", key, err)
@@ -73,11 +64,6 @@ func (s *BoltDB) PutAlert(key AlertKey, sentAt time.Time) error {
 func (s *BoltDB) DeleteAlert(key AlertKey) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
 		if err := b.Delete([]byte(key)); err != nil {
 			return fmt.Errorf("delete alert for key %s: %w", key, err)
 		}
@@ -90,11 +76,6 @@ func (s *BoltDB) DeleteAlert(key AlertKey) error {
 func (s *BoltDB) DeleteAlerts(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
 		prefix := fmt.Sprintf("%d_", chatID)
 		c := b.Cursor()
 
