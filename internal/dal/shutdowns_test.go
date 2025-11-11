@@ -11,37 +11,37 @@ func (s *BoltDBTestSuite) TestBoltDB_GetShutdowns() {
 	tomorrow := TomorrowDate(time.UTC)
 	shutdowns, ok, err := s.store.GetShutdowns(today)
 	s.Require().NoError(err)
-	if s.Assert().False(ok) {
-		s.Assert().Empty(shutdowns)
+	if s.False(ok) {
+		s.Empty(shutdowns)
 	}
 	shutdowns, ok, err = s.store.GetShutdowns(tomorrow)
 	s.Require().NoError(err)
-	if s.Assert().False(ok) {
-		s.Assert().Empty(shutdowns)
+	if s.False(ok) {
+		s.Empty(shutdowns)
 	}
 
 	s.Require().NoError(s.store.PutShutdowns(today, NewShutdowns().Build()))
 	shutdowns, ok, err = s.store.GetShutdowns(today)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(NewShutdowns().Build(), shutdowns)
+	if s.True(ok) {
+		s.Equal(NewShutdowns().Build(), shutdowns)
 	}
 	shutdowns, ok, err = s.store.GetShutdowns(tomorrow)
 	s.Require().NoError(err)
-	if s.Assert().False(ok) {
-		s.Assert().Empty(shutdowns)
+	if s.False(ok) {
+		s.Empty(shutdowns)
 	}
 
 	s.Require().NoError(s.store.PutShutdowns(tomorrow, NewShutdowns().Build()))
 	shutdowns, ok, err = s.store.GetShutdowns(today)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(NewShutdowns().Build(), shutdowns)
+	if s.True(ok) {
+		s.Equal(NewShutdowns().Build(), shutdowns)
 	}
 	shutdowns, ok, err = s.store.GetShutdowns(tomorrow)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(NewShutdowns().Build(), shutdowns)
+	if s.True(ok) {
+		s.Equal(NewShutdowns().Build(), shutdowns)
 	}
 }
 

@@ -46,15 +46,15 @@ func (s *BoltDBTestSuite) TestBoltDB_GetSubscription() {
 
 	actual, ok, err := s.store.GetSubscription(1)
 	s.Require().NoError(err, "error getting subscription")
-	if s.Assert().True(ok) {
+	if s.True(ok) {
 		expected := NewSubscription(1).WithCreatedAt(actual.CreatedAt).Build()
-		s.Assert().GreaterOrEqual(expected.CreatedAt, startAt, "subscription's CreatedAt must be after test's start at")
-		s.Assert().Equal(expected, actual)
+		s.GreaterOrEqual(expected.CreatedAt, startAt, "subscription's CreatedAt must be after test's start at")
+		s.Equal(expected, actual)
 	}
 
 	actual, ok, err = s.store.GetSubscription(2)
 	s.Require().NoError(err, "error getting subscription")
-	s.Assert().False(ok)
+	s.False(ok)
 }
 
 func (s *BoltDBTestSuite) TestBoltDB_GetAllSubscriptions() {
@@ -65,14 +65,14 @@ func (s *BoltDBTestSuite) TestBoltDB_GetAllSubscriptions() {
 	actual, err := s.store.GetAllSubscriptions()
 	s.Require().NoError(err, "error getting all subscriptions")
 
-	if s.Assert().Len(actual, 3) {
+	if s.Len(actual, 3) {
 		expected := []Subscription{
 			NewSubscription(1).WithCreatedAt(actual[0].CreatedAt).Build(),
 			NewSubscription(2).WithCreatedAt(actual[1].CreatedAt).Build(),
 			NewSubscription(3).WithCreatedAt(actual[2].CreatedAt).Build(),
 		}
 
-		s.Assert().Equal(expected, actual)
+		s.Equal(expected, actual)
 	}
 }
 
@@ -88,14 +88,14 @@ func (s *BoltDBTestSuite) TestBoltDB_PutSubscription() {
 	expected2 := NewSubscription(2).WithCreatedAt(createdAt).Build()
 	expected3 := NewSubscription(3).WithCreatedAt(createdAt).Build()
 
-	s.Assert().Equal(expected1, s.mustGetSubscription(1))
-	s.Assert().Equal(expected2, s.mustGetSubscription(2))
-	s.Assert().Equal(expected3, s.mustGetSubscription(3))
+	s.Equal(expected1, s.mustGetSubscription(1))
+	s.Equal(expected2, s.mustGetSubscription(2))
+	s.Equal(expected3, s.mustGetSubscription(3))
 
 	// make sure created at is not overridden
 	s.now.Set(createdAt.Add(24 * time.Hour))
 	s.Require().NoError(s.store.PutSubscription(NewSubscription(2).WithCreatedAt(createdAt.Add(24 * time.Hour)).Build()))
-	s.Assert().Equal(expected2, s.mustGetSubscription(2))
+	s.Equal(expected2, s.mustGetSubscription(2))
 }
 
 func (s *BoltDBTestSuite) mustGetSubscription(chatID int64) Subscription {

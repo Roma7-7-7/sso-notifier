@@ -18,8 +18,8 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 	for _, key := range allKeys {
 		alert, ok, err := s.store.GetAlert(key)
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
-		if s.Assert().Falsef(ok, "Alert should not be present for key: %s", key) {
-			s.Assert().Emptyf(alert, "Alert should not be present for key: %s", key)
+		if s.Falsef(ok, "Alert should not be present for key: %s", key) {
+			s.Emptyf(alert, "Alert should not be present for key: %s", key)
 		}
 	}
 
@@ -31,8 +31,8 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 	for i, key := range allKeys {
 		alert, ok, err := s.store.GetAlert(key)
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
-		if s.Assert().Truef(ok, "Alert should be present for key: %s", key) {
-			s.Assert().Equalf(sentAt.Add(time.Duration(i)*time.Hour).Truncate(time.Second), alert, "Invalid alert for key: %s", key)
+		if s.Truef(ok, "Alert should be present for key: %s", key) {
+			s.Equalf(sentAt.Add(time.Duration(i)*time.Hour).Truncate(time.Second), alert, "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -42,12 +42,12 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 	for i, key := range allKeys {
 		alert, ok, err := s.store.GetAlert(key)
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
-		if s.Assert().Truef(ok, "Alert should be present for key: %s", key) {
+		if s.Truef(ok, "Alert should be present for key: %s", key) {
 			expected := sentAt.Add(time.Duration(i) * time.Hour).Truncate(time.Second)
 			if key3 == key {
 				expected = sentAt.Add(7 * time.Hour).Truncate(time.Second)
 			}
-			s.Assert().Equalf(expected, alert, "Invalid alert for key: %s", key)
+			s.Equalf(expected, alert, "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -62,11 +62,11 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 			expected = false
 		}
 
-		s.Assert().Equal(expected, ok, "Invalid ok for key: %s", key)
+		s.Equal(expected, ok, "Invalid ok for key: %s", key)
 	}
 
 	// delete non existing alert
-	s.Assert().NoErrorf(s.store.DeleteAlert(unexistingKey), "DeleteAlert err for key: %s", key5)
+	s.NoErrorf(s.store.DeleteAlert(unexistingKey), "DeleteAlert err for key: %s", key5)
 }
 
 func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
@@ -86,9 +86,9 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 	for i, key := range allKeys {
 		alert, ok, err := s.store.GetAlert(key)
 		s.Require().NoErrorf(err, "GetAlert err for key: %s", key)
-		if s.Assert().Truef(ok, "Alert should be present for key: %s", key) {
+		if s.Truef(ok, "Alert should be present for key: %s", key) {
 			expected := sentAt.Add(time.Duration(i) * time.Hour).Truncate(time.Second)
-			s.Assert().Equalf(expected, alert, "Invalid alert for key: %s", key)
+			s.Equalf(expected, alert, "Invalid alert for key: %s", key)
 		}
 	}
 
@@ -103,8 +103,8 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 			expectedOk = false
 			expectedAlert = time.Time{}
 		}
-		if s.Assert().Equal(expectedOk, ok, "Invalid ok for key: %s", key) {
-			s.Assert().Equal(expectedAlert, alert, "Invalid alert for key: %s", key)
+		if s.Equal(expectedOk, ok, "Invalid ok for key: %s", key) {
+			s.Equal(expectedAlert, alert, "Invalid alert for key: %s", key)
 		}
 	}
 }
