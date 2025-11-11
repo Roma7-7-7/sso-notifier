@@ -88,17 +88,17 @@ func (s *BoltDBTestSuite) TestBoltDB_PutSubscription() {
 	expected2 := NewSubscription(2).WithCreatedAt(createdAt).Build()
 	expected3 := NewSubscription(3).WithCreatedAt(createdAt).Build()
 
-	s.Assert().Equal(expected1, s.requireSubscription(1))
-	s.Assert().Equal(expected2, s.requireSubscription(2))
-	s.Assert().Equal(expected3, s.requireSubscription(3))
+	s.Assert().Equal(expected1, s.mustGetSubscription(1))
+	s.Assert().Equal(expected2, s.mustGetSubscription(2))
+	s.Assert().Equal(expected3, s.mustGetSubscription(3))
 
 	// make sure created at is not overridden
 	s.now.Set(createdAt.Add(24 * time.Hour))
 	s.Require().NoError(s.store.PutSubscription(NewSubscription(2).WithCreatedAt(createdAt.Add(24 * time.Hour)).Build()))
-	s.Assert().Equal(expected2, s.requireSubscription(2))
+	s.Assert().Equal(expected2, s.mustGetSubscription(2))
 }
 
-func (s *BoltDBTestSuite) requireSubscription(chatID int64) Subscription {
+func (s *BoltDBTestSuite) mustGetSubscription(chatID int64) Subscription {
 	res, ok, err := s.store.GetSubscription(chatID)
 	s.Require().NoError(err, "error getting subscription")
 	s.Require().True(ok)
