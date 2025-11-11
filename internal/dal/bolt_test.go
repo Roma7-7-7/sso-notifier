@@ -1,22 +1,23 @@
-package dal_test
+package dal
 
 import (
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/bbolt"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 )
 
 type BoltDBTestSuite struct {
 	suite.Suite
 	db     *bbolt.DB
-	store  *dal.BoltDB
+	store  *BoltDB
+	now    *nowWrapper
 	tmpDir string
 }
 
@@ -38,8 +39,12 @@ func (s *BoltDBTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	s.db = db
-	s.store, err = dal.NewBoltDB(db)
+	s.store, err = NewBoltDB(db)
 	s.Require().NoError(err)
+	s.now = &nowWrapper{}
+	s.store.now = func() time.Time {
+		return s.now.Call()
+	}
 }
 
 // TearDownSuite runs ONCE after all tests
@@ -71,9 +76,39 @@ func (s *BoltDBTestSuite) TearDownTest() {
 		return nil
 	})
 	s.Require().NoError(err)
+
+	s.now.Reset()
+	s.store.now = func() time.Time {
+		return s.now.Call()
+	}
 }
 
 // Run the suite
 func TestBoltDBTestSuite(t *testing.T) {
 	suite.Run(t, new(BoltDBTestSuite))
+}
+
+type nowWrapper struct {
+	now func() time.Time
+}
+
+func (w *nowWrapper) Call() time.Time {
+	if w.now != nil {
+		return w.now()
+	}
+	return time.Now()
+}
+
+func (w *nowWrapper) SetF(now func() time.Time) {
+	w.now = now
+}
+
+func (w *nowWrapper) Set(v time.Time) {
+	w.now = func() time.Time {
+		return v
+	}
+}
+
+func (w *nowWrapper) Reset() {
+	w.now = time.Now
 }

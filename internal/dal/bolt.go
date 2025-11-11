@@ -3,18 +3,23 @@ package dal
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"go.etcd.io/bbolt"
 )
 
 type (
 	BoltDB struct {
-		db *bbolt.DB
+		db  *bbolt.DB
+		now func() time.Time
 	}
 )
 
 func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
-	return &BoltDB{db: db}, nil
+	return &BoltDB{
+		db:  db,
+		now: time.Now,
+	}, nil
 }
 
 func (s *BoltDB) Purge(chatID int64) error {

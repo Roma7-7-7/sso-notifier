@@ -1,74 +1,17 @@
-package testutil
-
-import (
-	"time"
-
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
-)
-
-// SubscriptionBuilder provides fluent API for building test subscriptions
-type SubscriptionBuilder struct {
-	sub dal.Subscription
-}
-
-// NewSubscription creates a new subscription builder with defaults
-func NewSubscription(chatID int64) *SubscriptionBuilder {
-	return &SubscriptionBuilder{
-		sub: dal.Subscription{
-			ChatID:    chatID,
-			Groups:    make(map[string]struct{}),
-			CreatedAt: time.Now(),
-			Settings:  nil,
-		},
-	}
-}
-
-// WithGroup adds a group subscription
-func (b *SubscriptionBuilder) WithGroup(groupNum string) *SubscriptionBuilder {
-	b.sub.Groups[groupNum] = struct{}{}
-	return b
-}
-
-// WithGroups adds multiple group subscriptions
-func (b *SubscriptionBuilder) WithGroups(groupNums ...string) *SubscriptionBuilder {
-	for _, g := range groupNums {
-		b.sub.Groups[g] = struct{}{}
-	}
-	return b
-}
-
-// WithCreatedAt sets the creation time
-func (b *SubscriptionBuilder) WithCreatedAt(t time.Time) *SubscriptionBuilder {
-	b.sub.CreatedAt = t
-	return b
-}
-
-// WithSetting sets a setting value
-func (b *SubscriptionBuilder) WithSetting(key dal.SettingKey, value interface{}) *SubscriptionBuilder {
-	if b.sub.Settings == nil {
-		b.sub.Settings = make(map[dal.SettingKey]interface{})
-	}
-	b.sub.Settings[key] = value
-	return b
-}
-
-// Build returns the constructed subscription
-func (b *SubscriptionBuilder) Build() dal.Subscription {
-	return b.sub
-}
+package dal
 
 // ShutdownsBuilder provides fluent API for building test shutdowns
 type ShutdownsBuilder struct {
-	shutdowns dal.Shutdowns
+	shutdowns Shutdowns
 }
 
 // NewShutdowns creates a new shutdowns builder with defaults
 func NewShutdowns() *ShutdownsBuilder {
 	return &ShutdownsBuilder{
-		shutdowns: dal.Shutdowns{
+		shutdowns: Shutdowns{
 			Date:    "1 листопада",
-			Periods: []dal.Period{},
-			Groups:  make(map[string]dal.ShutdownGroup),
+			Periods: []Period{},
+			Groups:  make(map[string]ShutdownGroup),
 		},
 	}
 }
@@ -81,7 +24,7 @@ func (b *ShutdownsBuilder) WithDate(date string) *ShutdownsBuilder {
 
 // WithPeriod adds a time period
 func (b *ShutdownsBuilder) WithPeriod(from, to string) *ShutdownsBuilder {
-	b.shutdowns.Periods = append(b.shutdowns.Periods, dal.Period{
+	b.shutdowns.Periods = append(b.shutdowns.Periods, Period{
 		From: from,
 		To:   to,
 	})
@@ -110,8 +53,8 @@ func (b *ShutdownsBuilder) WithStandardPeriods() *ShutdownsBuilder {
 }
 
 // WithGroup adds a group with status items
-func (b *ShutdownsBuilder) WithGroup(groupNum string, items ...dal.Status) *ShutdownsBuilder {
-	b.shutdowns.Groups[groupNum] = dal.ShutdownGroup{
+func (b *ShutdownsBuilder) WithGroup(groupNum string, items ...Status) *ShutdownsBuilder {
+	b.shutdowns.Groups[groupNum] = ShutdownGroup{
 		Number: parseGroupNum(groupNum),
 		Items:  items,
 	}
@@ -119,7 +62,7 @@ func (b *ShutdownsBuilder) WithGroup(groupNum string, items ...dal.Status) *Shut
 }
 
 // Build returns the constructed shutdowns
-func (b *ShutdownsBuilder) Build() dal.Shutdowns {
+func (b *ShutdownsBuilder) Build() Shutdowns {
 	return b.shutdowns
 }
 
@@ -156,8 +99,8 @@ func parseGroupNum(s string) int {
 }
 
 // Helper function to create multiple ON statuses
-func RepeatStatus(status dal.Status, count int) []dal.Status {
-	result := make([]dal.Status, count)
+func RepeatStatus(status Status, count int) []Status {
+	result := make([]Status, count)
 	for i := 0; i < count; i++ {
 		result[i] = status
 	}

@@ -82,6 +82,18 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscriptionsBucket))
 
+		existing, exists, err := s.GetSubscription(sub.ChatID)
+		if err != nil {
+			return fmt.Errorf("get existing subscription: %w", err)
+		}
+
+		if !exists {
+			sub.CreatedAt = s.now()
+		} else {
+			// make sure we do not override created at
+			sub.CreatedAt = existing.CreatedAt
+		}
+
 		id := i64tob(sub.ChatID)
 		data, err := json.Marshal(&sub)
 		if err != nil {
