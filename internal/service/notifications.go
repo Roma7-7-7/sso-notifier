@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/telegram"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
