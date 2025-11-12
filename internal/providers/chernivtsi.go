@@ -16,19 +16,21 @@ import (
 var ErrCheckNextDayAvailability = errors.New("check next day availability")
 
 type ChernivtsiProvider struct {
-	baseURL string
+	baseURL  string
+	loadPage func(context.Context, string) ([]byte, error)
 }
 
 func NewChernivtsiProvider(baseURL string) *ChernivtsiProvider {
 	return &ChernivtsiProvider{
-		baseURL: baseURL,
+		baseURL:  baseURL,
+		loadPage: loadPage,
 	}
 }
 
 // Shutdowns fetches today's shutdown schedule
 // Returns the schedule and a boolean indicating if tomorrow's schedule is available
 func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool, error) {
-	html, err := loadPage(ctx, p.baseURL)
+	html, err := p.loadPage(ctx, p.baseURL)
 	if err != nil {
 		return dal.Shutdowns{}, false, fmt.Errorf("load shutdowns page: %w", err)
 	}
@@ -50,7 +52,7 @@ func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool
 // Should only be called if Shutdowns indicated next day is available
 func (p *ChernivtsiProvider) ShutdownsNext(ctx context.Context) (dal.Shutdowns, error) {
 	nextURL := p.baseURL + "?next"
-	html, err := loadPage(ctx, nextURL)
+	html, err := p.loadPage(ctx, nextURL)
 	if err != nil {
 		return dal.Shutdowns{}, fmt.Errorf("load shutdowns page: %w", err)
 	}

@@ -69,7 +69,7 @@ type ShutdownsBuilder struct {
 func NewShutdowns() *ShutdownsBuilder {
 	return &ShutdownsBuilder{
 		shutdowns: dal.Shutdowns{
-			Date: "2025-11-23",
+			Date: "23.11.2025",
 			Periods: []dal.Period{
 				{From: "00:00", To: "00:30"},
 				{From: "00:30", To: "01:00"},
@@ -158,10 +158,10 @@ func (b *ShutdownsBuilder) WithDate(date string) *ShutdownsBuilder {
 }
 
 // WithGroup adds a group with status items
-func (b *ShutdownsBuilder) WithGroup(groupNum int, items ...dal.Status) *ShutdownsBuilder {
+func (b *ShutdownsBuilder) WithGroup(groupNum int, statuses string) *ShutdownsBuilder {
 	b.shutdowns.Groups[strconv.Itoa(groupNum)] = dal.ShutdownGroup{
 		Number: groupNum,
-		Items:  items,
+		Items:  parseGroupStatuses(statuses),
 	}
 	return b
 }
