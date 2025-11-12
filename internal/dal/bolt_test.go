@@ -1,4 +1,4 @@
-package dal
+package dal_test
 
 import (
 	"log/slog"
@@ -10,13 +10,15 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/bbolt"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 )
 
 type BoltDBTestSuite struct {
 	suite.Suite
 	db     *bbolt.DB
-	store  *BoltDB
+	store  *dal.BoltDB
 	now    *nowWrapper
 	tmpDir string
 }
@@ -39,12 +41,12 @@ func (s *BoltDBTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	s.db = db
-	s.store, err = NewBoltDB(db)
+	s.store, err = dal.NewBoltDB(db)
 	s.Require().NoError(err)
 	s.now = &nowWrapper{}
-	s.store.now = func() time.Time {
+	s.store.SetNow(func() time.Time {
 		return s.now.Call()
-	}
+	})
 }
 
 // TearDownSuite runs ONCE after all tests
@@ -78,9 +80,9 @@ func (s *BoltDBTestSuite) TearDownTest() {
 	s.Require().NoError(err)
 
 	s.now.Reset()
-	s.store.now = func() time.Time {
+	s.store.SetNow(func() time.Time {
 		return s.now.Call()
-	}
+	})
 }
 
 // Run the suite
@@ -119,50 +121,50 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 	chatID2 := int64(102)
 	chatID3 := int64(103)
 
-	subscription1 := NewSubscription(chatID1).WithGroups("1", "2").Build()
-	subscription2 := NewSubscription(chatID2).WithGroups("3", "4").Build()
-	subscription3 := NewSubscription(chatID3).WithGroups("5", "6").Build()
+	subscription1 := testutil.NewSubscription(chatID1).WithGroups("1", "2").Build()
+	subscription2 := testutil.NewSubscription(chatID2).WithGroups("3", "4").Build()
+	subscription3 := testutil.NewSubscription(chatID3).WithGroups("5", "6").Build()
 
 	s.Require().NoError(s.store.PutSubscription(subscription1))
 	s.Require().NoError(s.store.PutSubscription(subscription2))
 	s.Require().NoError(s.store.PutSubscription(subscription3))
 
 	// Create dates for notifications
-	date1 := Date{Year: 2025, Month: 11, Day: 23}
-	date2 := Date{Year: 2025, Month: 11, Day: 24}
+	date1 := dal.Date{Year: 2025, Month: 11, Day: 23}
+	date2 := dal.Date{Year: 2025, Month: 11, Day: 24}
 	sentAt := time.Now().UTC()
 
 	// Create 2 notification states for each subscription
-	notifications := []NotificationState{
+	notifications := []dal.NotificationState{
 		// For chatID1
-		NewNotificationState(chatID1, date1).
+		testutil.NewNotificationState(chatID1, date1).
 			WithSentAt(sentAt).
 			WithHash("1", "hash1_chatID1_date1").
 			WithHash("2", "hash2_chatID1_date1").
 			Build(),
-		NewNotificationState(chatID1, date2).
+		testutil.NewNotificationState(chatID1, date2).
 			WithSentAt(sentAt.Add(1*time.Hour)).
 			WithHash("1", "hash1_chatID1_date2").
 			WithHash("2", "hash2_chatID1_date2").
 			Build(),
 		// For chatID2
-		NewNotificationState(chatID2, date1).
+		testutil.NewNotificationState(chatID2, date1).
 			WithSentAt(sentAt.Add(2*time.Hour)).
 			WithHash("3", "hash1_chatID2_date1").
 			WithHash("4", "hash2_chatID2_date1").
 			Build(),
-		NewNotificationState(chatID2, date2).
+		testutil.NewNotificationState(chatID2, date2).
 			WithSentAt(sentAt.Add(3*time.Hour)).
 			WithHash("3", "hash1_chatID2_date2").
 			WithHash("4", "hash2_chatID2_date2").
 			Build(),
 		// For chatID3
-		NewNotificationState(chatID3, date1).
+		testutil.NewNotificationState(chatID3, date1).
 			WithSentAt(sentAt.Add(4*time.Hour)).
 			WithHash("5", "hash1_chatID3_date1").
 			WithHash("6", "hash2_chatID3_date1").
 			Build(),
-		NewNotificationState(chatID3, date2).
+		testutil.NewNotificationState(chatID3, date2).
 			WithSentAt(sentAt.Add(5*time.Hour)).
 			WithHash("5", "hash1_chatID3_date2").
 			WithHash("6", "hash2_chatID3_date2").
@@ -175,18 +177,18 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 
 	// Create 2 alerts for each subscription
 	alerts := []struct {
-		key    AlertKey
+		key    dal.AlertKey
 		sentAt time.Time
 	}{
 		// For chatID1
-		{BuildAlertKey(chatID1, "2025-11-23", "10:00", string(ON), "1"), sentAt},
-		{BuildAlertKey(chatID1, "2025-11-23", "14:00", string(MAYBE), "2"), sentAt.Add(1 * time.Hour)},
+		{dal.BuildAlertKey(chatID1, "2025-11-23", "10:00", string(dal.ON), "1"), sentAt},
+		{dal.BuildAlertKey(chatID1, "2025-11-23", "14:00", string(dal.MAYBE), "2"), sentAt.Add(1 * time.Hour)},
 		// For chatID2
-		{BuildAlertKey(chatID2, "2025-11-24", "10:00", string(ON), "3"), sentAt.Add(2 * time.Hour)},
-		{BuildAlertKey(chatID2, "2025-11-24", "14:00", string(OFF), "4"), sentAt.Add(3 * time.Hour)},
+		{dal.BuildAlertKey(chatID2, "2025-11-24", "10:00", string(dal.ON), "3"), sentAt.Add(2 * time.Hour)},
+		{dal.BuildAlertKey(chatID2, "2025-11-24", "14:00", string(dal.OFF), "4"), sentAt.Add(3 * time.Hour)},
 		// For chatID3
-		{BuildAlertKey(chatID3, "2025-11-25", "10:00", string(ON), "5"), sentAt.Add(4 * time.Hour)},
-		{BuildAlertKey(chatID3, "2025-11-25", "14:00", string(MAYBE), "6"), sentAt.Add(5 * time.Hour)},
+		{dal.BuildAlertKey(chatID3, "2025-11-25", "10:00", string(dal.ON), "5"), sentAt.Add(4 * time.Hour)},
+		{dal.BuildAlertKey(chatID3, "2025-11-25", "14:00", string(dal.MAYBE), "6"), sentAt.Add(5 * time.Hour)},
 	}
 
 	for i, alert := range alerts {
@@ -211,7 +213,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 
 	// BEFORE PURGE: Verify all notifications exist
 	for i, notif := range notifications {
-		dateMap := map[string]Date{
+		dateMap := map[string]dal.Date{
 			date1.ToKey(): date1,
 			date2.ToKey(): date2,
 		}
@@ -252,7 +254,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 
 	// AFTER PURGE: Verify notifications for chatID2 are deleted, others still exist
 	for i, notif := range notifications {
-		dateMap := map[string]Date{
+		dateMap := map[string]dal.Date{
 			date1.ToKey(): date1,
 			date2.ToKey(): date2,
 		}

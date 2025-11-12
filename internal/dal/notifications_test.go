@@ -1,13 +1,16 @@
-package dal
+package dal_test
 
 import (
 	"time"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 )
 
 func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_NotificationState() {
-	date1 := Date{Year: 2025, Month: 11, Day: 23}
-	date2 := Date{Year: 2025, Month: 11, Day: 24}
-	date3 := Date{Year: 2025, Month: 11, Day: 25}
+	date1 := dal.Date{Year: 2025, Month: 11, Day: 23}
+	date2 := dal.Date{Year: 2025, Month: 11, Day: 24}
+	date3 := dal.Date{Year: 2025, Month: 11, Day: 25}
 
 	chatID1 := int64(1)
 	chatID2 := int64(2)
@@ -15,7 +18,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_NotificationState() {
 	// Test keys: different combinations of chatID and date
 	keys := []struct {
 		chatID int64
-		date   Date
+		date   dal.Date
 	}{
 		{chatID1, date1},
 		{chatID1, date2},
@@ -34,11 +37,11 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_NotificationState() {
 	}
 
 	sentAt := time.Now().UTC()
-	states := make([]NotificationState, len(keys))
+	states := make([]dal.NotificationState, len(keys))
 
 	// Create and put states
 	for i, k := range keys {
-		states[i] = NewNotificationState(k.chatID, k.date).
+		states[i] = testutil.NewNotificationState(k.chatID, k.date).
 			WithSentAt(sentAt.Add(time.Duration(i)*time.Hour)).
 			WithHash("1", "hash1_"+k.date.ToKey()).
 			WithHash("2", "hash2_"+k.date.ToKey()).
@@ -59,7 +62,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_NotificationState() {
 	}
 
 	// Update one state (key index 1: chatID1, date2)
-	states[1] = NewNotificationState(keys[1].chatID, keys[1].date).
+	states[1] = testutil.NewNotificationState(keys[1].chatID, keys[1].date).
 		WithSentAt(sentAt.Add(10*time.Hour)).
 		WithHash("1", "updated_hash1").
 		WithHash("2", "updated_hash2").
@@ -81,9 +84,9 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_NotificationState() {
 }
 
 func (s *BoltDBTestSuite) TestBoltDB_DeleteNotificationStates() {
-	date1 := Date{Year: 2025, Month: 11, Day: 23}
-	date2 := Date{Year: 2025, Month: 11, Day: 24}
-	date3 := Date{Year: 2025, Month: 11, Day: 25}
+	date1 := dal.Date{Year: 2025, Month: 11, Day: 23}
+	date2 := dal.Date{Year: 2025, Month: 11, Day: 24}
+	date3 := dal.Date{Year: 2025, Month: 11, Day: 25}
 
 	chatID1 := int64(1)
 	chatID2 := int64(2)
@@ -92,17 +95,17 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteNotificationStates() {
 	sentAt := time.Now().UTC()
 
 	// Create states for multiple users and dates
-	states := []NotificationState{
-		NewNotificationState(chatID1, date1).WithSentAt(sentAt).WithHash("1", "hash1").Build(),
-		NewNotificationState(chatID1, date2).WithSentAt(sentAt.Add(1*time.Hour)).WithHash("1", "hash2").Build(),
-		NewNotificationState(chatID2, date1).WithSentAt(sentAt.Add(2*time.Hour)).WithHash("2", "hash3").Build(),
-		NewNotificationState(chatID2, date2).WithSentAt(sentAt.Add(3*time.Hour)).WithHash("2", "hash4").Build(),
-		NewNotificationState(chatID3, date1).WithSentAt(sentAt.Add(4*time.Hour)).WithHash("3", "hash5").Build(),
-		NewNotificationState(chatID3, date3).WithSentAt(sentAt.Add(5*time.Hour)).WithHash("3", "hash6").Build(),
+	states := []dal.NotificationState{
+		testutil.NewNotificationState(chatID1, date1).WithSentAt(sentAt).WithHash("1", "hash1").Build(),
+		testutil.NewNotificationState(chatID1, date2).WithSentAt(sentAt.Add(1*time.Hour)).WithHash("1", "hash2").Build(),
+		testutil.NewNotificationState(chatID2, date1).WithSentAt(sentAt.Add(2*time.Hour)).WithHash("2", "hash3").Build(),
+		testutil.NewNotificationState(chatID2, date2).WithSentAt(sentAt.Add(3*time.Hour)).WithHash("2", "hash4").Build(),
+		testutil.NewNotificationState(chatID3, date1).WithSentAt(sentAt.Add(4*time.Hour)).WithHash("3", "hash5").Build(),
+		testutil.NewNotificationState(chatID3, date3).WithSentAt(sentAt.Add(5*time.Hour)).WithHash("3", "hash6").Build(),
 	}
 
 	// Create a map for easy date lookup
-	dateMap := map[string]Date{
+	dateMap := map[string]dal.Date{
 		date1.ToKey(): date1,
 		date2.ToKey(): date2,
 		date3.ToKey(): date3,
@@ -172,49 +175,4 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteNotificationStates() {
 			s.Falsef(ok, "NotificationState should not be present for state %d (chatID %d)", i, state.ChatID)
 		}
 	}
-}
-
-// NotificationStateBuilder provides fluent API for building test notification states
-type NotificationStateBuilder struct {
-	state NotificationState
-}
-
-// NewNotificationState creates a new notification state builder with defaults
-func NewNotificationState(chatID int64, date Date) *NotificationStateBuilder {
-	return &NotificationStateBuilder{
-		state: NotificationState{
-			ChatID: chatID,
-			Date:   date.ToKey(),
-			SentAt: time.Now().UTC(),
-			Hashes: map[string]string{
-				"1": "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
-				"2": "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
-				"3": "NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN",
-				"4": "MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN",
-			},
-		},
-	}
-}
-
-// WithSentAt sets the sent at time
-func (b *NotificationStateBuilder) WithSentAt(t time.Time) *NotificationStateBuilder {
-	b.state.SentAt = t
-	return b
-}
-
-// WithHash adds a single hash for a group
-func (b *NotificationStateBuilder) WithHash(group, hash string) *NotificationStateBuilder {
-	b.state.Hashes[group] = hash
-	return b
-}
-
-// WithHashes sets multiple hashes at once
-func (b *NotificationStateBuilder) WithHashes(hashes map[string]string) *NotificationStateBuilder {
-	b.state.Hashes = hashes
-	return b
-}
-
-// Build returns the constructed notification state
-func (b *NotificationStateBuilder) Build() NotificationState {
-	return b.state
 }

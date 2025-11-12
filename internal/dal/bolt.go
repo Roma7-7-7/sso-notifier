@@ -22,6 +22,12 @@ func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
 	}, nil
 }
 
+// SetNow replaces method that will be used for current time detection.
+// Use it for tests only
+func (s *BoltDB) SetNow(now func() time.Time) {
+	s.now = now
+}
+
 func (s *BoltDB) Purge(chatID int64) error {
 	if err := s.db.Update(func(tx *bbolt.Tx) error {
 		subsBucket := tx.Bucket([]byte(subscriptionsBucket))
