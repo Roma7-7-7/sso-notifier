@@ -9,6 +9,11 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
+const (
+	AllStatesOnHash  = "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY"
+	AllStatesOffHash = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+)
+
 // SubscriptionBuilder provides fluent API for building test subscriptions
 type SubscriptionBuilder struct {
 	sub dal.Subscription
@@ -24,12 +29,6 @@ func NewSubscription(chatID int64) *SubscriptionBuilder {
 			Settings:  nil,
 		},
 	}
-}
-
-// WithGroup adds a group subscription
-func (b *SubscriptionBuilder) WithGroup(groupNum string) *SubscriptionBuilder {
-	b.sub.Groups[groupNum] = struct{}{}
-	return b
 }
 
 // WithGroups adds multiple group subscriptions
@@ -121,24 +120,50 @@ func NewShutdowns() *ShutdownsBuilder {
 				{From: "23:30", To: "24:00"},
 			},
 			Groups: map[string]dal.ShutdownGroup{
-				"1":  {Number: 1, Items: parseGroupStatuses("YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY")},
-				"2":  {Number: 2, Items: parseGroupStatuses("MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY")},
-				"3":  {Number: 3, Items: parseGroupStatuses("NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN")},
-				"4":  {Number: 4, Items: parseGroupStatuses("MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN")},
-				"5":  {Number: 5, Items: parseGroupStatuses("YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY")},
-				"6":  {Number: 6, Items: parseGroupStatuses("MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY")},
-				"7":  {Number: 7, Items: parseGroupStatuses("NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN")},
-				"8":  {Number: 8, Items: parseGroupStatuses("MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN")},
-				"9":  {Number: 9, Items: parseGroupStatuses("YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY")},
-				"10": {Number: 10, Items: parseGroupStatuses("MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY")},
-				"11": {Number: 11, Items: parseGroupStatuses("NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN")},
-				"12": {Number: 12, Items: parseGroupStatuses("MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN")},
+				"1":  {Number: 1, Items: ParseGroupHash(AllStatesOnHash)},
+				"2":  {Number: 2, Items: ParseGroupHash(AllStatesOnHash)},
+				"3":  {Number: 3, Items: ParseGroupHash(AllStatesOnHash)},
+				"4":  {Number: 4, Items: ParseGroupHash(AllStatesOnHash)},
+				"5":  {Number: 5, Items: ParseGroupHash(AllStatesOnHash)},
+				"6":  {Number: 6, Items: ParseGroupHash(AllStatesOnHash)},
+				"7":  {Number: 7, Items: ParseGroupHash(AllStatesOnHash)},
+				"8":  {Number: 8, Items: ParseGroupHash(AllStatesOnHash)},
+				"9":  {Number: 9, Items: ParseGroupHash(AllStatesOnHash)},
+				"10": {Number: 10, Items: ParseGroupHash(AllStatesOnHash)},
+				"11": {Number: 11, Items: ParseGroupHash(AllStatesOnHash)},
+				"12": {Number: 12, Items: ParseGroupHash(AllStatesOnHash)},
 			},
 		},
 	}
 }
 
-func parseGroupStatuses(s string) []dal.Status {
+var StubGroupHashes = map[int]string{
+	1:  "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
+	2:  "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
+	3:  "NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN",
+	4:  "MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN",
+	5:  "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
+	6:  "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
+	7:  "NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN",
+	8:  "MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN",
+	9:  "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
+	10: "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
+	11: "NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN",
+	12: "MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN",
+}
+
+func (b *ShutdownsBuilder) WithStubGroups() *ShutdownsBuilder {
+	for num, hash := range StubGroupHashes {
+		b.shutdowns.Groups[strconv.Itoa(num)] = dal.ShutdownGroup{
+			Number: num,
+			Items:  ParseGroupHash(hash),
+		}
+	}
+
+	return b
+}
+
+func ParseGroupHash(s string) []dal.Status {
 	if len(s) != 48 {
 		panic(fmt.Sprintf("expecting 48 groups, got %d", len(s)))
 	}
@@ -161,7 +186,7 @@ func (b *ShutdownsBuilder) WithDate(date string) *ShutdownsBuilder {
 func (b *ShutdownsBuilder) WithGroup(groupNum int, statuses string) *ShutdownsBuilder {
 	b.shutdowns.Groups[strconv.Itoa(groupNum)] = dal.ShutdownGroup{
 		Number: groupNum,
-		Items:  parseGroupStatuses(statuses),
+		Items:  ParseGroupHash(statuses),
 	}
 	return b
 }
@@ -169,6 +194,12 @@ func (b *ShutdownsBuilder) WithGroup(groupNum int, statuses string) *ShutdownsBu
 // Build returns the constructed shutdowns
 func (b *ShutdownsBuilder) Build() dal.Shutdowns {
 	return b.shutdowns
+}
+
+// BuildPointer returns pointer to the constructed shutdowns
+func (b *ShutdownsBuilder) BuildPointer() *dal.Shutdowns {
+	res := b.shutdowns
+	return &res
 }
 
 // NotificationStateBuilder provides fluent API for building test notification states
