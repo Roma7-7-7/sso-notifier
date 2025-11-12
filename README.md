@@ -1,6 +1,6 @@
 # SSO Notifier
 
-[![Coverage](https://img.shields.io/badge/coverage-15.1%25-red)](https://github.com/Roma7-7-7/sso-notifier)
+[![Coverage](https://img.shields.io/badge/coverage-14.8%25-red)](https://github.com/Roma7-7-7/sso-notifier)
 
 A Telegram bot that monitors electricity power outage schedules in Chernivtsi, Ukraine and sends notifications to subscribers when the schedule changes.
 
