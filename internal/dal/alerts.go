@@ -75,17 +75,21 @@ func (s *BoltDB) DeleteAlert(key AlertKey) error {
 // DeleteAlerts removes all alert records for a specific user
 func (s *BoltDB) DeleteAlerts(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(alertsBucket))
-		prefix := fmt.Sprintf("%d_", chatID)
-		c := b.Cursor()
-
-		// Find and delete all keys with this chatID prefix
-		for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
-			if err := b.Delete(k); err != nil {
-				return fmt.Errorf("delete alert for key %s: %w", k, err)
-			}
-		}
-
-		return nil
+		return s.deleteAlerts(tx, chatID)
 	})
+}
+
+func (s *BoltDB) deleteAlerts(tx *bbolt.Tx, chatID int64) error {
+	b := tx.Bucket([]byte(alertsBucket))
+	prefix := fmt.Sprintf("%d_", chatID)
+	c := b.Cursor()
+
+	// Find and delete all keys with this chatID prefix
+	for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
+		if err := b.Delete(k); err != nil {
+			return fmt.Errorf("delete alert for key %s: %w", k, err)
+		}
+	}
+
+	return nil
 }
