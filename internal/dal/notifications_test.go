@@ -159,6 +159,19 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteNotificationStates() {
 
 	// Delete non-existing chatID (should not error)
 	s.NoError(s.store.DeleteNotificationStates(999))
+
+	// Verify only chatID3 states remain
+	for i, state := range states {
+		date := dateMap[state.Date]
+		_, ok, err := s.store.GetNotificationState(state.ChatID, date)
+		s.Require().NoErrorf(err, "GetNotificationState err for state %d", i)
+
+		if state.ChatID == chatID3 {
+			s.Truef(ok, "NotificationState should still be present for state %d (chatID3)", i)
+		} else {
+			s.Falsef(ok, "NotificationState should not be present for state %d (chatID %d)", i, state.ChatID)
+		}
+	}
 }
 
 // NotificationStateBuilder provides fluent API for building test notification states
