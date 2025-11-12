@@ -137,6 +137,7 @@ func NewShutdowns() *ShutdownsBuilder {
 	}
 }
 
+//nolint:gochecknoglobals // this is testutil
 var StubGroupHashes = map[int]string{
 	1:  "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
 	2:  "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
