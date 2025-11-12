@@ -209,7 +209,7 @@ func (s *Alerts) processSubscriptionAlert(
 		return nil
 	}
 
-	message := renderUpcomingMessage(userAlerts)
+	message := NewPowerSupplyChangeMessageBuilder().Build(userAlerts)
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), message); err != nil {
 		if !errors.Is(err, telegram.ErrForbidden) {
 			return fmt.Errorf("send telegram message: %w", err)

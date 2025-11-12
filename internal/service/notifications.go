@@ -175,7 +175,7 @@ func (s *Notifications) getOrCreateNotificationState(
 func (s *Notifications) updateNotificationStates(
 	ctx context.Context,
 	todayState, tomorrowState dal.NotificationState,
-	msg PowerSupplyMessage,
+	msg PowerSupplyScheduleMessage,
 	log *slog.Logger,
 ) {
 	now := s.now()

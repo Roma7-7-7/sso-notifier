@@ -52,7 +52,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    service.PowerSupplyMessage
+		want    service.PowerSupplyScheduleMessage
 		wantErr assert.ErrorAssertionFunc
 	}{
 		// ===================== Single group ===================== //
@@ -73,7 +73,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -107,7 +107,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -141,7 +141,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -176,7 +176,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -217,7 +217,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -258,7 +258,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -302,7 +302,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -352,7 +352,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -402,7 +402,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -454,7 +454,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -518,7 +518,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -582,7 +582,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -636,7 +636,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -664,7 +664,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -699,7 +699,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -738,7 +738,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -767,7 +767,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -810,7 +810,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-11:
@@ -857,7 +857,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -905,7 +905,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -962,7 +962,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1004,7 +1004,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1038,7 +1038,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1072,7 +1072,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1104,7 +1104,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					Hashes: map[string]string{},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
