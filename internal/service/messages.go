@@ -306,7 +306,11 @@ func NewPowerSupplyChangeMessageBuilder() *PowerSupplyChangeMessageBuilder {
 	}
 }
 
-func (b *PowerSupplyChangeMessageBuilder) Build(alerts []PendingAlert) string {
+func (b *PowerSupplyChangeMessageBuilder) Build(alerts []Alert) string {
+	if len(alerts) == 0 {
+		return ""
+	}
+
 	type groupKey struct {
 		Status    dal.Status
 		StartTime string

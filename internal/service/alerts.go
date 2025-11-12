@@ -37,8 +37,8 @@ type Alerts struct {
 	mx  *sync.Mutex
 }
 
-// PendingAlert represents a detected outage start that needs notification
-type PendingAlert struct {
+// Alert represents a detected outage start that needs notification
+type Alert struct {
 	GroupNum  string
 	Date      string
 	StartTime string
@@ -96,7 +96,7 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 		return nil
 	}
 
-	pendingAlerts := make([]PendingAlert, 0)
+	pendingAlerts := make([]Alert, 0)
 
 	for groupNum, group := range shutdowns.Groups {
 		periodIndex, err := findPeriodIndex(shutdowns.Periods, targetTime)
@@ -133,7 +133,7 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 
 		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
 			if isOutageStart(group.Items, periodIndex, status) {
-				pendingAlerts = append(pendingAlerts, PendingAlert{
+				pendingAlerts = append(pendingAlerts, Alert{
 					GroupNum:  groupNum,
 					Date:      shutdowns.Date,
 					StartTime: period.From,
@@ -172,13 +172,13 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 func (s *Alerts) processSubscriptionAlert(
 	ctx context.Context,
 	sub dal.Subscription,
-	pendingAlerts []PendingAlert,
+	pendingAlerts []Alert,
 	now time.Time,
 ) error {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
 
-	userAlerts := make([]PendingAlert, 0)
+	userAlerts := make([]Alert, 0)
 
 	for _, alert := range pendingAlerts {
 		if _, subscribed := sub.Groups[alert.GroupNum]; !subscribed {
@@ -205,11 +205,10 @@ func (s *Alerts) processSubscriptionAlert(
 		userAlerts = append(userAlerts, alert)
 	}
 
-	if len(userAlerts) == 0 {
+	message := NewPowerSupplyChangeMessageBuilder().Build(userAlerts)
+	if message == "" {
 		return nil
 	}
-
-	message := NewPowerSupplyChangeMessageBuilder().Build(userAlerts)
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), message); err != nil {
 		if !errors.Is(err, telegram.ErrForbidden) {
 			return fmt.Errorf("send telegram message: %w", err)

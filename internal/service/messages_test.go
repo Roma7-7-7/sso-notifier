@@ -1125,3 +1125,113 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 		})
 	}
 }
+
+func TestPowerSupplyChangeMessageBuilder_Build(t *testing.T) {
+	type args struct {
+		alerts []service.Alert
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "empty_alerts",
+			args: args{
+				alerts: []service.Alert{},
+			},
+			want: "",
+		},
+		{
+			name: "combined",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:20",
+						Status:    dal.MAYBE,
+					},
+					{
+						GroupNum:  "3",
+						StartTime: "13:00",
+						Status:    dal.OFF,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🟢 Відновлення електропостачання об 12:00
+
+Група 2:
+🟡 Можливе відключення/відновлення електропостачання об 12:30
+
+Група 3:
+🔴 Відключення електропостачання об 13:00`,
+		},
+		{
+			name: "sort_by_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "23:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "09:00",
+						Status:    dal.MAYBE,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🟡 Можливе відключення/відновлення електропостачання об 09:00
+
+Група 1:
+🟢 Відновлення електропостачання об 12:00
+
+Група 1:
+🔴 Відключення електропостачання об 23:00`,
+		},
+		{
+			name: "group_by_status_and_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Групи 1, 2:
+🟢 Відновлення електропостачання об 12:00`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := service.NewPowerSupplyChangeMessageBuilder()
+			assert.Equalf(t, tt.want, b.Build(tt.args.alerts), "Build(%v)", tt.args.alerts)
+		})
+	}
+}
