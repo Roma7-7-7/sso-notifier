@@ -29,3 +29,12 @@ ci-build:
 testserver:
 	go mod download
 	CGO_ENABLED=0 go build -o ./bin/testserver ./cmd/testserver/main.go
+
+test:
+	go test ./...
+
+coverage:
+	@echo "Running tests with coverage..."
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | grep total | awk '{print "Total Coverage: " $$3}'
+	@rm coverage.out

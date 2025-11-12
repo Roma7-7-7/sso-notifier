@@ -90,7 +90,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	return nil
 }
 
-func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date) (*MessageBuilder, error) {
+func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return nil, fmt.Errorf("getting shutdowns table for today: %w", err)
@@ -99,7 +99,7 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Dat
 		return nil, ErrShutdownsNotAvailable
 	}
 
-	msgBuilder := NewMessageBuilder(todayTable, s.now())
+	msgBuilder := NewPowerSupplyScheduleMessageBuilder(todayTable, s.now())
 
 	tomorrowTable, hasTomorrow, err := s.shutdowns.GetShutdowns(dal.TomorrowDate(s.loc))
 	if err != nil {
@@ -117,7 +117,7 @@ func (s *Notifications) processSubscriptionNotification(
 	ctx context.Context,
 	sub dal.Subscription,
 	today, tomorrow dal.Date,
-	msgBuilder *MessageBuilder,
+	msgBuilder *PowerSupplyScheduleMessageBuilder,
 ) {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
@@ -175,7 +175,7 @@ func (s *Notifications) getOrCreateNotificationState(
 func (s *Notifications) updateNotificationStates(
 	ctx context.Context,
 	todayState, tomorrowState dal.NotificationState,
-	msg Message,
+	msg PowerSupplyMessage,
 	log *slog.Logger,
 ) {
 	now := s.now()

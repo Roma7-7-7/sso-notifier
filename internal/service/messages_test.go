@@ -1,0 +1,1127 @@
+package service_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
+	"github.com/Roma7-7-7/sso-notifier/internal/service"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
+	beginningOfDay := time.Date(2025, time.November, 10, 0, 30, 0, 0, time.UTC)
+	middleOfDay := time.Date(2025, time.November, 10, 12, 0, 0, 0, time.UTC)
+	endOfDay := time.Date(2025, time.November, 10, 23, 30, 0, 0, time.UTC)
+
+	todayDate := middleOfDay.Format(time.DateOnly)
+	tomorrowDate := middleOfDay.AddDate(0, 0, 1).Format(time.DateOnly)
+	defaultTodayShutdowns := testutil.NewShutdowns().
+		WithDate(todayDate).
+		WithStubGroups().
+		Build()
+	const defaultTomorrowHash = "YYYYYYYYMNNNNNNNNMYYYYYYYYMNNNNNNNNMYYYYYYYYMNNN"
+	defaultTomorrowShutdowns := testutil.NewShutdowns().
+		WithDate(tomorrowDate).
+		WithGroup(1, defaultTomorrowHash).
+		WithGroup(2, defaultTomorrowHash).
+		WithGroup(3, defaultTomorrowHash).
+		WithGroup(4, defaultTomorrowHash).
+		WithGroup(5, defaultTomorrowHash).
+		WithGroup(6, defaultTomorrowHash).
+		WithGroup(7, defaultTomorrowHash).
+		WithGroup(8, defaultTomorrowHash).
+		WithGroup(9, defaultTomorrowHash).
+		WithGroup(10, defaultTomorrowHash).
+		WithGroup(11, defaultTomorrowHash).
+		WithGroup(12, defaultTomorrowHash).
+		Build()
+
+	type fields struct {
+		shutdowns        dal.Shutdowns
+		nextDayShutdowns *dal.Shutdowns
+		now              func() time.Time
+	}
+	type args struct {
+		sub           dal.Subscription
+		todayState    dal.NotificationState
+		tomorrowState dal.NotificationState
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    service.PowerSupplyMessage
+		wantErr assert.ErrorAssertionFunc
+	}{
+		// ===================== Single group ===================== //
+		{
+			name: "success_single_group_beginning_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_single_group_middle_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_single_group_end_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return endOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+
+		// ===================== Multiple groups ===================== //
+		{
+			name: "success_multiple_groups_beginning_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_multiple_groups_middle_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 10:30 - 13:30; 17:30 - 20:30;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_multiple_groups_end_of_day",
+			fields: fields{
+				shutdowns: defaultTodayShutdowns,
+				now: func() time.Time {
+					return endOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 21:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		// =============== Single group with tomorrow =============== //
+		{
+			name: "success_single_group_with_tomorrow_beginning_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_single_group_with_tomorrow_middle_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_single_group_with_tomorrow_end_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return endOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 21:30 - 24:00;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+
+		// =============== Multiple groups with tomorrow =============== //
+		{
+			name: "success_multiple_groups_with_tomorrow_beginning_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_multiple_groups_with_tomorrow_middle_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 10:30 - 13:30; 17:30 - 20:30;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_multiple_groups_with_tomorrow_end_of_day",
+			fields: fields{
+				shutdowns:        defaultTodayShutdowns,
+				nextDayShutdowns: &defaultTomorrowShutdowns,
+				now: func() time.Time {
+					return endOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 21:00 - 24:00;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
+  🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
+  🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		// ===================== No changes ===================== //
+		{
+			name: "single_group_no_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					Build(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "multiple_groups_no_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					Build(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "single_group_with_tomorrow_no_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					Build(),
+				nextDayShutdowns: testutil.NewShutdowns().WithDate(tomorrowDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					BuildPointer(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "multiple_groups_with_tomorrow_no_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					Build(),
+				nextDayShutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					BuildPointer(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		// ===================== Partial changes ===================== //
+		{
+			name: "multiple_groups_partial_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					Build(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+						"5": testutil.AllStatesOffHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 5:
+  🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"5": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "single_group_with_tomorrow_partial_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					Build(),
+				nextDayShutdowns: testutil.NewShutdowns().WithDate(tomorrowDate).
+					WithGroup(4, testutil.AllStatesOffHash).
+					BuildPointer(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-11:
+Група 4:
+  🔴 Відключено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOffHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "multiple_groups_with_tomorrow_partial_changes_middle_of_day",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					Build(),
+				nextDayShutdowns: testutil.NewShutdowns().WithDate(tomorrowDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					WithGroup(5, testutil.AllStatesOnHash).
+					BuildPointer(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOffHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+				tomorrowState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOffHash,
+						"5": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 00:00 - 24:00;
+
+
+📅 2025-11-11:
+Група 4:
+  🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		// ===================== Edge cases ===================== //
+		{
+			name: "success_group_numeric_sorting_with_double_digits",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(1, testutil.StubGroupHashes[1]).
+					WithGroup(2, testutil.StubGroupHashes[2]).
+					WithGroup(11, testutil.StubGroupHashes[11]).
+					WithGroup(12, testutil.StubGroupHashes[12]).
+					Build(),
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("12", "1", "11", "2").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"1":  testutil.AllStatesOnHash,
+						"2":  testutil.AllStatesOnHash,
+						"11": testutil.AllStatesOnHash,
+						"12": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 1:
+  🟢 Заживлено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+
+Група 2:
+  🟢 Заживлено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+
+Група 11:
+  🟢 Заживлено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+  🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
+
+Група 12:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"1":  testutil.StubGroupHashes[1],
+					"2":  testutil.StubGroupHashes[2],
+					"11": testutil.StubGroupHashes[11],
+					"12": testutil.StubGroupHashes[12],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "subscription_with_non_existent_groups",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.StubGroupHashes[4]).
+					WithGroup(5, testutil.StubGroupHashes[5]).
+					Build(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4", "5", "99").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4":  testutil.AllStatesOnHash,
+						"5":  testutil.AllStatesOnHash,
+						"99": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+Група 5:
+  🟢 Заживлено: 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 10:30 - 13:30; 17:30 - 20:30;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "group_with_only_on_status",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOnHash).
+					Build(),
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOffHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "group_with_only_off_status",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.AllStatesOffHash).
+					Build(),
+				now: func() time.Time {
+					return beginningOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOffHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "end_of_day_with_remaining_period",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithGroup(4, testutil.StubGroupHashes[4]).
+					Build(),
+				now: func() time.Time {
+					return time.Date(2025, time.November, 10, 23, 59, 59, 0, time.UTC)
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).WithGroups("4").Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{
+						"4": testutil.AllStatesOnHash,
+					},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4:
+  🔴 Відключено: 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "empty_subscription_groups",
+			fields: fields{
+				shutdowns: testutil.NewShutdowns().WithDate(todayDate).
+					WithStubGroups().
+					Build(),
+				now: func() time.Time {
+					return middleOfDay
+				},
+			},
+			args: args{
+				sub: testutil.NewSubscription(123).Build(),
+				todayState: dal.NotificationState{
+					ChatID: 123,
+					Hashes: map[string]string{},
+				},
+			},
+			want: service.PowerSupplyMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mb := service.NewPowerSupplyScheduleMessageBuilder(tt.fields.shutdowns, tt.fields.now())
+			if tt.fields.nextDayShutdowns != nil {
+				mb.WithNextDay(*tt.fields.nextDayShutdowns)
+			}
+			got, err := mb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
+			if tt.wantErr(t, err) {
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}

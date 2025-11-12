@@ -11,40 +11,51 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
-// MessageBuilder builds notification messages for subscribed users
-type MessageBuilder struct {
-	shutdowns    dal.Shutdowns
-	nextDayTable *dal.Shutdowns // Optional next day shutdowns
-	now          time.Time
-}
+// messageTemplate is the main notification template
+// IMPORTANT: If you change this template or the rendering logic below, you must also update:
+// - internal/service/TEMPLATES.md - Update examples and documentation
+// - CLAUDE.md - Update message format examples in "PowerSupplyMessage Templates" section
+//
+//nolint:gochecknoglobals // it's template
+var messageTemplate = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
+{{range .Dates}}
+📅 {{.Date}}:
+{{range .Groups}}Група {{.GroupNum}}:
+{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
+{{end}}{{end}}
+{{end}}{{end}}`))
 
-// NewMessageBuilder creates a new message builder for a specific date and shutdowns data
-func NewMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *MessageBuilder {
-	return &MessageBuilder{
+type (
+	PowerSupplyMessage struct {
+		Text                  string
+		TodayUpdatedGroups    map[string]string // groupNum -> newHash for today
+		TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
+	}
+
+	PowerSupplyScheduleMessageBuilder struct {
+		shutdowns    dal.Shutdowns
+		nextDayTable *dal.Shutdowns // Optional next day shutdowns
+		now          time.Time
+	}
+)
+
+func NewPowerSupplyScheduleMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *PowerSupplyScheduleMessageBuilder {
+	return &PowerSupplyScheduleMessageBuilder{
 		shutdowns: shutdowns,
 		now:       now,
 	}
 }
 
-// WithNextDay adds tomorrow's shutdown schedule to the builder
-// Returns the builder for chaining
-func (mb *MessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *MessageBuilder {
+func (mb *PowerSupplyScheduleMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *PowerSupplyScheduleMessageBuilder {
 	mb.nextDayTable = &nextDayShutdowns
 	return mb
 }
 
-// Message contains the built message and updated subscription
-type Message struct {
-	Text                  string
-	TodayUpdatedGroups    map[string]string // groupNum -> newHash for today
-	TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
-}
-
 // Build generates a notification message for a subscription
-// Returns Message with message and hash updates, or empty result if no changes
+// Returns PowerSupplyMessage with message and hash updates, or empty result if no changes
 // If builder has next day data, tomorrowState must be provided
-func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (Message, error) {
-	result := Message{
+func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyMessage, error) {
+	result := PowerSupplyMessage{
 		TodayUpdatedGroups:    make(map[string]string),
 		TomorrowUpdatedGroups: make(map[string]string),
 	}
@@ -90,7 +101,6 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState 
 		}
 	}
 
-	// If no changes at all, return empty result
 	if len(dateSchedules) == 0 {
 		return result, nil
 	}
@@ -98,7 +108,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState 
 	// Render multi-date message
 	msg, err := renderMultiDateMessage(dateSchedules)
 	if err != nil {
-		return Message{}, fmt.Errorf("render message: %w", err)
+		return PowerSupplyMessage{}, fmt.Errorf("render message: %w", err)
 	}
 
 	result.Text = msg
@@ -113,7 +123,7 @@ type dateScheduleResult struct {
 }
 
 // processDateSchedule processes shutdown schedule for a single date
-func (mb *MessageBuilder) processDateSchedule(
+func (mb *PowerSupplyScheduleMessageBuilder) processDateSchedule(
 	shutdowns dal.Shutdowns,
 	notifState dal.NotificationState,
 	groupNums []string,
@@ -226,20 +236,6 @@ type DateSchedule struct {
 type NotificationMessage struct {
 	Dates []DateSchedule
 }
-
-// messageTemplate is the main notification template
-// IMPORTANT: If you change this template or the rendering logic below, you must also update:
-// - internal/service/TEMPLATES.md - Update examples and documentation
-// - CLAUDE.md - Update message format examples in "Message Templates" section
-//
-//nolint:gochecknoglobals // it's template
-var messageTemplate = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
-{{range .Dates}}
-📅 {{.Date}}:
-{{range .Groups}}Група {{.GroupNum}}:
-{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
-{{end}}{{end}}
-{{end}}{{end}}`))
 
 // buildGroupSchedule creates a GroupSchedule from periods and statuses
 func buildGroupSchedule(num string, periods []dal.Period, statuses []dal.Status) GroupSchedule {
