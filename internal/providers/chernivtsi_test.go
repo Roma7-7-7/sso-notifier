@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	"testing"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -104,7 +103,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 			}
 			got, gotHasNextPage, err := p.Shutdowns(t.Context())
 
-			if !tt.wantErr(t, err, fmt.Sprintf("ChernivtsiProvider_Shutdowns()")) {
+			if !tt.wantErr(t, err, "ChernivtsiProvider_Shutdowns()") {
 				return
 			}
 
