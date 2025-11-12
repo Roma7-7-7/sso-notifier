@@ -276,11 +276,12 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 
 		// Extract chatID from the alert key to determine expected behavior
 		var alertChatID int64
-		if i < 2 {
+		switch {
+		case i < 2:
 			alertChatID = chatID1
-		} else if i < 4 {
+		case i < 4:
 			alertChatID = chatID2
-		} else {
+		default:
 			alertChatID = chatID3
 		}
 
@@ -300,7 +301,7 @@ func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 
 	// Test purging non-existent chatID (should not error)
 	err = s.store.Purge(999)
-	s.NoError(err, "Purging non-existent chatID should not return an error")
+	s.Require().NoError(err, "Purging non-existent chatID should not return an error")
 
 	// Verify nothing else was affected
 	totalSubscriptionsAfterNoop, err := s.store.CountSubscriptions()
