@@ -1,19 +1,21 @@
-package dal
+package dal_test
 
 import (
 	"time"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
 func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
-	key1 := BuildAlertKey(1, "12025-11-23", "11:00", string(ON), "1")
-	key2 := BuildAlertKey(2, "12025-11-23", "11:00", string(ON), "1")
-	key3 := BuildAlertKey(1, "12025-11-24", "11:00", string(ON), "1")
-	key4 := BuildAlertKey(1, "12025-11-23", "11:30", string(ON), "1")
-	key5 := BuildAlertKey(1, "12025-11-23", "11:00", string(MAYBE), "1")
-	key6 := BuildAlertKey(1, "12025-11-23", "11:00", string(ON), "2")
-	unexistingKey := BuildAlertKey(7, "12025-11-23", "11:00", string(ON), "7")
+	key1 := dal.BuildAlertKey(1, "12025-11-23", "11:00", string(dal.ON), "1")
+	key2 := dal.BuildAlertKey(2, "12025-11-23", "11:00", string(dal.ON), "1")
+	key3 := dal.BuildAlertKey(1, "12025-11-24", "11:00", string(dal.ON), "1")
+	key4 := dal.BuildAlertKey(1, "12025-11-23", "11:30", string(dal.ON), "1")
+	key5 := dal.BuildAlertKey(1, "12025-11-23", "11:00", string(dal.MAYBE), "1")
+	key6 := dal.BuildAlertKey(1, "12025-11-23", "11:00", string(dal.ON), "2")
+	unexistingKey := dal.BuildAlertKey(7, "12025-11-23", "11:00", string(dal.ON), "7")
 
-	allKeys := []AlertKey{key1, key2, key3, key4, key5, key6}
+	allKeys := []dal.AlertKey{key1, key2, key3, key4, key5, key6}
 
 	for _, key := range allKeys {
 		alert, ok, err := s.store.GetAlert(key)
@@ -70,15 +72,15 @@ func (s *BoltDBTestSuite) TestBoltDB_Get_Put_Delete_Alert() {
 }
 
 func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
-	key1 := BuildAlertKey(1, "2025-11-23", "11:00", string(ON), "1")
-	key2 := BuildAlertKey(1, "2025-11-23", "11:30", string(MAYBE), "1")
-	key3 := BuildAlertKey(2, "2025-11-24", "11:00", string(ON), "2")
-	key4 := BuildAlertKey(2, "2025-11-25", "11:30", string(OFF), "2")
-	key5 := BuildAlertKey(3, "2025-11-25", "11:30", string(OFF), "3")
-	key6 := BuildAlertKey(3, "2025-11-25", "11:30", string(MAYBE), "3")
+	key1 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "1")
+	key2 := dal.BuildAlertKey(1, "2025-11-23", "11:30", string(dal.MAYBE), "1")
+	key3 := dal.BuildAlertKey(2, "2025-11-24", "11:00", string(dal.ON), "2")
+	key4 := dal.BuildAlertKey(2, "2025-11-25", "11:30", string(dal.OFF), "2")
+	key5 := dal.BuildAlertKey(3, "2025-11-25", "11:30", string(dal.OFF), "3")
+	key6 := dal.BuildAlertKey(3, "2025-11-25", "11:30", string(dal.MAYBE), "3")
 
 	sentAt := time.Now().UTC()
-	allKeys := []AlertKey{key1, key2, key3, key4, key5, key6}
+	allKeys := []dal.AlertKey{key1, key2, key3, key4, key5, key6}
 	for i, key := range allKeys {
 		s.Require().NoErrorf(s.store.PutAlert(key, sentAt.Add(time.Duration(i)*time.Hour)), "PutAlert err for key: %s", key)
 	}
