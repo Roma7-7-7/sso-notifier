@@ -5,28 +5,15 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"text/template"
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
-// messageTemplate is the main notification template
-// IMPORTANT: If you change this template or the rendering logic below, you must also update:
-// - internal/service/TEMPLATES.md - Update examples and documentation
-// - CLAUDE.md - Update message format examples in "PowerSupplyMessage Templates" section
-//
-//nolint:gochecknoglobals // it's template
-var messageTemplate = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
-{{range .Dates}}
-📅 {{.Date}}:
-{{range .Groups}}Група {{.GroupNum}}:
-{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
-{{end}}{{end}}
-{{end}}{{end}}`))
-
 type (
-	PowerSupplyMessage struct {
+	PowerSupplyScheduleMessage struct {
 		Text                  string
 		TodayUpdatedGroups    map[string]string // groupNum -> newHash for today
 		TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
@@ -36,13 +23,28 @@ type (
 		shutdowns    dal.Shutdowns
 		nextDayTable *dal.Shutdowns // Optional next day shutdowns
 		now          time.Time
+
+		template *template.Template
 	}
 )
 
 func NewPowerSupplyScheduleMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *PowerSupplyScheduleMessageBuilder {
+	// powerSupplyScheduleMessageTemplate is the main notification template
+	// IMPORTANT: If you change this template or the rendering logic below, you must also update:
+	// - internal/service/TEMPLATES.md - Update examples and documentation
+	// - CLAUDE.md - Update message format examples in "PowerSupplyScheduleMessage Templates" section
+	templ := template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
+{{range .Dates}}
+📅 {{.Date}}:
+{{range .Groups}}Група {{.GroupNum}}:
+{{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
+{{end}}{{end}}
+{{end}}{{end}}`))
 	return &PowerSupplyScheduleMessageBuilder{
 		shutdowns: shutdowns,
 		now:       now,
+
+		template: templ,
 	}
 }
 
@@ -52,10 +54,10 @@ func (mb *PowerSupplyScheduleMessageBuilder) WithNextDay(nextDayShutdowns dal.Sh
 }
 
 // Build generates a notification message for a subscription
-// Returns PowerSupplyMessage with message and hash updates, or empty result if no changes
+// Returns PowerSupplyScheduleMessage with message and hash updates, or empty result if no changes
 // If builder has next day data, tomorrowState must be provided
-func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyMessage, error) {
-	result := PowerSupplyMessage{
+func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
+	result := PowerSupplyScheduleMessage{
 		TodayUpdatedGroups:    make(map[string]string),
 		TomorrowUpdatedGroups: make(map[string]string),
 	}
@@ -106,9 +108,9 @@ func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todaySt
 	}
 
 	// Render multi-date message
-	msg, err := renderMultiDateMessage(dateSchedules)
+	msg, err := mb.renderMultiDateMessage(dateSchedules)
 	if err != nil {
-		return PowerSupplyMessage{}, fmt.Errorf("render message: %w", err)
+		return PowerSupplyScheduleMessage{}, fmt.Errorf("render message: %w", err)
 	}
 
 	result.Text = msg
@@ -157,6 +159,17 @@ func (mb *PowerSupplyScheduleMessageBuilder) processDateSchedule(
 	}
 
 	return result
+}
+
+// renderMultiDateMessage renders a message for multiple dates
+func (mb *PowerSupplyScheduleMessageBuilder) renderMultiDateMessage(dates []DateSchedule) (string, error) {
+	msg := NotificationMessage{
+		Dates: dates,
+	}
+
+	var buf bytes.Buffer
+	err := mb.template.Execute(&buf, msg)
+	return buf.String(), err
 }
 
 // shutdownGroupHash generates a hash for a shutdown group
@@ -258,13 +271,148 @@ func buildGroupSchedule(num string, periods []dal.Period, statuses []dal.Status)
 	}
 }
 
-// renderMultiDateMessage renders a message for multiple dates
-func renderMultiDateMessage(dates []DateSchedule) (string, error) {
-	msg := NotificationMessage{
-		Dates: dates,
+type (
+	PowerSupplyChangeMessage struct {
+		Status    dal.Status
+		StartTime string
+		Groups    []string // Group numbers (e.g., ["5", "7"])
+		Emoji     string   // Status emoji (🟢/🟡/🔴)
+		Label     string   // Status label in Ukrainian
 	}
 
+	PowerSupplyChangeMessageBuilder struct {
+		template *template.Template
+	}
+)
+
+func NewPowerSupplyChangeMessageBuilder() *PowerSupplyChangeMessageBuilder {
+	// powerSupplyChangeMessageTemplate is the template for 10-minute advance notifications
+	// IMPORTANT: If you change this template or the rendering logic below, you must also update:
+	// - internal/service/TEMPLATES.md - Update "Upcoming Notification Template" section
+	// - CLAUDE.md - Update message format examples in "Alerts Service" section
+	templ := template.Must(
+		template.New("upcoming").Funcs(template.FuncMap{
+			"joinGroups": func(groups []string) string {
+				return strings.Join(groups, ", ")
+			},
+		}).Parse(`⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+{{range .}}
+{{if eq (len .Groups) 1}}Група {{index .Groups 0}}:{{else}}Групи {{joinGroups .Groups}}:{{end}}
+{{.Emoji}} {{.Label}} об {{.StartTime}}
+{{end}}`))
+
+	return &PowerSupplyChangeMessageBuilder{
+		template: templ,
+	}
+}
+
+func (b *PowerSupplyChangeMessageBuilder) Build(alerts []Alert) string {
+	if len(alerts) == 0 {
+		return ""
+	}
+
+	type groupKey struct {
+		Status    dal.Status
+		StartTime string
+	}
+
+	// Group alerts by status and start time
+	grouped := make(map[groupKey][]string)
+	for _, a := range alerts {
+		key := groupKey{Status: a.Status, StartTime: a.StartTime}
+		grouped[key] = append(grouped[key], a.GroupNum)
+	}
+
+	// Convert to PowerSupplyChangeMessage structs
+	upcomingAlerts := make([]PowerSupplyChangeMessage, 0, len(grouped))
+
+	for key, groups := range grouped {
+		// Sort groups numerically
+		sort.Slice(groups, func(i, j int) bool {
+			numI, _ := strconv.Atoi(groups[i])
+			numJ, _ := strconv.Atoi(groups[j])
+			return numI < numJ
+		})
+
+		upcomingAlerts = append(upcomingAlerts, PowerSupplyChangeMessage{
+			Status:    key.Status,
+			StartTime: key.StartTime,
+			Groups:    groups,
+			Emoji:     getEmojiForStatus(key.Status),
+			Label:     getLabelForStatus(key.Status),
+		})
+	}
+
+	// Sort alerts by start time, then by minimum group number, then by status priority
+	sort.Slice(upcomingAlerts, func(i, j int) bool {
+		if upcomingAlerts[i].StartTime != upcomingAlerts[j].StartTime {
+			return upcomingAlerts[i].StartTime < upcomingAlerts[j].StartTime
+		}
+
+		// Get minimum group number for each alert (groups are already sorted)
+		minGroupI, _ := strconv.Atoi(upcomingAlerts[i].Groups[0])
+		minGroupJ, _ := strconv.Atoi(upcomingAlerts[j].Groups[0])
+
+		if minGroupI != minGroupJ {
+			return minGroupI < minGroupJ
+		}
+
+		return statusPriority(upcomingAlerts[i].Status) < statusPriority(upcomingAlerts[j].Status)
+	})
+
 	var buf bytes.Buffer
-	err := messageTemplate.Execute(&buf, msg)
-	return buf.String(), err
+	if err := b.template.Execute(&buf, upcomingAlerts); err != nil {
+		// Fallback to simple message on template error
+		return "⚠️ Увага! Незабаром зміниться електропостачання"
+	}
+
+	return strings.TrimSpace(buf.String())
+}
+
+// statusPriority returns sort priority for status (lower = higher priority)
+func statusPriority(status dal.Status) int {
+	const (
+		priorityOff     = 0
+		priorityMaybe   = 1
+		priorityOn      = 2
+		priorityDefault = 3
+	)
+	switch status {
+	case dal.OFF:
+		return priorityOff
+	case dal.MAYBE:
+		return priorityMaybe
+	case dal.ON:
+		return priorityOn
+	default:
+		return priorityDefault
+	}
+}
+
+// getEmojiForStatus returns the emoji for a status
+func getEmojiForStatus(status dal.Status) string {
+	switch status {
+	case dal.ON:
+		return "🟢"
+	case dal.OFF:
+		return "🔴"
+	case dal.MAYBE:
+		return "🟡"
+	default:
+		return "⚪"
+	}
+}
+
+// getLabelForStatus returns the Ukrainian label for a status
+func getLabelForStatus(status dal.Status) string {
+	switch status {
+	case dal.ON:
+		return "Відновлення електропостачання"
+	case dal.OFF:
+		return "Відключення електропостачання"
+	case dal.MAYBE:
+		return "Можливе відключення/відновлення електропостачання"
+	default:
+		return "Невідомий статус"
+	}
 }

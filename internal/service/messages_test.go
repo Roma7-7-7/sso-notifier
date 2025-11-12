@@ -52,7 +52,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    service.PowerSupplyMessage
+		want    service.PowerSupplyScheduleMessage
 		wantErr assert.ErrorAssertionFunc
 	}{
 		// ===================== Single group ===================== //
@@ -73,7 +73,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -107,7 +107,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -141,7 +141,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -176,7 +176,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -217,7 +217,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -258,7 +258,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -302,7 +302,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -352,7 +352,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -402,7 +402,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -454,7 +454,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -518,7 +518,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -582,7 +582,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -636,7 +636,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -664,7 +664,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -699,7 +699,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -738,7 +738,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -767,7 +767,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -810,7 +810,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-11:
@@ -857,7 +857,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -905,7 +905,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -962,7 +962,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1004,7 +1004,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1038,7 +1038,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1072,7 +1072,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
 
 📅 2025-11-10:
@@ -1104,7 +1104,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					Hashes: map[string]string{},
 				},
 			},
-			want: service.PowerSupplyMessage{
+			want: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -1122,6 +1122,329 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 			if tt.wantErr(t, err) {
 				assert.Equal(t, tt.want, got)
 			}
+		})
+	}
+}
+
+func TestPowerSupplyChangeMessageBuilder_Build(t *testing.T) {
+	type args struct {
+		alerts []service.Alert
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "empty_alerts",
+			args: args{
+				alerts: []service.Alert{},
+			},
+			want: "",
+		},
+		{
+			name: "combined",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:20",
+						Status:    dal.MAYBE,
+					},
+					{
+						GroupNum:  "3",
+						StartTime: "13:00",
+						Status:    dal.OFF,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🟢 Відновлення електропостачання об 12:00
+
+Група 2:
+🟡 Можливе відключення/відновлення електропостачання об 12:20
+
+Група 3:
+🔴 Відключення електропостачання об 13:00`,
+		},
+		{
+			name: "sort_by_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "23:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "09:00",
+						Status:    dal.MAYBE,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🟡 Можливе відключення/відновлення електропостачання об 09:00
+
+Група 1:
+🟢 Відновлення електропостачання об 12:00
+
+Група 1:
+🔴 Відключення електропостачання об 23:00`,
+		},
+		{
+			name: "group_by_status_and_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Групи 1, 2:
+🟢 Відновлення електропостачання об 12:00`,
+		},
+		{
+			name: "numeric_group_sorting_at_same_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "12",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "11",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Групи 1, 2, 11, 12:
+🟢 Відновлення електропостачання об 12:00`,
+		},
+		{
+			name: "sort_by_status_priority_same_time_same_group",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.MAYBE,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🔴 Відключення електропостачання об 12:00
+
+Група 1:
+🟡 Можливе відключення/відновлення електропостачання об 12:00
+
+Група 1:
+🟢 Відновлення електропостачання об 12:00`,
+		},
+		{
+			name: "sort_by_min_group_number_same_time_different_status",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "5",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "3",
+						StartTime: "12:00",
+						Status:    dal.MAYBE,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 2:
+🟢 Відновлення електропостачання об 12:00
+
+Група 3:
+🟡 Можливе відключення/відновлення електропостачання об 12:00
+
+Група 5:
+🔴 Відключення електропостачання об 12:00`,
+		},
+		{
+			name: "group_multiple_groups_same_status_time",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "3",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "5",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Групи 1, 2, 3, 5:
+🔴 Відключення електропостачання об 12:00`,
+		},
+		{
+			name: "mixed_grouping_scenario",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "3",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "4",
+						StartTime: "13:00",
+						Status:    dal.MAYBE,
+					},
+					{
+						GroupNum:  "5",
+						StartTime: "13:00",
+						Status:    dal.MAYBE,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Групи 1, 2:
+🔴 Відключення електропостачання об 12:00
+
+Група 3:
+🟢 Відновлення електропостачання об 12:00
+
+Групи 4, 5:
+🟡 Можливе відключення/відновлення електропостачання об 13:00`,
+		},
+		{
+			name: "complex_sorting_time_group_status",
+			args: args{
+				alerts: []service.Alert{
+					{
+						GroupNum:  "3",
+						StartTime: "14:00",
+						Status:    dal.MAYBE,
+					},
+					{
+						GroupNum:  "1",
+						StartTime: "12:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "2",
+						StartTime: "12:00",
+						Status:    dal.ON,
+					},
+					{
+						GroupNum:  "11",
+						StartTime: "13:00",
+						Status:    dal.OFF,
+					},
+					{
+						GroupNum:  "5",
+						StartTime: "13:00",
+						Status:    dal.OFF,
+					},
+				},
+			},
+			want: `⚠️ Увага! Згідно з графіком Чернівціобленерго незабаром зміниться електропостачання.
+
+Група 1:
+🔴 Відключення електропостачання об 12:00
+
+Група 2:
+🟢 Відновлення електропостачання об 12:00
+
+Групи 5, 11:
+🔴 Відключення електропостачання об 13:00
+
+Група 3:
+🟡 Можливе відключення/відновлення електропостачання об 14:00`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := service.NewPowerSupplyChangeMessageBuilder()
+			assert.Equalf(t, tt.want, b.Build(tt.args.alerts), "Build(%v)", tt.args.alerts)
 		})
 	}
 }
