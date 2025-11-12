@@ -67,24 +67,24 @@ func (s *BoltDB) PutNotificationState(state NotificationState) error {
 // DeleteNotificationStates removes all notification states for a specific user
 func (s *BoltDB) DeleteNotificationStates(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(notificationsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
-		prefix := fmt.Sprintf("%d_", chatID)
-		c := b.Cursor()
-
-		// Find and delete all keys with this chatID prefix
-		for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
-			if err := b.Delete(k); err != nil {
-				return fmt.Errorf("delete notification state for key %s: %w", k, err)
-			}
-		}
-
-		return nil
+		return s.deleteNotificationStates(tx, chatID)
 	})
+}
+
+func (s *BoltDB) deleteNotificationStates(tx *bbolt.Tx, chatID int64) error {
+	b := tx.Bucket([]byte(notificationsBucket))
+
+	prefix := fmt.Sprintf("%d_", chatID)
+	c := b.Cursor()
+
+	// Find and delete all keys with this chatID prefix
+	for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
+		if err := b.Delete(k); err != nil {
+			return fmt.Errorf("delete notification state for key %s: %w", k, err)
+		}
+	}
+
+	return nil
 }
 
 func notificationKey(chatID int64, date string) string {

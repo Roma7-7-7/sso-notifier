@@ -1,7 +1,6 @@
 package dal
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -23,7 +22,6 @@ const (
 	SettingNotifyOn    SettingKey = "notify_on_10min"
 	SettingNotifyOff   SettingKey = "notify_off_10min"
 	SettingNotifyMaybe SettingKey = "notify_maybe_10min"
-	SettingWindowMins  SettingKey = "notification_window_minutes"
 )
 
 // GetAlert checks if an alert was already sent for the given key
@@ -32,10 +30,6 @@ func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 	found := false
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			return nil
-		}
-
 		data := b.Get([]byte(key))
 		if data == nil {
 			return nil
@@ -57,10 +51,6 @@ func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 func (s *BoltDB) PutAlert(key AlertKey, sentAt time.Time) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			return errors.New("alerts bucket not found")
-		}
-
 		timestamp := []byte(sentAt.Format(time.RFC3339))
 		if err := b.Put([]byte(key), timestamp); err != nil {
 			return fmt.Errorf("put alert for key %s: %w", key, err)
@@ -74,11 +64,6 @@ func (s *BoltDB) PutAlert(key AlertKey, sentAt time.Time) error {
 func (s *BoltDB) DeleteAlert(key AlertKey) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
 		if err := b.Delete([]byte(key)); err != nil {
 			return fmt.Errorf("delete alert for key %s: %w", key, err)
 		}
@@ -90,22 +75,21 @@ func (s *BoltDB) DeleteAlert(key AlertKey) error {
 // DeleteAlerts removes all alert records for a specific user
 func (s *BoltDB) DeleteAlerts(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(alertsBucket))
-		if b == nil {
-			// Bucket doesn't exist, nothing to delete
-			return nil
-		}
-
-		prefix := fmt.Sprintf("%d_", chatID)
-		c := b.Cursor()
-
-		// Find and delete all keys with this chatID prefix
-		for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
-			if err := b.Delete(k); err != nil {
-				return fmt.Errorf("delete alert for key %s: %w", k, err)
-			}
-		}
-
-		return nil
+		return s.deleteAlerts(tx, chatID)
 	})
+}
+
+func (s *BoltDB) deleteAlerts(tx *bbolt.Tx, chatID int64) error {
+	b := tx.Bucket([]byte(alertsBucket))
+	prefix := fmt.Sprintf("%d_", chatID)
+	c := b.Cursor()
+
+	// Find and delete all keys with this chatID prefix
+	for k, _ := c.Seek([]byte(prefix)); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == prefix; k, _ = c.Next() {
+		if err := b.Delete(k); err != nil {
+			return fmt.Errorf("delete alert for key %s: %w", k, err)
+		}
+	}
+
+	return nil
 }

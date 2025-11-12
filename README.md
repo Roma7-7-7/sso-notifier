@@ -1,5 +1,7 @@
 # SSO Notifier
 
+[![Coverage](https://img.shields.io/badge/coverage-15.1%25-red)](https://github.com/Roma7-7-7/sso-notifier)
+
 A Telegram bot that monitors electricity power outage schedules in Chernivtsi, Ukraine and sends notifications to subscribers when the schedule changes.
 
 ## Overview
@@ -177,6 +179,32 @@ make build
 ```
 
 This produces a static binary at `./bin/sso-notifier` (CGO_ENABLED=0 for portability).
+
+### Testing & Coverage
+
+Run tests:
+```bash
+go test ./...
+```
+
+Run tests with coverage:
+```bash
+go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+```
+
+**Coverage Badge**: The coverage badge in this README is automatically validated by CI on every pull request. If you add tests and the coverage changes, update the badge:
+
+```bash
+./scripts/update-coverage-badge.sh
+```
+
+This script will:
+- Calculate the current test coverage
+- Update the badge in README.md with the correct percentage
+- Set the appropriate badge color (red < 20%, orange < 40%, yellow < 60%, green < 80%, bright green ≥ 80%)
+
+The CI will fail if the badge doesn't match actual coverage, ensuring it stays up-to-date.
 
 ### Dependencies
 

@@ -82,6 +82,18 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(subscriptionsBucket))
 
+		existing, exists, err := s.GetSubscription(sub.ChatID)
+		if err != nil {
+			return fmt.Errorf("get existing subscription: %w", err)
+		}
+
+		if !exists {
+			sub.CreatedAt = s.now()
+		} else {
+			// make sure we do not override created at
+			sub.CreatedAt = existing.CreatedAt
+		}
+
 		id := i64tob(sub.ChatID)
 		data, err := json.Marshal(&sub)
 		if err != nil {
@@ -114,47 +126,4 @@ func GetBoolSetting(settings map[SettingKey]interface{}, key SettingKey, default
 	}
 
 	return boolVal
-}
-
-// GetIntSetting retrieves an integer setting from the settings map with a default value
-func GetIntSetting(settings map[SettingKey]interface{}, key SettingKey, defaultValue int) int {
-	if settings == nil {
-		return defaultValue
-	}
-
-	val, exists := settings[key]
-	if !exists {
-		return defaultValue
-	}
-
-	// Handle both int and float64 (JSON unmarshaling uses float64 for numbers)
-	switch v := val.(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	case int64:
-		return int(v)
-	default:
-		return defaultValue
-	}
-}
-
-// GetStringSetting retrieves a string setting from the settings map with a default value
-func GetStringSetting(settings map[string]interface{}, key SettingKey, defaultValue string) string {
-	if settings == nil {
-		return defaultValue
-	}
-
-	val, exists := settings[string(key)]
-	if !exists {
-		return defaultValue
-	}
-
-	strVal, ok := val.(string)
-	if !ok {
-		return defaultValue
-	}
-
-	return strVal
 }
