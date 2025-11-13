@@ -6,9 +6,9 @@
 set -e
 
 echo "🧪 Running tests to calculate coverage..."
-go test -coverprofile=coverage.out ./... > /dev/null 2>&1
+make coverage > /dev/null 2>&1
 
-ACTUAL_COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+ACTUAL_COVERAGE=$(go tool cover -func=coverage.filtered.out | grep total | awk '{print $3}' | sed 's/%//')
 BADGE_COVERAGE=$(grep -o 'coverage-[0-9.]*%25' README.md | head -1 | sed 's/coverage-//;s/%25//')
 
 echo "Current badge coverage: ${BADGE_COVERAGE}%"
@@ -16,7 +16,6 @@ echo "Actual coverage: ${ACTUAL_COVERAGE}%"
 
 if [ "$ACTUAL_COVERAGE" = "$BADGE_COVERAGE" ]; then
   echo "✅ Coverage badge is already up to date!"
-  rm coverage.out
   exit 0
 fi
 
@@ -42,6 +41,4 @@ rm README.md.bak
 
 echo "✅ Coverage badge updated to ${ACTUAL_COVERAGE}% with color ${COLOR}"
 echo "📄 Please commit the updated README.md"
-
-rm coverage.out
 

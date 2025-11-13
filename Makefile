@@ -36,5 +36,6 @@ test:
 coverage:
 	@echo "Running tests with coverage..."
 	@go test -coverprofile=coverage.out ./...
-	@go tool cover -func=coverage.out | grep total | awk '{print "Total Coverage: " $$3}'
-	@rm coverage.out
+	@echo "Filtering excluded packages..."
+	@grep -v -E '(github\.com/Roma7-7-7/sso-notifier/cmd/|github\.com/Roma7-7-7/sso-notifier/internal/dal/migrations/|github\.com/Roma7-7-7/sso-notifier/internal/dal/testutil/|/mocks/)' coverage.out > coverage.filtered.out || true
+	@go tool cover -func=coverage.filtered.out | grep total | awk '{print "Total Coverage: " $$3}'
