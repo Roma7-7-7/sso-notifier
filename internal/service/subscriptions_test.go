@@ -8,6 +8,7 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
@@ -25,9 +26,8 @@ func TestSubscriptions_IsSubscribed(t *testing.T) {
 		store.EXPECT().ExistsSubscription(chatID).Return(true, nil)
 
 		exists, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
-		if assert.NoError(t, err) {
-			assert.True(t, exists)
-		}
+		require.NoError(t, err)
+		assert.True(t, exists)
 	})
 
 	t.Run("error", func(t *testing.T) {
@@ -38,8 +38,7 @@ func TestSubscriptions_IsSubscribed(t *testing.T) {
 		store.EXPECT().ExistsSubscription(chatID).Return(false, assert.AnError)
 
 		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "check if subscription exists: ")
 	})
 }
@@ -57,7 +56,8 @@ func TestSubscriptions_GetSubscriptions(t *testing.T) {
 		}, nil)
 
 		subs, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscriptions()
-		if assert.NoError(t, err) && assert.Len(t, subs, 3) {
+		require.NoError(t, err)
+		if assert.Len(t, subs, 3) {
 			assert.Equal(t, subs, []dal.Subscription{
 				testutil.NewSubscription(123).WithCreatedAt(subs[0].CreatedAt).Build(),
 				testutil.NewSubscription(456).WithCreatedAt(subs[1].CreatedAt).Build(),
@@ -73,8 +73,7 @@ func TestSubscriptions_GetSubscriptions(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{}, assert.AnError)
 		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscriptions()
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "get subscriptions: ")
 	})
 }
@@ -92,7 +91,8 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 		)
 
 		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
-		if assert.NoError(t, err) && assert.Len(t, groups, 3) {
+		require.NoError(t, err)
+		if assert.Len(t, groups, 3) {
 			assert.ElementsMatch(t, []string{"1", "5", "11"}, groups)
 		}
 	})
@@ -109,7 +109,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 		)
 
 		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, groups)
 	})
 
@@ -127,7 +127,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 		)
 
 		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, groups)
 	})
 
@@ -143,10 +143,8 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 		)
 
 		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
-		if assert.Error(t, err) {
-			assert.ErrorIs(t, err, assert.AnError)
-			assert.ErrorContains(t, err, "get subscription: ")
-		}
+		require.ErrorIs(t, err, assert.AnError)
+		assert.ErrorContains(t, err, "get subscription: ")
 	})
 }
 
@@ -329,7 +327,7 @@ func TestSubscriptions_Unsubscribe(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().Purge(chatID).Return(nil)
 
-		assert.NoError(t, service.NewSubscription(store, slog.New(slog.DiscardHandler)).Unsubscribe(chatID))
+		require.NoError(t, service.NewSubscription(store, slog.New(slog.DiscardHandler)).Unsubscribe(chatID))
 	})
 
 	t.Run("error", func(t *testing.T) {
@@ -340,10 +338,8 @@ func TestSubscriptions_Unsubscribe(t *testing.T) {
 		store.EXPECT().Purge(chatID).Return(assert.AnError)
 
 		err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).Unsubscribe(chatID)
-		if assert.Error(t, err) {
-			assert.ErrorIs(t, err, assert.AnError)
-			assert.ErrorContains(t, err, "purge subscription: ")
-		}
+		require.ErrorIs(t, err, assert.AnError)
+		assert.ErrorContains(t, err, "purge subscription: ")
 	})
 }
 
@@ -361,7 +357,8 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 			)
 
 		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
-		if assert.NoError(t, err) && assert.Len(t, settings, 2) {
+		require.NoError(t, err)
+		if assert.Len(t, settings, 2) {
 			assert.Equal(t, true, settings[dal.SettingNotifyOn], "settings should have been set")
 			assert.Equal(t, false, settings[dal.SettingNotifyMaybe], "settings should not be set")
 		}
@@ -375,7 +372,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		store.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, nil)
 
 		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, settings)
 	})
 
@@ -389,7 +386,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		store.EXPECT().GetSubscription(chatID).Return(sub, true, nil)
 
 		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, settings)
 	})
 
@@ -401,10 +398,8 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		store.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, assert.AnError)
 
 		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
-		if assert.Error(t, err) {
-			assert.ErrorIs(t, err, assert.AnError)
-			assert.ErrorContains(t, err, "get subscription: ")
-		}
+		require.ErrorIs(t, err, assert.AnError)
+		assert.ErrorContains(t, err, "get subscription: ")
 	})
 }
 
