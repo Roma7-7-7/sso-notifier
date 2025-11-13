@@ -4,6 +4,7 @@ package testutil
 import (
 	"fmt"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -57,6 +58,10 @@ func (b *SubscriptionBuilder) WithSetting(key dal.SettingKey, value interface{})
 // Build returns the constructed subscription
 func (b *SubscriptionBuilder) Build() dal.Subscription {
 	return b.sub
+}
+
+func (b *SubscriptionBuilder) BuildMatcher(t *testing.T) *SubscriptionMatcher {
+	return NewSubscriptionMatcher(t, b.sub)
 }
 
 // ShutdownsBuilder provides fluent API for building test shutdowns

@@ -207,6 +207,7 @@ linters:
           - noctx
           - wrapcheck
           - revive
+          - lll
         path: _test\.go
       - linters:
           - gocognit

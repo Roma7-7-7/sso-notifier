@@ -12,6 +12,8 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 )
 
+//go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStor,ShutdownsProvider
+
 type ShutdownsStore interface {
 	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)
 	PutShutdowns(d dal.Date, s dal.Shutdowns) error
@@ -54,7 +56,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
 	if err != nil {
 		if !errors.Is(err, providers.ErrCheckNextDayAvailability) {
-			return fmt.Errorf("get chernivtsi shutdowns for today: %w", err)
+			return fmt.Errorf("get shutdowns for today: %w", err)
 		}
 		s.log.WarnContext(ctx, "failed to check next day availability", "error", err)
 	}
