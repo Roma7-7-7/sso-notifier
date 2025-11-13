@@ -29,12 +29,12 @@ jobs:
       - name: Run build
         run: make build
 
-      - name: Run testing
-        run: go test -coverprofile=coverage.out -v ./...
+      - name: Run tests and generate coverage
+        run: make coverage
 
       - name: Check coverage badge matches actual coverage
         run: |
-          ACTUAL_COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          ACTUAL_COVERAGE=$(go tool cover -func=coverage.filtered.out | grep total | awk '{print $3}' | sed 's/%//')
           
           # Extract coverage from README badge (handles both with and without color suffix)
           BADGE_COVERAGE=$(grep -o 'coverage-[0-9.]*%25' README.md | head -1 | sed 's/coverage-//;s/%25.*//')
