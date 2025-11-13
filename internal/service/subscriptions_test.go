@@ -58,11 +58,11 @@ func TestSubscriptions_GetSubscriptions(t *testing.T) {
 		subs, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscriptions()
 		require.NoError(t, err)
 		if assert.Len(t, subs, 3) {
-			assert.Equal(t, subs, []dal.Subscription{
+			assert.Equal(t, []dal.Subscription{
 				testutil.NewSubscription(123).WithCreatedAt(subs[0].CreatedAt).Build(),
 				testutil.NewSubscription(456).WithCreatedAt(subs[1].CreatedAt).Build(),
 				testutil.NewSubscription(789).WithCreatedAt(subs[2].CreatedAt).Build(),
-			})
+			}, subs)
 		}
 	})
 
