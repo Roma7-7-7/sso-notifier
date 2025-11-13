@@ -10,6 +10,8 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
+//go:generate mockgen -package mocks -destination mocks/subscriptions.go . SubscriptionsStore
+
 var ErrSubscriptionNotFound = errors.New("subscription not found")
 
 type SubscriptionsStore interface {
@@ -117,7 +119,7 @@ func (s *Subscriptions) ToggleGroupSubscription(chatID int64, groupNum string) e
 
 func (s *Subscriptions) Unsubscribe(chatID int64) error {
 	if err := s.store.Purge(chatID); err != nil {
-		return fmt.Errorf("purge subscriptions: %w", err)
+		return fmt.Errorf("purge subscription: %w", err)
 	}
 	return nil
 }
@@ -167,17 +169,4 @@ func (s *Subscriptions) ToggleSetting(chatID int64, key dal.SettingKey, defaultV
 		"newValue", newValue)
 
 	return nil
-}
-
-// GetBoolSetting retrieves a boolean setting for a user
-func (s *Subscriptions) GetBoolSetting(chatID int64, key dal.SettingKey, defaultValue bool) (bool, error) {
-	sub, exists, err := s.store.GetSubscription(chatID)
-	if err != nil {
-		return defaultValue, fmt.Errorf("get subscription: %w", err)
-	}
-	if !exists {
-		return defaultValue, nil
-	}
-
-	return dal.GetBoolSetting(sub.Settings, key, defaultValue), nil
 }

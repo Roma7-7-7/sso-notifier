@@ -18,13 +18,11 @@ type MessageSender interface {
 
 type SubscriptionService interface {
 	IsSubscribed(chatID int64) (bool, error)
-	GetSubscriptions() ([]dal.Subscription, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
 	ToggleGroupSubscription(chatID int64, number string) error
 	Unsubscribe(chatID int64) error
 	GetSettings(chatID int64) (map[dal.SettingKey]interface{}, error)
 	ToggleSetting(chatID int64, key dal.SettingKey, defaultValue bool) error
-	GetBoolSetting(chatID int64, key dal.SettingKey, defaultValue bool) (bool, error)
 }
 
 type Bot struct {
