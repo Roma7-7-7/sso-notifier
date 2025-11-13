@@ -113,6 +113,24 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 		assert.Empty(t, groups)
 	})
 
+	t.Run("exists_but_groups_nil", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mocks.NewMockSubscriptionsStore(ctrl)
+		sub := testutil.NewSubscription(chatID).Build()
+		sub.Groups = nil
+		store.EXPECT().GetSubscription(chatID).Return(
+			sub,
+			true,
+			nil,
+		)
+
+		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
+		assert.NoError(t, err)
+		assert.Empty(t, groups)
+	})
+
 	t.Run("error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -355,6 +373,20 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, nil)
+
+		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
+		assert.NoError(t, err)
+		assert.Empty(t, settings)
+	})
+
+	t.Run("exists_but_settings_nil", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mocks.NewMockSubscriptionsStore(ctrl)
+		sub := testutil.NewSubscription(chatID).Build()
+		sub.Settings = nil
+		store.EXPECT().GetSubscription(chatID).Return(sub, true, nil)
 
 		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
 		assert.NoError(t, err)
