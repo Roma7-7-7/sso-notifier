@@ -123,18 +123,36 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 func (s *Alerts) processSubscriptionAlert(
 	ctx context.Context,
 	sub dal.Subscription,
-	alerts []Alert,
+	allAlerts []Alert,
 	now time.Time,
 ) error {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
 
-	alerts, err := FilterPowerSupplyChangeAlertsBySubscription(sub, alerts, s.store.GetAlert)
-	if err != nil {
-		return fmt.Errorf("filter power supply change alerts: %w", err)
+	filteredAlerts := make([]Alert, 0, len(allAlerts))
+
+	for _, alert := range allAlerts {
+		if _, subscribed := sub.Groups[alert.GroupNum]; !subscribed {
+			continue
+		}
+
+		settingKey := getSettingKeyForStatus(alert.Status)
+		if !dal.GetBoolSetting(sub.Settings, settingKey, false) {
+			continue
+		}
+
+		alertKey := dal.BuildAlertKey(sub.ChatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
+		if _, exists, err := s.store.GetAlert(alertKey); err != nil {
+			return fmt.Errorf("get alert with key %s: %w", alertKey, err)
+		} else if exists {
+			// alert already sent
+			continue
+		}
+
+		filteredAlerts = append(filteredAlerts, alert)
 	}
 
-	message := s.messageBuilder.Build(alerts)
+	message := s.messageBuilder.Build(filteredAlerts)
 	if message == "" {
 		return nil
 	}
@@ -150,9 +168,9 @@ func (s *Alerts) processSubscriptionAlert(
 		return nil
 	}
 
-	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(alerts))
+	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(filteredAlerts))
 
-	for _, alert := range alerts {
+	for _, alert := range filteredAlerts {
 		alertKey := dal.BuildAlertKey(chatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
 		if err := s.store.PutAlert(alertKey, now); err != nil {
 			log.ErrorContext(ctx, "failed to mark alert as sent", "key", alertKey, "error", err)
@@ -201,35 +219,6 @@ func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, targ
 				})
 			}
 		}
-	}
-
-	return res, nil
-}
-
-type AlertFetcher func(key dal.AlertKey) (time.Time, bool, error)
-
-func FilterPowerSupplyChangeAlertsBySubscription(sub dal.Subscription, alerts []Alert, fetchAlert AlertFetcher) ([]Alert, error) {
-	res := make([]Alert, 0, len(alerts))
-
-	for _, alert := range alerts {
-		if _, subscribed := sub.Groups[alert.GroupNum]; !subscribed {
-			continue
-		}
-
-		settingKey := getSettingKeyForStatus(alert.Status)
-		if !dal.GetBoolSetting(sub.Settings, settingKey, false) {
-			continue
-		}
-
-		alertKey := dal.BuildAlertKey(sub.ChatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
-		if _, exists, err := fetchAlert(alertKey); err != nil {
-			return nil, fmt.Errorf("get alert %s: %w", alertKey, err)
-		} else if exists {
-			// alert already sent
-			continue
-		}
-
-		res = append(res, alert)
 	}
 
 	return res, nil
