@@ -49,7 +49,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyUpcomingShutdowns)
+		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyPowerSupplyChanges)
 	}()
 
 	wg.Wait()
