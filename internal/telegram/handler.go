@@ -11,6 +11,10 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
+//go:generate mockgen -package mocks -destination mocks/telebot.go -mock_names Context=MockTelebotContext gopkg.in/telebot.v3/ Context
+
+//go:generate mockgen -package mocks -destination mocks/subscriptions.go . Subscriptions
+
 type Subscriptions interface {
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
