@@ -15,6 +15,8 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/subscriptions.go . Subscriptions
 
+const genericErrorMsg = "Щось пішло не так. Будь ласка, спробуйте пізніше."
+
 type Subscriptions interface {
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
@@ -48,7 +50,7 @@ func (h *Handler) Start(c tb.Context) error {
 		h.log.Error("failed to check if user is subscribed",
 			"error", err,
 			"chatID", chatID)
-		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 
 	h.log.Debug("start handler called",
@@ -65,7 +67,7 @@ func (h *Handler) Start(c tb.Context) error {
 			h.log.Error("failed to get subscribed groups",
 				"error", err,
 				"chatID", chatID)
-			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, genericErrorMsg, nil)
 		}
 
 		// Build message with group list
@@ -90,7 +92,7 @@ func (h *Handler) ManageGroups(c tb.Context) error {
 		h.log.Error("failed to get subscribed groups",
 			"error", err,
 			"chatID", chatID)
-		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 
 	// Convert to map for quick lookup
@@ -103,6 +105,61 @@ func (h *Handler) ManageGroups(c tb.Context) error {
 	markup := h.markups.buildDynamicGroupsMarkup(subscribedMap)
 
 	return h.sendOrDelete(c, "Оберіть групи для підписки\n(натисніть щоб додати/видалити)", markup)
+}
+
+func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
+	return func(c tb.Context) error {
+		chatID := c.Sender().ID
+
+		if err := h.subscriptions.ToggleGroupSubscription(chatID, groupNumber); err != nil {
+			h.log.Error("failed to toggle subscription",
+				"error", err,
+				"chatID", chatID,
+				"groupNum", groupNumber)
+			return h.sendOrDelete(c, genericErrorMsg, nil)
+		}
+
+		// Get updated subscriptions
+		subscribedGroups, err := h.subscriptions.GetSubscribedGroups(chatID)
+		if err != nil {
+			h.log.Error("failed to get subscribed groups after toggle",
+				"error", err,
+				"chatID", chatID)
+			return h.sendOrDelete(c, genericErrorMsg, nil)
+		}
+
+		h.log.Info("user toggled group subscription",
+			"chatID", chatID,
+			"groupNum", groupNumber,
+			"subscribedGroups", subscribedGroups)
+
+		// Convert to map for quick lookup
+		subscribedMap := make(map[string]bool)
+		isSubscribed := false
+		for _, gNum := range subscribedGroups {
+			subscribedMap[gNum] = true
+			if gNum == groupNumber {
+				isSubscribed = true
+			}
+		}
+
+		// Build updated markup
+		markup := h.markups.buildDynamicGroupsMarkup(subscribedMap)
+
+		// Show feedback message
+		var message string
+		if isSubscribed {
+			message = fmt.Sprintf("✅ Підписано на групу %s\n\nОберіть групи для підписки\n(натисніть щоб додати/видалити)", groupNumber)
+		} else {
+			if len(subscribedGroups) == 0 {
+				// User removed all groups - return to main menu
+				return h.sendOrDelete(c, "Ви відписані від усіх груп", h.markups.main.unsubscribed.ReplyMarkup)
+			}
+			message = fmt.Sprintf("❌ Відписано від групи %s\n\nОберіть групи для підписки\n(натисніть щоб додати/видалити)", groupNumber)
+		}
+
+		return h.sendOrDelete(c, message, markup)
+	}
 }
 
 func (h *Handler) Callback(c tb.Context) error {
@@ -177,61 +234,6 @@ func (h *Handler) Callback(c tb.Context) error {
 	}
 }
 
-func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
-	return func(c tb.Context) error {
-		chatID := c.Sender().ID
-
-		if err := h.subscriptions.ToggleGroupSubscription(chatID, groupNumber); err != nil {
-			h.log.Error("failed to toggle subscription",
-				"error", err,
-				"chatID", chatID,
-				"groupNum", groupNumber)
-			return h.sendOrDelete(c, "Не вдалось оновити підписку. Будь ласка, спробуйте пізніше.", nil)
-		}
-
-		// Get updated subscriptions
-		subscribedGroups, err := h.subscriptions.GetSubscribedGroups(chatID)
-		if err != nil {
-			h.log.Error("failed to get subscribed groups after toggle",
-				"error", err,
-				"chatID", chatID)
-			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
-		}
-
-		h.log.Info("user toggled group subscription",
-			"chatID", chatID,
-			"groupNum", groupNumber,
-			"subscribedGroups", subscribedGroups)
-
-		// Convert to map for quick lookup
-		subscribedMap := make(map[string]bool)
-		isSubscribed := false
-		for _, gNum := range subscribedGroups {
-			subscribedMap[gNum] = true
-			if gNum == groupNumber {
-				isSubscribed = true
-			}
-		}
-
-		// Build updated markup
-		markup := h.markups.buildDynamicGroupsMarkup(subscribedMap)
-
-		// Show feedback message
-		var message string
-		if isSubscribed {
-			message = fmt.Sprintf("✅ Підписано на групу %s\n\nОберіть групи для підписки\n(натисніть щоб додати/видалити)", groupNumber)
-		} else {
-			if len(subscribedGroups) == 0 {
-				// User removed all groups - return to main menu
-				return h.sendOrDelete(c, "Ви відписані від усіх груп", h.markups.main.unsubscribed.ReplyMarkup)
-			}
-			message = fmt.Sprintf("❌ Відписано від групи %s\n\nОберіть групи для підписки\n(натисніть щоб додати/видалити)", groupNumber)
-		}
-
-		return h.sendOrDelete(c, message, markup)
-	}
-}
-
 func (h *Handler) Unsubscribe(c tb.Context) error {
 	chatID := c.Sender().ID
 
@@ -255,7 +257,7 @@ func (h *Handler) Settings(c tb.Context) error {
 		h.log.Error("failed to check subscription status",
 			"error", err,
 			"chatID", chatID)
-		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 
 	if !subscribed {
@@ -267,7 +269,7 @@ func (h *Handler) Settings(c tb.Context) error {
 		h.log.Error("failed to get settings",
 			"error", err,
 			"chatID", chatID)
-		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 
 	markup := h.markups.buildSettingsMarkup(settings)
@@ -300,7 +302,7 @@ func (h *Handler) ToggleSettingHandler(settingKey dal.SettingKey) func(c tb.Cont
 			h.log.Error("failed to get settings after toggle",
 				"error", err,
 				"chatID", chatID)
-			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, genericErrorMsg, nil)
 		}
 
 		markup := h.markups.buildSettingsMarkup(settings)
