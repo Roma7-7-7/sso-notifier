@@ -15,6 +15,8 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
 
+//go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore
+
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
 type TelegramClient interface {

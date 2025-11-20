@@ -87,7 +87,7 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	targetTime := now.Add(defaultAlertWindowMinutes * time.Minute)
 	s.log.DebugContext(ctx, "checking for events", "targetTime", targetTime.Format("15:04"))
 
-	today := dal.DateByTime(s.clock.Now())
+	today := dal.DateByTime(now)
 	shutdowns, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return fmt.Errorf("get shutdowns: %w", err)

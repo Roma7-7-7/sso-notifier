@@ -40,6 +40,11 @@ func (b *SubscriptionBuilder) WithGroups(groupNums ...string) *SubscriptionBuild
 	return b
 }
 
+// WithAllGroups adds all group subscriptions
+func (b *SubscriptionBuilder) WithAllGroups() *SubscriptionBuilder {
+	return b.WithGroups("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")
+}
+
 // WithCreatedAt sets the creation time
 func (b *SubscriptionBuilder) WithCreatedAt(t time.Time) *SubscriptionBuilder {
 	b.sub.CreatedAt = t
@@ -220,12 +225,7 @@ func NewNotificationState(chatID int64, date dal.Date) *NotificationStateBuilder
 			ChatID: chatID,
 			Date:   date.ToKey(),
 			SentAt: time.Now().UTC(),
-			Hashes: map[string]string{
-				"1": "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY",
-				"2": "MYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYY",
-				"3": "NNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNN",
-				"4": "MNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNN",
-			},
+			Hashes: map[string]string{},
 		},
 	}
 }
