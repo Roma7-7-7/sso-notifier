@@ -12,7 +12,7 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 )
 
-//go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStor,ShutdownsProvider
+//go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStore,ShutdownsProvider
 
 type ShutdownsStore interface {
 	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)

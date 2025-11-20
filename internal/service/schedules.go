@@ -10,6 +10,10 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
 
+type Clock interface {
+	Now() time.Time
+}
+
 type processFn func(ctx context.Context) error
 
 type Scheduler struct {
@@ -49,7 +53,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyUpcomingShutdowns)
+		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyPowerSupplyChanges)
 	}()
 
 	wg.Wait()

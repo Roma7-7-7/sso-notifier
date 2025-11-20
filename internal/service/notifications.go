@@ -14,6 +14,8 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
+//go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
+
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
 type TelegramClient interface {

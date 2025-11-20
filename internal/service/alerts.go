@@ -20,22 +20,27 @@ const (
 	defaultAlertWindowMinutes = 10
 )
 
+//go:generate mockgen -package mocks -destination mocks/alerts.go . AlertsStore
+
 type AlertsStore interface {
 	GetAlert(key dal.AlertKey) (time.Time, bool, error)
 	PutAlert(key dal.AlertKey, sentAt time.Time) error
 }
 
-type Alerts struct {
-	shutdowns     ShutdownsStore
-	subscriptions SubscriptionsStore
-	alerts        AlertsStore
-	telegram      TelegramClient
+type (
+	Alerts struct {
+		shutdowns      ShutdownsStore
+		subscriptions  SubscriptionsStore
+		store          AlertsStore
+		telegram       TelegramClient
+		messageBuilder *PowerSupplyChangeMessageBuilder
 
-	loc *time.Location
-	now func() time.Time
-	log *slog.Logger
-	mx  *sync.Mutex
-}
+		clock Clock
+		loc   *time.Location
+		log   *slog.Logger
+		mx    *sync.Mutex
+	}
+)
 
 // Alert represents a detected outage start that needs notification
 type Alert struct {
@@ -50,31 +55,31 @@ func NewAlerts(
 	subscriptions SubscriptionsStore,
 	alerts AlertsStore,
 	telegram TelegramClient,
+	clock Clock,
 	loc *time.Location,
 	log *slog.Logger,
 ) *Alerts {
 	return &Alerts{
-		shutdowns:     shutdowns,
-		subscriptions: subscriptions,
-		alerts:        alerts,
-		telegram:      telegram,
+		shutdowns:      shutdowns,
+		subscriptions:  subscriptions,
+		store:          alerts,
+		telegram:       telegram,
+		messageBuilder: NewPowerSupplyChangeMessageBuilder(),
 
-		loc: loc,
-		now: func() time.Time {
-			return time.Now().In(loc)
-		},
+		clock: clock,
+		loc:   loc,
 
 		log: log.With("component", "service").With("service", "alerts"),
 		mx:  &sync.Mutex{},
 	}
 }
 
-// NotifyUpcomingShutdowns checks for upcoming status changes and sends advance notifications
-func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
+// NotifyPowerSupplyChanges checks for upcoming status changes and sends advance notifications
+func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	now := s.now()
+	now := s.clock.Now()
 	s.log.InfoContext(ctx, "checking for upcoming shutdowns", "time", now.Format("15:04"))
 
 	// Check if we're within notification window (6 AM - 11 PM)
@@ -96,58 +101,10 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 		return nil
 	}
 
-	pendingAlerts := make([]Alert, 0)
-
-	for groupNum, group := range shutdowns.Groups {
-		periodIndex, err := findPeriodIndex(shutdowns.Periods, targetTime)
-		if err != nil {
-			s.log.ErrorContext(ctx, "failed to find period index", "groupNum", groupNum, "targetTime", targetTime, "err", err)
-			continue
-		}
-
-		period := shutdowns.Periods[periodIndex]
-
-		// Check if the period's start time is close to our target time
-		// This prevents notifying about periods that already started in the past
-		periodStartMinutes, err := parseTimeToMinutes(period.From)
-		if err != nil {
-			s.log.ErrorContext(ctx, "failed to parse period start time", "time", period.From, "err", err)
-			continue
-		}
-
-		nowMinutes := now.Hour()*60 + now.Minute() //nolint:mnd // hours to minutes
-		periodStartAbsoluteMinutes := nowMinutes + defaultAlertWindowMinutes
-
-		// Allow some tolerance (±5 minutes) since periods are 30-min intervals
-		// and we check every minute
-		const toleranceMinutes = 5
-		if periodStartMinutes < periodStartAbsoluteMinutes-toleranceMinutes ||
-			periodStartMinutes > periodStartAbsoluteMinutes+toleranceMinutes {
-			s.log.DebugContext(ctx, "period start time not within notification window",
-				"group", groupNum,
-				"periodStart", period.From,
-				"periodStartMinutes", periodStartMinutes,
-				"targetMinutes", periodStartAbsoluteMinutes)
-			continue
-		}
-
-		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
-			if isOutageStart(group.Items, periodIndex, status) {
-				pendingAlerts = append(pendingAlerts, Alert{
-					GroupNum:  groupNum,
-					Date:      shutdowns.Date,
-					StartTime: period.From,
-					Status:    status,
-				})
-				s.log.DebugContext(ctx, "found outage start",
-					"group", groupNum,
-					"status", status,
-					"time", period.From)
-			}
-		}
-	}
-
-	if len(pendingAlerts) == 0 {
+	alerts, err := PreparePowerSupplyChangeAlerts(shutdowns, now, targetTime)
+	if err != nil {
+		return fmt.Errorf("prepare power supply change alerts: %w", err)
+	} else if len(alerts) == 0 {
 		s.log.DebugContext(ctx, "no outage starts found")
 		return nil
 	}
@@ -158,7 +115,7 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 	}
 
 	for _, sub := range subs {
-		if err := s.processSubscriptionAlert(ctx, sub, pendingAlerts, now); err != nil {
+		if err := s.processSubscriptionAlert(ctx, sub, alerts, now); err != nil {
 			s.log.ErrorContext(ctx, "failed to process subscription alert",
 				"chatID", sub.ChatID,
 				"error", err)
@@ -168,44 +125,39 @@ func (s *Alerts) NotifyUpcomingShutdowns(ctx context.Context) error {
 	return nil
 }
 
-// processSubscriptionAlert processes alerts for a single subscription
 func (s *Alerts) processSubscriptionAlert(
 	ctx context.Context,
 	sub dal.Subscription,
-	pendingAlerts []Alert,
+	allAlerts []Alert,
 	now time.Time,
 ) error {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
 
-	userAlerts := make([]Alert, 0)
+	filteredAlerts := make([]Alert, 0, len(allAlerts))
 
-	for _, alert := range pendingAlerts {
+	for _, alert := range allAlerts {
 		if _, subscribed := sub.Groups[alert.GroupNum]; !subscribed {
 			continue
 		}
 
 		settingKey := getSettingKeyForStatus(alert.Status)
 		if !dal.GetBoolSetting(sub.Settings, settingKey, false) {
-			log.DebugContext(ctx, "user disabled notification",
-				"group", alert.GroupNum,
-				"status", alert.Status)
 			continue
 		}
 
-		alertKey := dal.BuildAlertKey(chatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
-		if _, exists, err := s.alerts.GetAlert(alertKey); err != nil {
-			log.ErrorContext(ctx, "failed to check alert", "key", alertKey, "error", err)
-			continue
+		alertKey := dal.BuildAlertKey(sub.ChatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
+		if _, exists, err := s.store.GetAlert(alertKey); err != nil {
+			return fmt.Errorf("get alert with key %s: %w", alertKey, err)
 		} else if exists {
-			log.DebugContext(ctx, "alert already sent", "key", alertKey)
+			// alert already sent
 			continue
 		}
 
-		userAlerts = append(userAlerts, alert)
+		filteredAlerts = append(filteredAlerts, alert)
 	}
 
-	message := NewPowerSupplyChangeMessageBuilder().Build(userAlerts)
+	message := s.messageBuilder.Build(filteredAlerts)
 	if message == "" {
 		return nil
 	}
@@ -221,17 +173,60 @@ func (s *Alerts) processSubscriptionAlert(
 		return nil
 	}
 
-	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(userAlerts))
+	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(filteredAlerts))
 
-	for _, alert := range userAlerts {
+	for _, alert := range filteredAlerts {
 		alertKey := dal.BuildAlertKey(chatID, alert.Date, alert.StartTime, string(alert.Status), alert.GroupNum)
-		if err := s.alerts.PutAlert(alertKey, now); err != nil {
+		if err := s.store.PutAlert(alertKey, now); err != nil {
 			log.ErrorContext(ctx, "failed to mark alert as sent", "key", alertKey, "error", err)
 			// Continue marking others
 		}
 	}
 
 	return nil
+}
+
+func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, target time.Time) ([]Alert, error) {
+	res := make([]Alert, 0, 10) //nolint:mnd // default
+
+	periodIndex, err := findPeriodIndex(shutdowns.Periods, target)
+	if err != nil {
+		return nil, fmt.Errorf("find period index: %w", err)
+	}
+
+	period := shutdowns.Periods[periodIndex]
+
+	// Check if the period's start time is close to our target time
+	// This prevents notifying about periods that already started in the past
+	periodStartMinutes, err := parseTimeToMinutes(period.From)
+	if err != nil {
+		return nil, fmt.Errorf("parse period start minutes: %w", err)
+	}
+
+	nowMinutes := now.Hour()*60 + now.Minute() //nolint:mnd // hours to minutes
+	periodStartAbsoluteMinutes := nowMinutes + defaultAlertWindowMinutes
+
+	// Allow some tolerance (±5 minutes) since periods are 30-min intervals, and we check every minute
+	const toleranceMinutes = 5
+	if periodStartMinutes < periodStartAbsoluteMinutes-toleranceMinutes ||
+		periodStartMinutes > periodStartAbsoluteMinutes+toleranceMinutes {
+		return nil, nil
+	}
+
+	for groupNum, group := range shutdowns.Groups {
+		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
+			if isOutageStart(group.Items, periodIndex, status) {
+				res = append(res, Alert{
+					GroupNum:  groupNum,
+					Date:      shutdowns.Date,
+					StartTime: period.From,
+					Status:    status,
+				})
+			}
+		}
+	}
+
+	return res, nil
 }
 
 // isOutageStart checks if the period at index i is the START of a new outage
