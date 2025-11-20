@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 

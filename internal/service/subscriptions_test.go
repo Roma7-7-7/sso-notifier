@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
-	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/service/mocks"
 )

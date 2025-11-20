@@ -3,8 +3,9 @@ package testutil
 import (
 	"testing"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
 type SubscriptionMatcher struct {

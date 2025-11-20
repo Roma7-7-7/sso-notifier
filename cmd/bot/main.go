@@ -11,8 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	tc "github.com/Roma7-7-7/telegram"
 	"go.etcd.io/bbolt"
+
+	tc "github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"

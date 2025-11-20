@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	tb "gopkg.in/telebot.v3"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
 type MessageSender interface {

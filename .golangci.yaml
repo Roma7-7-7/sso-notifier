@@ -221,6 +221,14 @@ issues:
 formatters:
   enable:
     - goimports
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/Roma7-7-7)
+        - prefix(github.com/Roma7-7-7/sso-notifier)
   exclusions:
     generated: lax
     paths:
