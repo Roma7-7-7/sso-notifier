@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
-	
+
+	"github.com/Roma7-7-7/telegram"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -46,6 +47,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 	defaultSubscription := testutil.NewSubscription(chatID).
 		WithGroups("1", "3", "5", "7", "9", "11").
 		Build()
+
+	singleSubscription := testutil.NewSubscription(chatID).WithGroups("1").Build()
 
 	type fields struct {
 		shutdowns     func(*gomock.Controller) service.ShutdownsStore
@@ -248,6 +251,49 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 			wantErr: assert.NoError,
 		},
 		{
+			name: "success_with_get_tomorrow_schedule_failure",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, assert.AnError)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
+					todayState := testutil.NewNotificationState(chatID, today).
+						WithSentAt(now).
+						WithHash("1", "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY").
+						Build()
+
+					res.EXPECT().PutNotificationState(todayState).Return(nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, `Графік стабілізаційних відключень:
+
+📅 2025-11-20:
+Група 1:
+  🟢 Заживлено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
+  🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
+  🔴 Відключено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+
+`)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
 			name: "success_with_partial_changes",
 			fields: fields{
 				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
@@ -344,6 +390,269 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res.EXPECT().GetNotificationState(chatID, today).Return(state, true, nil)
 					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
 
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_put_tomorrow_state",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(defaultShutdowns, true, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
+					todayState := testutil.NewNotificationState(chatID, today).
+						WithSentAt(now).
+						WithHash("1", "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY").
+						Build()
+					tomorrowState := testutil.NewNotificationState(chatID, tomorrow).
+						WithSentAt(now).
+						WithHash("1", "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY").
+						Build()
+
+					res.EXPECT().PutNotificationState(todayState).Return(nil)
+					res.EXPECT().PutNotificationState(tomorrowState).Return(assert.AnError)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(nil)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_put_state",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
+					todayState := testutil.NewNotificationState(chatID, today).
+						WithSentAt(now).
+						WithHash("1", "YYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYYMNNNNNNMYYYYYY").
+						Build()
+
+					res.EXPECT().PutNotificationState(todayState).Return(assert.AnError)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(nil)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_send_message",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(assert.AnError)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_send_message_forbidden",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					res.EXPECT().Purge(chatID).Return(nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(telegram.ErrForbidden)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_tomorrow_notification",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, assert.AnError)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_todays_notification",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, assert.AnError)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_all_subscriptions",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
+					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return(nil, assert.AnError)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get all subscriptions: "),
+		},
+		{
+			name: "error_get_shutdown_error",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(dal.Shutdowns{}, false, assert.AnError)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get shutdowns table for today: "),
+		},
+		{
+			name: "error_no_shutdowns_yet",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetShutdowns(today).Return(dal.Shutdowns{}, false, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
 					return res
 				},
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {

@@ -79,7 +79,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
-		return fmt.Errorf("getting all subscriptions: %w", err)
+		return fmt.Errorf("get all subscriptions: %w", err)
 	}
 
 	for _, sub := range subs {
@@ -92,7 +92,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
-		return nil, fmt.Errorf("getting shutdowns table for today: %w", err)
+		return nil, fmt.Errorf("get shutdowns table for today: %w", err)
 	}
 	if !ok {
 		return nil, ErrShutdownsNotAvailable
@@ -121,8 +121,16 @@ func (s *Notifications) processSubscriptionNotification(
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
 
-	todayState := s.getOrCreateNotificationState(ctx, chatID, today, log)
-	tomorrowState := s.getOrCreateNotificationState(ctx, chatID, tomorrow, log)
+	todayState, err := s.getOrCreateNotificationState(chatID, today)
+	if err != nil {
+		log.ErrorContext(ctx, "failed to get or create notification state for today", "error", err)
+		return
+	}
+	tomorrowState, err := s.getOrCreateNotificationState(chatID, tomorrow)
+	if err != nil {
+		log.ErrorContext(ctx, "failed to get or create notification state for tomorrow", "error", err)
+		return
+	}
 
 	msg, err := msgBuilder.Build(sub, todayState, tomorrowState)
 	if err != nil {
@@ -140,9 +148,9 @@ func (s *Notifications) processSubscriptionNotification(
 			return
 		}
 
-		s.log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
+		log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
 		if err := s.subscriptions.Purge(chatID); err != nil {
-			s.log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
+			log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
 		}
 		return
 	}
@@ -151,24 +159,19 @@ func (s *Notifications) processSubscriptionNotification(
 }
 
 // getOrCreateNotificationState retrieves or creates notification state for a date
-func (s *Notifications) getOrCreateNotificationState(
-	ctx context.Context,
-	chatID int64,
-	date dal.Date,
-	log *slog.Logger,
-) dal.NotificationState {
+func (s *Notifications) getOrCreateNotificationState(chatID int64, date dal.Date) (dal.NotificationState, error) {
 	state, exists, err := s.notifications.GetNotificationState(chatID, date)
 	if err != nil {
-		log.ErrorContext(ctx, "failed to get notification state", "date", date.ToKey(), "error", err)
+		return state, fmt.Errorf("get notification state: %w", err)
 	}
-	if !exists || err != nil {
+	if !exists {
 		state = dal.NotificationState{
 			ChatID: chatID,
 			Date:   date.ToKey(),
 			Hashes: make(map[string]string),
 		}
 	}
-	return state
+	return state, nil
 }
 
 func (s *Notifications) updateNotificationStates(
