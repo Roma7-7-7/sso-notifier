@@ -10,6 +10,10 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 )
 
+type Clock interface {
+	Now() time.Time
+}
+
 type processFn func(ctx context.Context) error
 
 type Scheduler struct {

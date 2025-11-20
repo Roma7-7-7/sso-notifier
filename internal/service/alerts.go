@@ -20,6 +20,8 @@ const (
 	defaultAlertWindowMinutes = 10
 )
 
+//go:generate mockgen -package mocks -destination mocks/alerts.go . AlertsStore
+
 type AlertsStore interface {
 	GetAlert(key dal.AlertKey) (time.Time, bool, error)
 	PutAlert(key dal.AlertKey, sentAt time.Time) error
@@ -33,9 +35,10 @@ type (
 		telegram       TelegramClient
 		messageBuilder *PowerSupplyChangeMessageBuilder
 
-		loc *time.Location
-		log *slog.Logger
-		mx  *sync.Mutex
+		clock Clock
+		loc   *time.Location
+		log   *slog.Logger
+		mx    *sync.Mutex
 	}
 )
 
@@ -52,6 +55,7 @@ func NewAlerts(
 	subscriptions SubscriptionsStore,
 	alerts AlertsStore,
 	telegram TelegramClient,
+	clock Clock,
 	loc *time.Location,
 	log *slog.Logger,
 ) *Alerts {
@@ -62,7 +66,8 @@ func NewAlerts(
 		telegram:       telegram,
 		messageBuilder: NewPowerSupplyChangeMessageBuilder(),
 
-		loc: loc,
+		clock: clock,
+		loc:   loc,
 
 		log: log.With("component", "service").With("service", "alerts"),
 		mx:  &sync.Mutex{},
@@ -74,7 +79,7 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	now := time.Now()
+	now := s.clock.Now()
 	s.log.InfoContext(ctx, "checking for upcoming shutdowns", "time", now.Format("15:04"))
 
 	// Check if we're within notification window (6 AM - 11 PM)
