@@ -1,23 +1,17 @@
 package telegram
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
-	"time"
 
 	tb "gopkg.in/telebot.v3"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
-type MessageSender interface {
-	SendMessage(ctx context.Context, chatID, msg string) error
-}
-
-type SubscriptionService interface {
+type Subscriptions interface {
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
 	ToggleGroupSubscription(chatID int64, number string) error
@@ -26,67 +20,34 @@ type SubscriptionService interface {
 	ToggleSetting(chatID int64, key dal.SettingKey, defaultValue bool) error
 }
 
-type Bot struct {
-	svc SubscriptionService
+type Handler struct {
+	subscriptions Subscriptions
 
-	bot     *tb.Bot
 	markups *markups
 
 	log *slog.Logger
 }
 
-func NewBot(config *Config, svc SubscriptionService, log *slog.Logger) (*Bot, error) {
-	bot, err := tb.NewBot(tb.Settings{
-		Token:  config.TelegramToken,
-		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd // it's ok
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create telegram bot: %w", err)
+func NewHandler(subscriptions Subscriptions, groupsCount int, log *slog.Logger) *Handler {
+	return &Handler{
+		subscriptions: subscriptions,
+		markups:       newMarkups(groupsCount),
+		log:           log,
 	}
-
-	return &Bot{
-		bot: bot,
-
-		svc:     svc,
-		markups: newMarkups(config.GroupsCount),
-
-		log: log.With("component", "bot"),
-	}, nil
 }
 
-func (b *Bot) Start(ctx context.Context) error {
-	// Register command handlers
-	b.bot.Handle("/start", b.StartHandler)
-	b.bot.Handle("/subscribe", b.ManageGroupsHandler)
-	b.bot.Handle("/unsubscribe", b.UnsubscribeHandler)
-	b.bot.Handle("/settings", b.SettingsHandler)
-
-	// Register catch-all callback handler FIRST
-	b.bot.Handle(tb.OnCallback, b.handleCallbackRouter)
-
-	go func() {
-		<-ctx.Done()
-		b.log.Info("Stopping bot")
-		b.bot.Stop()
-	}()
-
-	b.bot.Start()
-
-	return nil
-}
-
-func (b *Bot) StartHandler(c tb.Context) error {
+func (h *Handler) Start(c tb.Context) error {
 	chatID := c.Sender().ID
 
-	subscribed, err := b.svc.IsSubscribed(chatID)
+	subscribed, err := h.subscriptions.IsSubscribed(chatID)
 	if err != nil {
-		b.log.Error("failed to check if user is subscribed",
+		h.log.Error("failed to check if user is subscribed",
 			"error", err,
 			"chatID", chatID)
-		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 	}
 
-	b.log.Debug("start handler called",
+	h.log.Debug("start handler called",
 		"chatID", chatID,
 		"subscribed", subscribed)
 
@@ -95,37 +56,37 @@ func (b *Bot) StartHandler(c tb.Context) error {
 
 	if subscribed {
 		// Get subscribed groups
-		groups, err := b.svc.GetSubscribedGroups(chatID)
+		groups, err := h.subscriptions.GetSubscribedGroups(chatID)
 		if err != nil {
-			b.log.Error("failed to get subscribed groups",
+			h.log.Error("failed to get subscribed groups",
 				"error", err,
 				"chatID", chatID)
-			return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 		}
 
 		// Build message with group list
 		groupsList := formatGroupsList(groups)
 		message = fmt.Sprintf("Привіт! Ви підписані на групи: %s", groupsList)
-		markup = b.markups.main.subscribed.ReplyMarkup
+		markup = h.markups.main.subscribed.ReplyMarkup
 	} else {
 		message = "Привіт! Бажаєте підписатись на оновлення графіку відключень?"
-		markup = b.markups.main.unsubscribed.ReplyMarkup
+		markup = h.markups.main.unsubscribed.ReplyMarkup
 	}
 
-	return b.sendOrDelete(c, message, markup)
+	return h.sendOrDelete(c, message, markup)
 }
 
-func (b *Bot) ManageGroupsHandler(c tb.Context) error {
+func (h *Handler) ManageGroups(c tb.Context) error {
 	chatID := c.Sender().ID
-	b.log.Debug("manage groups handler called", "chatID", chatID)
+	h.log.Debug("manage groups handler called", "chatID", chatID)
 
 	// Get current subscriptions
-	subscribedGroups, err := b.svc.GetSubscribedGroups(chatID)
+	subscribedGroups, err := h.subscriptions.GetSubscribedGroups(chatID)
 	if err != nil {
-		b.log.Error("failed to get subscribed groups",
+		h.log.Error("failed to get subscribed groups",
 			"error", err,
 			"chatID", chatID)
-		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 	}
 
 	// Convert to map for quick lookup
@@ -135,20 +96,20 @@ func (b *Bot) ManageGroupsHandler(c tb.Context) error {
 	}
 
 	// Build dynamic markup with checkmarks
-	markup := b.markups.buildDynamicGroupsMarkup(subscribedMap)
+	markup := h.markups.buildDynamicGroupsMarkup(subscribedMap)
 
-	return b.sendOrDelete(c, "Оберіть групи для підписки\n(натисніть щоб додати/видалити)", markup)
+	return h.sendOrDelete(c, "Оберіть групи для підписки\n(натисніть щоб додати/видалити)", markup)
 }
 
-func (b *Bot) handleCallbackRouter(c tb.Context) error {
+func (h *Handler) Callback(c tb.Context) error {
 	callback := c.Callback()
 	if callback == nil {
-		b.log.Debug("callback router called with nil callback")
+		h.log.Debug("callback router called with nil callback")
 		return nil
 	}
 
 	chatID := c.Sender().ID
-	b.log.Debug("callback received",
+	h.log.Debug("callback received",
 		"chatID", chatID,
 		"data", callback.Data,
 		"unique", callback.Unique,
@@ -156,7 +117,7 @@ func (b *Bot) handleCallbackRouter(c tb.Context) error {
 
 	// Respond to callback first to remove loading state
 	if err := c.Respond(); err != nil {
-		b.log.Warn("failed to respond to callback", "error", err, "chatID", chatID)
+		h.log.Warn("failed to respond to callback", "error", err, "chatID", chatID)
 	}
 
 	// Use Data field and trim the prefix if present
@@ -165,75 +126,75 @@ func (b *Bot) handleCallbackRouter(c tb.Context) error {
 		data = data[1:]
 	}
 
-	b.log.Debug("routing callback", "processedData", data)
+	h.log.Debug("routing callback", "processedData", data)
 
 	// Route based on callback data
 	switch {
 	case data == "subscribe", data == "manage_groups":
-		b.log.Debug("routing to ManageGroupsHandler")
-		return b.ManageGroupsHandler(c)
+		h.log.Debug("routing to ManageGroups")
+		return h.ManageGroups(c)
 
 	case data == "unsubscribe":
-		b.log.Debug("routing to UnsubscribeHandler")
-		return b.UnsubscribeHandler(c)
+		h.log.Debug("routing to Unsubscribe")
+		return h.Unsubscribe(c)
 
 	case data == "settings":
-		b.log.Debug("routing to SettingsHandler")
-		return b.SettingsHandler(c)
+		h.log.Debug("routing to Settings")
+		return h.Settings(c)
 
 	case data == "toggle_notify_off":
-		b.log.Debug("routing to ToggleSettingHandler for notify_off")
-		return b.ToggleSettingHandler(dal.SettingNotifyOff)(c)
+		h.log.Debug("routing to ToggleSettingHandler for notify_off")
+		return h.ToggleSettingHandler(dal.SettingNotifyOff)(c)
 
 	case data == "toggle_notify_maybe":
-		b.log.Debug("routing to ToggleSettingHandler for notify_maybe")
-		return b.ToggleSettingHandler(dal.SettingNotifyMaybe)(c)
+		h.log.Debug("routing to ToggleSettingHandler for notify_maybe")
+		return h.ToggleSettingHandler(dal.SettingNotifyMaybe)(c)
 
 	case data == "toggle_notify_on":
-		b.log.Debug("routing to ToggleSettingHandler for notify_on")
-		return b.ToggleSettingHandler(dal.SettingNotifyOn)(c)
+		h.log.Debug("routing to ToggleSettingHandler for notify_on")
+		return h.ToggleSettingHandler(dal.SettingNotifyOn)(c)
 
 	case data == "back_from_settings":
-		b.log.Debug("routing to StartHandler from settings")
-		return b.StartHandler(c)
+		h.log.Debug("routing to StartHandler from settings")
+		return h.Start(c)
 
 	case data == "back":
-		b.log.Debug("routing to StartHandler")
-		return b.StartHandler(c)
+		h.log.Debug("routing to StartHandler")
+		return h.Start(c)
 
 	case len(data) > 13 && data[:13] == "toggle_group_":
 		groupNum := data[13:]
-		b.log.Debug("routing to ToggleGroupHandler", "groupNum", groupNum)
-		return b.ToggleGroupHandler(groupNum)(c)
+		h.log.Debug("routing to ToggleGroupHandler", "groupNum", groupNum)
+		return h.ToggleGroupHandler(groupNum)(c)
 
 	default:
-		b.log.Debug("no handler matched for callback", "data", data)
+		h.log.Debug("no handler matched for callback", "data", data)
 		return nil
 	}
 }
 
-func (b *Bot) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
+func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		chatID := c.Sender().ID
 
-		if err := b.svc.ToggleGroupSubscription(chatID, groupNumber); err != nil {
-			b.log.Error("failed to toggle subscription",
+		if err := h.subscriptions.ToggleGroupSubscription(chatID, groupNumber); err != nil {
+			h.log.Error("failed to toggle subscription",
 				"error", err,
 				"chatID", chatID,
 				"groupNum", groupNumber)
-			return b.sendOrDelete(c, "Не вдалось оновити підписку. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, "Не вдалось оновити підписку. Будь ласка, спробуйте пізніше.", nil)
 		}
 
 		// Get updated subscriptions
-		subscribedGroups, err := b.svc.GetSubscribedGroups(chatID)
+		subscribedGroups, err := h.subscriptions.GetSubscribedGroups(chatID)
 		if err != nil {
-			b.log.Error("failed to get subscribed groups after toggle",
+			h.log.Error("failed to get subscribed groups after toggle",
 				"error", err,
 				"chatID", chatID)
-			return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 		}
 
-		b.log.Info("user toggled group subscription",
+		h.log.Info("user toggled group subscription",
 			"chatID", chatID,
 			"groupNum", groupNumber,
 			"subscribedGroups", subscribedGroups)
@@ -249,7 +210,7 @@ func (b *Bot) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
 		}
 
 		// Build updated markup
-		markup := b.markups.buildDynamicGroupsMarkup(subscribedMap)
+		markup := h.markups.buildDynamicGroupsMarkup(subscribedMap)
 
 		// Show feedback message
 		var message string
@@ -258,103 +219,103 @@ func (b *Bot) ToggleGroupHandler(groupNumber string) func(c tb.Context) error {
 		} else {
 			if len(subscribedGroups) == 0 {
 				// User removed all groups - return to main menu
-				return b.sendOrDelete(c, "Ви відписані від усіх груп", b.markups.main.unsubscribed.ReplyMarkup)
+				return h.sendOrDelete(c, "Ви відписані від усіх груп", h.markups.main.unsubscribed.ReplyMarkup)
 			}
 			message = fmt.Sprintf("❌ Відписано від групи %s\n\nОберіть групи для підписки\n(натисніть щоб додати/видалити)", groupNumber)
 		}
 
-		return b.sendOrDelete(c, message, markup)
+		return h.sendOrDelete(c, message, markup)
 	}
 }
 
-func (b *Bot) UnsubscribeHandler(c tb.Context) error {
+func (h *Handler) Unsubscribe(c tb.Context) error {
 	chatID := c.Sender().ID
 
-	if err := b.svc.Unsubscribe(chatID); err != nil {
-		b.log.Error("failed to unsubscribe",
+	if err := h.subscriptions.Unsubscribe(chatID); err != nil {
+		h.log.Error("failed to unsubscribe",
 			"error", err,
 			"chatID", chatID)
-		return b.sendOrDelete(c, "Не вдалось відписатись. Будь ласка, спробуйте пізніше.", b.markups.main.subscribed.ReplyMarkup)
+		return h.sendOrDelete(c, "Не вдалось відписатись. Будь ласка, спробуйте пізніше.", h.markups.main.subscribed.ReplyMarkup)
 	}
 
-	b.log.Info("user unsubscribed", "chatID", chatID)
-	return b.sendOrDelete(c, "Ви відписані", b.markups.main.unsubscribed.ReplyMarkup)
+	h.log.Info("user unsubscribed", "chatID", chatID)
+	return h.sendOrDelete(c, "Ви відписані", h.markups.main.unsubscribed.ReplyMarkup)
 }
 
-func (b *Bot) SettingsHandler(c tb.Context) error {
+func (h *Handler) Settings(c tb.Context) error {
 	chatID := c.Sender().ID
-	b.log.Debug("settings handler called", "chatID", chatID)
+	h.log.Debug("settings handler called", "chatID", chatID)
 
-	subscribed, err := b.svc.IsSubscribed(chatID)
+	subscribed, err := h.subscriptions.IsSubscribed(chatID)
 	if err != nil {
-		b.log.Error("failed to check subscription status",
+		h.log.Error("failed to check subscription status",
 			"error", err,
 			"chatID", chatID)
-		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 	}
 
 	if !subscribed {
-		return b.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", b.markups.main.unsubscribed.ReplyMarkup)
+		return h.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", h.markups.main.unsubscribed.ReplyMarkup)
 	}
 
-	settings, err := b.svc.GetSettings(chatID)
+	settings, err := h.subscriptions.GetSettings(chatID)
 	if err != nil {
-		b.log.Error("failed to get settings",
+		h.log.Error("failed to get settings",
 			"error", err,
 			"chatID", chatID)
-		return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+		return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 	}
 
-	markup := b.markups.buildSettingsMarkup(settings)
+	markup := h.markups.buildSettingsMarkup(settings)
 
 	message := "⚙️ Налаштування сповіщень\n\n" +
 		"Попереджати за 10 хвилин до:\n\n" +
 		"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
 
-	return b.sendOrDelete(c, message, markup)
+	return h.sendOrDelete(c, message, markup)
 }
 
-func (b *Bot) ToggleSettingHandler(settingKey dal.SettingKey) func(c tb.Context) error {
+func (h *Handler) ToggleSettingHandler(settingKey dal.SettingKey) func(c tb.Context) error {
 	return func(c tb.Context) error {
 		chatID := c.Sender().ID
 
-		if err := b.svc.ToggleSetting(chatID, settingKey, true); err != nil {
-			b.log.Error("failed to toggle setting",
+		if err := h.subscriptions.ToggleSetting(chatID, settingKey, true); err != nil {
+			h.log.Error("failed to toggle setting",
 				"error", err,
 				"chatID", chatID,
 				"settingKey", settingKey)
-			return b.sendOrDelete(c, "Не вдалось оновити налаштування. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, "Не вдалось оновити налаштування. Будь ласка, спробуйте пізніше.", nil)
 		}
 
-		b.log.Info("user toggled setting",
+		h.log.Info("user toggled setting",
 			"chatID", chatID,
 			"settingKey", settingKey)
 
-		settings, err := b.svc.GetSettings(chatID)
+		settings, err := h.subscriptions.GetSettings(chatID)
 		if err != nil {
-			b.log.Error("failed to get settings after toggle",
+			h.log.Error("failed to get settings after toggle",
 				"error", err,
 				"chatID", chatID)
-			return b.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
+			return h.sendOrDelete(c, "Щось пішло не так. Будь ласка, спробуйте пізніше.", nil)
 		}
 
-		markup := b.markups.buildSettingsMarkup(settings)
+		markup := h.markups.buildSettingsMarkup(settings)
 
 		message := "⚙️ Налаштування сповіщень\n\n" +
 			"Попереджати за 10 хвилин до:\n\n" +
 			"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
 
-		return b.sendOrDelete(c, message, markup)
+		return h.sendOrDelete(c, message, markup)
 	}
 }
 
 // sendOrDelete deletes the previous message for callbacks and sends a new one
-func (b *Bot) sendOrDelete(c tb.Context, text string, markup *tb.ReplyMarkup) error {
+func (h *Handler) sendOrDelete(c tb.Context, text string, markup *tb.ReplyMarkup) error {
 	// Check if this is a callback query (button press)
 	if c.Callback() != nil {
 		// Delete the old message to keep chat clean
 		if err := c.Delete(); err != nil {
-			b.log.Warn("failed to delete message",
+			h.log.Warn("failed to delete message",
 				"error", err,
 				"chatID", c.Sender().ID,
 				"messageID", c.Message().ID)
@@ -392,42 +353,6 @@ type (
 		groupsCount int
 	}
 )
-
-func newMarkups(subscriptionGroupsCount int) *markups {
-	// Create markup for subscribed users
-	mainSubscribed := &tb.ReplyMarkup{}
-	manageGroupsBtn := mainSubscribed.Data("Керувати групами", "manage_groups")
-	subscribedSettingsBtn := mainSubscribed.Data("⚙️ Налаштування", "settings")
-	unsubscribeBtn := mainSubscribed.Data("Відписатись від усіх", "unsubscribe")
-	mainSubscribed.Inline(
-		mainSubscribed.Row(manageGroupsBtn),
-		mainSubscribed.Row(subscribedSettingsBtn),
-		mainSubscribed.Row(unsubscribeBtn),
-	)
-
-	// Create markup for unsubscribed users
-	mainUnsubscribed := &tb.ReplyMarkup{}
-	subscribeBtn := mainUnsubscribed.Data("Підписатись на оновлення", "subscribe")
-	mainUnsubscribed.Inline(mainUnsubscribed.Row(subscribeBtn))
-
-	// Create group selection markup (static structure, will be rebuilt dynamically)
-
-	return &markups{
-		main: mainMarkups{
-			subscribed: subscribedMarkup{
-				ReplyMarkup:  mainSubscribed,
-				manageGroups: manageGroupsBtn,
-				settings:     subscribedSettingsBtn,
-				unsubscribe:  unsubscribeBtn,
-			},
-			unsubscribed: unsubscribedMarkup{
-				ReplyMarkup: mainUnsubscribed,
-				subscribe:   subscribeBtn,
-			},
-		},
-		groupsCount: subscriptionGroupsCount,
-	}
-}
 
 // buildDynamicGroupsMarkup creates group selection keyboard with checkmarks for subscribed groups
 func (m *markups) buildDynamicGroupsMarkup(subscribedGroups map[string]bool) *tb.ReplyMarkup {
@@ -550,4 +475,40 @@ func formatGroupsList(groups []string) string {
 	}
 
 	return builder.String()
+}
+
+func newMarkups(subscriptionGroupsCount int) *markups {
+	// Create markup for subscribed users
+	mainSubscribed := &tb.ReplyMarkup{}
+	manageGroupsBtn := mainSubscribed.Data("Керувати групами", "manage_groups")
+	subscribedSettingsBtn := mainSubscribed.Data("⚙️ Налаштування", "settings")
+	unsubscribeBtn := mainSubscribed.Data("Відписатись від усіх", "unsubscribe")
+	mainSubscribed.Inline(
+		mainSubscribed.Row(manageGroupsBtn),
+		mainSubscribed.Row(subscribedSettingsBtn),
+		mainSubscribed.Row(unsubscribeBtn),
+	)
+
+	// Create markup for unsubscribed users
+	mainUnsubscribed := &tb.ReplyMarkup{}
+	subscribeBtn := mainUnsubscribed.Data("Підписатись на оновлення", "subscribe")
+	mainUnsubscribed.Inline(mainUnsubscribed.Row(subscribeBtn))
+
+	// Create group selection markup (static structure, will be rebuilt dynamically)
+
+	return &markups{
+		main: mainMarkups{
+			subscribed: subscribedMarkup{
+				ReplyMarkup:  mainSubscribed,
+				manageGroups: manageGroupsBtn,
+				settings:     subscribedSettingsBtn,
+				unsubscribe:  unsubscribeBtn,
+			},
+			unsubscribed: unsubscribedMarkup{
+				ReplyMarkup: mainUnsubscribed,
+				subscribe:   subscribeBtn,
+			},
+		},
+		groupsCount: subscriptionGroupsCount,
+	}
 }

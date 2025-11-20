@@ -74,8 +74,9 @@ func run(ctx context.Context) int {
 	subscriptionsSvc := service.NewSubscription(store, c, log)
 	notificationsSvc := service.NewNotifications(store, store, store, sender, c, log)
 	alertsSvc := service.NewAlerts(store, store, store, sender, c, log)
+	handler := telegram.NewHandler(subscriptionsSvc, conf.GroupsCount, log)
 
-	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
+	bot, err := telegram.NewBot(conf, handler, log)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to create telegram bot", "error", err)
 		return 1
