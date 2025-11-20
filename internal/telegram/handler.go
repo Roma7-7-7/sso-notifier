@@ -162,6 +162,39 @@ func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) erro
 	}
 }
 
+func (h *Handler) Settings(c tb.Context) error {
+	chatID := c.Sender().ID
+	h.log.Debug("settings handler called", "chatID", chatID)
+
+	subscribed, err := h.subscriptions.IsSubscribed(chatID)
+	if err != nil {
+		h.log.Error("failed to check subscription status",
+			"error", err,
+			"chatID", chatID)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
+	}
+
+	if !subscribed {
+		return h.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", h.markups.main.unsubscribed.ReplyMarkup)
+	}
+
+	settings, err := h.subscriptions.GetSettings(chatID)
+	if err != nil {
+		h.log.Error("failed to get settings",
+			"error", err,
+			"chatID", chatID)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
+	}
+
+	markup := h.markups.buildSettingsMarkup(settings)
+
+	message := "⚙️ Налаштування сповіщень\n\n" +
+		"Попереджати за 10 хвилин до:\n\n" +
+		"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
+
+	return h.sendOrDelete(c, message, markup)
+}
+
 func (h *Handler) Callback(c tb.Context) error {
 	callback := c.Callback()
 	if callback == nil {
@@ -246,39 +279,6 @@ func (h *Handler) Unsubscribe(c tb.Context) error {
 
 	h.log.Info("user unsubscribed", "chatID", chatID)
 	return h.sendOrDelete(c, "Ви відписані", h.markups.main.unsubscribed.ReplyMarkup)
-}
-
-func (h *Handler) Settings(c tb.Context) error {
-	chatID := c.Sender().ID
-	h.log.Debug("settings handler called", "chatID", chatID)
-
-	subscribed, err := h.subscriptions.IsSubscribed(chatID)
-	if err != nil {
-		h.log.Error("failed to check subscription status",
-			"error", err,
-			"chatID", chatID)
-		return h.sendOrDelete(c, genericErrorMsg, nil)
-	}
-
-	if !subscribed {
-		return h.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", h.markups.main.unsubscribed.ReplyMarkup)
-	}
-
-	settings, err := h.subscriptions.GetSettings(chatID)
-	if err != nil {
-		h.log.Error("failed to get settings",
-			"error", err,
-			"chatID", chatID)
-		return h.sendOrDelete(c, genericErrorMsg, nil)
-	}
-
-	markup := h.markups.buildSettingsMarkup(settings)
-
-	message := "⚙️ Налаштування сповіщень\n\n" +
-		"Попереджати за 10 хвилин до:\n\n" +
-		"ℹ️ Сповіщення надсилаються з 6:00 до 23:00"
-
-	return h.sendOrDelete(c, message, markup)
 }
 
 func (h *Handler) ToggleSettingHandler(settingKey dal.SettingKey) func(c tb.Context) error {
