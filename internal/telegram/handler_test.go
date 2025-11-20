@@ -4,13 +4,13 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/dal"
-	"github.com/Roma7-7-7/sso-notifier/internal/telegram/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 	tb "gopkg.in/telebot.v3"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
+	"github.com/Roma7-7-7/sso-notifier/internal/telegram/mocks"
 )
 
 const chatID = int64(123)
@@ -20,7 +20,6 @@ var defaultUser = &tb.User{
 }
 
 func TestHandler_Start(t *testing.T) {
-
 	type fields struct {
 		subscriptions func(*gomock.Controller) telegram.Subscriptions
 	}
@@ -523,6 +522,7 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
 						dal.SettingNotifyOn:    true,
 						dal.SettingNotifyMaybe: true,
+						dal.SettingNotifyOff:   true,
 					}, nil)
 					return res
 				},
