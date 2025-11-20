@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 func TestClock_Now(t *testing.T) {
