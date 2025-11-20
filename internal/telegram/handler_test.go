@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -495,6 +496,105 @@ func TestHandler_Settings(t *testing.T) {
 
 			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), 12, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.Settings(tt.args.c(ctrl)), "Settings(_)")
+		})
+	}
+}
+
+func TestHandler_ToggleSettingHandler(t *testing.T) {
+	type fields struct {
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+	}
+	type args struct {
+		settingKey dal.SettingKey
+		ctx        func(ctrl *gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_toggle_setting",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyOn, true).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingNotifyOn:    true,
+						dal.SettingNotifyMaybe: true,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				settingKey: dal.SettingNotifyOn,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+
+Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_setting",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyOn, true).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				settingKey: dal.SettingNotifyOn,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_toggle_setting",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyOn, true).Return(assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				settingKey: dal.SettingNotifyOn,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), 12, slog.New(slog.DiscardHandler))
+			fn := h.ToggleSettingHandler(tt.args.settingKey)
+			tt.wantErr(t, fn(tt.args.ctx(ctrl)), "ToggleSettingHandler(_)")
 		})
 	}
 }
