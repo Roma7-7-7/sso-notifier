@@ -64,7 +64,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 
 	now := s.clock.Now()
 	today := dal.DateByTime(now)
-	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1)) //nolint:mnd // 1 day
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
 	msgBuilder, err := s.prepareMessageBuilder(ctx, today, tomorrow)
 	if err != nil {
 		if errors.Is(err, ErrShutdownsNotAvailable) {

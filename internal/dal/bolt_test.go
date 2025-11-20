@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/bbolt"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 type BoltDBTestSuite struct {

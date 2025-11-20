@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/service/mocks"
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 func TestShutdowns_Refresh(t *testing.T) {
