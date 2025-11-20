@@ -187,7 +187,7 @@ func (s *Alerts) processSubscriptionAlert(
 }
 
 func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, target time.Time) ([]Alert, error) {
-	res := make([]Alert, 0, 10)
+	res := make([]Alert, 0, 10) //nolint:mnd // default
 
 	periodIndex, err := findPeriodIndex(shutdowns.Periods, target)
 	if err != nil {

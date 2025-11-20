@@ -179,17 +179,15 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
 					sub := defaultSubscription
 					sub.Groups = map[string]struct{}{
-						"1": {},
-						"2": {},
-						"3": {},
-						"4": {},
-						//"5":  {},
+						"1":  {},
+						"2":  {},
+						"3":  {},
+						"4":  {},
 						"6":  {},
 						"7":  {},
 						"8":  {},
 						"9":  {},
 						"10": {},
-						//"11": {},
 						"12": {},
 					}
 					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{sub}, nil)
