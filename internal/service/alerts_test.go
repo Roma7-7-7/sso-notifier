@@ -44,28 +44,12 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 
 	const chatID = int64(123)
 	chatIDStr := strconv.FormatInt(chatID, 10)
-	defaultSubscription := dal.Subscription{
-		ChatID: chatID,
-		Groups: map[string]struct{}{
-			"1":  {},
-			"2":  {},
-			"3":  {},
-			"4":  {},
-			"5":  {},
-			"6":  {},
-			"7":  {},
-			"8":  {},
-			"9":  {},
-			"10": {},
-			"11": {},
-			"12": {},
-		},
-		Settings: map[dal.SettingKey]interface{}{
-			dal.SettingNotifyOn:    true,
-			dal.SettingNotifyOff:   true,
-			dal.SettingNotifyMaybe: true,
-		},
-	}
+	defaultSubscription := testutil.NewSubscription(chatID).
+		WithAllGroups().
+		WithSetting(dal.SettingNotifyOn, true).
+		WithSetting(dal.SettingNotifyOff, true).
+		WithSetting(dal.SettingNotifyMaybe, true).
+		Build()
 
 	singleGroupSubscription := defaultSubscription
 	singleGroupSubscription.Groups = map[string]struct{}{
