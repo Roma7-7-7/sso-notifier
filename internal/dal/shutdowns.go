@@ -46,8 +46,7 @@ func (d Date) ToKey() string {
 	return fmt.Sprintf("%d-%02d-%02d", d.Year, d.Month, d.Day)
 }
 
-func TodayDate(loc *time.Location) Date {
-	now := time.Now().In(loc)
+func DateByTime(now time.Time) Date {
 	return Date{
 		Year:  now.Year(),
 		Month: now.Month(),
@@ -55,8 +54,8 @@ func TodayDate(loc *time.Location) Date {
 	}
 }
 
-func TomorrowDate(loc *time.Location) Date {
-	tomorrow := time.Now().In(loc).Add(24 * time.Hour) //nolint:mnd // 1 day
+func TomorrowDateByTime(now time.Time) Date {
+	tomorrow := now.Add(24 * time.Hour) //nolint:mnd // 1 day
 	return Date{
 		Year:  tomorrow.Year(),
 		Month: tomorrow.Month(),

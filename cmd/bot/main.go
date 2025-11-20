@@ -53,7 +53,9 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	store, err := dal.NewBoltDB(db)
+	c := clock.NewWithLocation(loc)
+
+	store, err := dal.NewBoltDB(db, c)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
 		return 1
@@ -68,10 +70,10 @@ func run(ctx context.Context) int {
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
-	shutdownsSvc := service.NewShutdowns(store, provider, loc, log)
-	subscriptionsSvc := service.NewSubscription(store, log)
-	notificationsSvc := service.NewNotifications(store, store, store, sender, loc, log)
-	alertsSvc := service.NewAlerts(store, store, store, sender, clock.New(), loc, log)
+	shutdownsSvc := service.NewShutdowns(store, provider, c, log)
+	subscriptionsSvc := service.NewSubscription(store, c, log)
+	notificationsSvc := service.NewNotifications(store, store, store, sender, c, log)
+	alertsSvc := service.NewAlerts(store, store, store, sender, c, log)
 
 	bot, err := telegram.NewBot(conf, subscriptionsSvc, log)
 	if err != nil {

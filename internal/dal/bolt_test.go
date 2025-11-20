@@ -13,14 +13,15 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 type BoltDBTestSuite struct {
 	suite.Suite
-	db     *bbolt.DB
-	store  *dal.BoltDB
-	now    *nowWrapper
-	tmpDir string
+	db        *bbolt.DB
+	store     *dal.BoltDB
+	clockMock *clock.Mock
+	tmpDir    string
 }
 
 // SetupSuite runs ONCE before all tests in the suite
@@ -41,12 +42,10 @@ func (s *BoltDBTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	s.db = db
-	s.store, err = dal.NewBoltDB(db)
+	s.clockMock = clock.NewMockF(time.Now)
+
+	s.store, err = dal.NewBoltDB(db, s.clockMock)
 	s.Require().NoError(err)
-	s.now = &nowWrapper{}
-	s.store.SetNow(func() time.Time {
-		return s.now.Call()
-	})
 }
 
 // TearDownSuite runs ONCE after all tests
@@ -79,10 +78,7 @@ func (s *BoltDBTestSuite) TearDownTest() {
 	})
 	s.Require().NoError(err)
 
-	s.now.Reset()
-	s.store.SetNow(func() time.Time {
-		return s.now.Call()
-	})
+	s.clockMock.SetF(time.Now)
 }
 
 // Run the suite

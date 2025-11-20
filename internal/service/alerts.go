@@ -34,11 +34,10 @@ type (
 		store          AlertsStore
 		telegram       TelegramClient
 		messageBuilder *PowerSupplyChangeMessageBuilder
+		clock          Clock
 
-		clock Clock
-		loc   *time.Location
-		log   *slog.Logger
-		mx    *sync.Mutex
+		log *slog.Logger
+		mx  *sync.Mutex
 	}
 )
 
@@ -56,7 +55,6 @@ func NewAlerts(
 	alerts AlertsStore,
 	telegram TelegramClient,
 	clock Clock,
-	loc *time.Location,
 	log *slog.Logger,
 ) *Alerts {
 	return &Alerts{
@@ -65,9 +63,7 @@ func NewAlerts(
 		store:          alerts,
 		telegram:       telegram,
 		messageBuilder: NewPowerSupplyChangeMessageBuilder(),
-
-		clock: clock,
-		loc:   loc,
+		clock:          clock,
 
 		log: log.With("component", "service").With("service", "alerts"),
 		mx:  &sync.Mutex{},
@@ -91,7 +87,7 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	targetTime := now.Add(defaultAlertWindowMinutes * time.Minute)
 	s.log.DebugContext(ctx, "checking for events", "targetTime", targetTime.Format("15:04"))
 
-	today := dal.TodayDate(s.loc)
+	today := dal.DateByTime(s.clock.Now())
 	shutdowns, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return fmt.Errorf("get shutdowns: %w", err)

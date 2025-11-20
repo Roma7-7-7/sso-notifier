@@ -9,23 +9,21 @@ import (
 )
 
 type (
+	Clock interface {
+		Now() time.Time
+	}
+
 	BoltDB struct {
-		db  *bbolt.DB
-		now func() time.Time
+		db    *bbolt.DB
+		clock Clock
 	}
 )
 
-func NewBoltDB(db *bbolt.DB) (*BoltDB, error) {
+func NewBoltDB(db *bbolt.DB, clock Clock) (*BoltDB, error) {
 	return &BoltDB{
-		db:  db,
-		now: time.Now,
+		db:    db,
+		clock: clock,
 	}, nil
-}
-
-// SetNow replaces method that will be used for current time detection.
-// Use it for tests only
-func (s *BoltDB) SetNow(now func() time.Time) {
-	s.now = now
 }
 
 func (s *BoltDB) Purge(chatID int64) error {

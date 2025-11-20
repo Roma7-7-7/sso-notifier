@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,11 +14,14 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/service/mocks"
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 const chatID = int64(123)
 
 func TestSubscriptions_IsSubscribed(t *testing.T) {
+	c := clock.NewMock(time.Now())
+
 	t.Run("ok", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -25,7 +29,7 @@ func TestSubscriptions_IsSubscribed(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().ExistsSubscription(chatID).Return(true, nil)
 
-		exists, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
+		exists, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
 		require.NoError(t, err)
 		assert.True(t, exists)
 	})
@@ -37,13 +41,15 @@ func TestSubscriptions_IsSubscribed(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().ExistsSubscription(chatID).Return(false, assert.AnError)
 
-		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
+		_, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).IsSubscribed(chatID)
 		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "check if subscription exists: ")
 	})
 }
 
 func TestSubscriptions_GetSubscriptions(t *testing.T) {
+	c := clock.NewMock(time.Now())
+
 	t.Run("ok", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -55,7 +61,7 @@ func TestSubscriptions_GetSubscriptions(t *testing.T) {
 			testutil.NewSubscription(789).Build(),
 		}, nil)
 
-		subs, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscriptions()
+		subs, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscriptions()
 		require.NoError(t, err)
 		if assert.Len(t, subs, 3) {
 			assert.Equal(t, []dal.Subscription{
@@ -72,13 +78,15 @@ func TestSubscriptions_GetSubscriptions(t *testing.T) {
 
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{}, assert.AnError)
-		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscriptions()
+		_, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscriptions()
 		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "get subscriptions: ")
 	})
 }
 
 func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
+	c := clock.NewMock(time.Now())
+
 	t.Run("ok", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -90,7 +98,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 			nil,
 		)
 
-		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
+		groups, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
 		require.NoError(t, err)
 		if assert.Len(t, groups, 3) {
 			assert.ElementsMatch(t, []string{"1", "5", "11"}, groups)
@@ -108,7 +116,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 			nil,
 		)
 
-		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
+		groups, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
 		require.NoError(t, err)
 		assert.Empty(t, groups)
 	})
@@ -126,7 +134,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 			nil,
 		)
 
-		groups, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
+		groups, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
 		require.NoError(t, err)
 		assert.Empty(t, groups)
 	})
@@ -142,7 +150,7 @@ func TestSubscriptions_GetSubscribedGroups(t *testing.T) {
 			assert.AnError,
 		)
 
-		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
+		_, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSubscribedGroups(chatID)
 		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "get subscription: ")
 	})
@@ -313,13 +321,15 @@ func TestSubscriptions_ToggleGroupSubscription(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			s := service.NewSubscription(tt.fields.store(t, ctrl), slog.New(slog.DiscardHandler))
+			s := service.NewSubscription(tt.fields.store(t, ctrl), clock.NewMock(time.Now()), slog.New(slog.DiscardHandler))
 			tt.wantErr(t, s.ToggleGroupSubscription(tt.args.chatID, tt.args.groupNum), fmt.Sprintf("ToggleGroupSubscription(%v, %v)", tt.args.chatID, tt.args.groupNum))
 		})
 	}
 }
 
 func TestSubscriptions_Unsubscribe(t *testing.T) {
+	c := clock.NewMock(time.Now())
+
 	t.Run("ok", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -327,7 +337,7 @@ func TestSubscriptions_Unsubscribe(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().Purge(chatID).Return(nil)
 
-		require.NoError(t, service.NewSubscription(store, slog.New(slog.DiscardHandler)).Unsubscribe(chatID))
+		require.NoError(t, service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).Unsubscribe(chatID))
 	})
 
 	t.Run("error", func(t *testing.T) {
@@ -337,13 +347,15 @@ func TestSubscriptions_Unsubscribe(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().Purge(chatID).Return(assert.AnError)
 
-		err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).Unsubscribe(chatID)
+		err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).Unsubscribe(chatID)
 		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "purge subscription: ")
 	})
 }
 
 func TestSubscriptions_GetSettings(t *testing.T) {
+	c := clock.NewMock(time.Now())
+
 	t.Run("ok", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -356,7 +368,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 				nil,
 			)
 
-		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
+		settings, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSettings(chatID)
 		require.NoError(t, err)
 		if assert.Len(t, settings, 2) {
 			assert.Equal(t, true, settings[dal.SettingNotifyOn], "settings should have been set")
@@ -371,7 +383,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, nil)
 
-		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
+		settings, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSettings(chatID)
 		require.NoError(t, err)
 		assert.Empty(t, settings)
 	})
@@ -385,7 +397,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		sub.Settings = nil
 		store.EXPECT().GetSubscription(chatID).Return(sub, true, nil)
 
-		settings, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
+		settings, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSettings(chatID)
 		require.NoError(t, err)
 		assert.Empty(t, settings)
 	})
@@ -397,7 +409,7 @@ func TestSubscriptions_GetSettings(t *testing.T) {
 		store := mocks.NewMockSubscriptionsStore(ctrl)
 		store.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, assert.AnError)
 
-		_, err := service.NewSubscription(store, slog.New(slog.DiscardHandler)).GetSettings(chatID)
+		_, err := service.NewSubscription(store, c, slog.New(slog.DiscardHandler)).GetSettings(chatID)
 		require.ErrorIs(t, err, assert.AnError)
 		assert.ErrorContains(t, err, "get subscription: ")
 	})
@@ -741,7 +753,7 @@ func TestSubscriptions_ToggleSetting(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			s := service.NewSubscription(tt.fields.store(t, ctrl), slog.New(slog.DiscardHandler))
+			s := service.NewSubscription(tt.fields.store(t, ctrl), clock.NewMock(time.Now()), slog.New(slog.DiscardHandler))
 			tt.wantErr(t, s.ToggleSetting(tt.args.chatID, tt.args.key, tt.args.defaultValue), fmt.Sprintf("ToggleSetting(%v, %v, %v)", tt.args.chatID, tt.args.key, tt.args.defaultValue))
 		})
 	}

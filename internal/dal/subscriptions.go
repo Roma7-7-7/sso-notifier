@@ -88,7 +88,7 @@ func (s *BoltDB) PutSubscription(sub Subscription) error {
 		}
 
 		if !exists {
-			sub.CreatedAt = s.now()
+			sub.CreatedAt = s.clock.Now()
 		} else {
 			// make sure we do not override created at
 			sub.CreatedAt = existing.CreatedAt
