@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {

@@ -5,9 +5,10 @@ import (
 	_ "embed"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
-	"github.com/stretchr/testify/assert"
 )
 
 //go:embed testdata/chernivtsi_without_next_day.html
