@@ -53,7 +53,9 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	store, err := dal.NewBoltDB(db)
+	c := clock.NewWithLocation(loc)
+
+	store, err := dal.NewBoltDB(db, c)
 	if err != nil {
 		log.ErrorContext(ctx, "Failed to open database", "error", err)
 		return 1
@@ -65,8 +67,6 @@ func run(ctx context.Context) int {
 		log.ErrorContext(ctx, "Failed to run database migrations", "error", err)
 		return 1
 	}
-
-	c := clock.NewWithLocation(loc)
 
 	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
 	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)

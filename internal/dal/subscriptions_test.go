@@ -82,7 +82,7 @@ func (s *BoltDBTestSuite) TestBoltDB_GetAllSubscriptions() {
 
 func (s *BoltDBTestSuite) TestBoltDB_PutSubscription() {
 	createdAt := time.Date(2025, time.November, 11, 18, 19, 20, 0, time.UTC).AddDate(0, 0, -2)
-	s.now.Set(createdAt)
+	s.clockMock.Set(createdAt)
 
 	s.Require().NoError(s.store.PutSubscription(testutil.NewSubscription(1).WithCreatedAt(time.Time{}).Build()))
 	s.Require().NoError(s.store.PutSubscription(testutil.NewSubscription(2).WithCreatedAt(createdAt).Build()))
@@ -97,7 +97,7 @@ func (s *BoltDBTestSuite) TestBoltDB_PutSubscription() {
 	s.Equal(expected3, s.mustGetSubscription(3))
 
 	// make sure created at is not overridden
-	s.now.Set(createdAt.Add(24 * time.Hour))
+	s.clockMock.Set(createdAt.Add(24 * time.Hour))
 	s.Require().NoError(s.store.PutSubscription(testutil.NewSubscription(2).WithCreatedAt(createdAt.Add(24 * time.Hour)).Build()))
 	s.Equal(expected2, s.mustGetSubscription(2))
 }
