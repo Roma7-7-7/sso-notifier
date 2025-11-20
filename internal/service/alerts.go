@@ -83,7 +83,7 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	s.log.InfoContext(ctx, "checking for upcoming shutdowns", "time", now.Format("15:04"))
 
 	// Check if we're within notification window (6 AM - 11 PM)
-	if !isWithinNotificationWindow(now.Hour()) {
+	if !IsWithinNotificationWindow(now.Hour()) {
 		s.log.DebugContext(ctx, "outside notification window", "hour", now.Hour())
 		return nil
 	}
@@ -141,7 +141,7 @@ func (s *Alerts) processSubscriptionAlert(
 			continue
 		}
 
-		settingKey := getSettingKeyForStatus(alert.Status)
+		settingKey := GetSettingKeyForStatus(alert.Status)
 		if !dal.GetBoolSetting(sub.Settings, settingKey, false) {
 			continue
 		}
@@ -189,7 +189,7 @@ func (s *Alerts) processSubscriptionAlert(
 func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, target time.Time) ([]Alert, error) {
 	res := make([]Alert, 0, 10) //nolint:mnd // default
 
-	periodIndex, err := findPeriodIndex(shutdowns.Periods, target)
+	periodIndex, err := FindPeriodIndex(shutdowns.Periods, target)
 	if err != nil {
 		return nil, fmt.Errorf("find period index: %w", err)
 	}
@@ -198,7 +198,7 @@ func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, targ
 
 	// Check if the period's start time is close to our target time
 	// This prevents notifying about periods that already started in the past
-	periodStartMinutes, err := parseTimeToMinutes(period.From)
+	periodStartMinutes, err := ParseTimeToMinutes(period.From)
 	if err != nil {
 		return nil, fmt.Errorf("parse period start minutes: %w", err)
 	}
@@ -215,7 +215,7 @@ func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, targ
 
 	for groupNum, group := range shutdowns.Groups {
 		for _, status := range []dal.Status{dal.OFF, dal.MAYBE, dal.ON} {
-			if isOutageStart(group.Items, periodIndex, status) {
+			if IsOutageStart(group.Items, periodIndex, status) {
 				res = append(res, Alert{
 					GroupNum:  groupNum,
 					Date:      shutdowns.Date,
@@ -229,8 +229,8 @@ func PreparePowerSupplyChangeAlerts(shutdowns dal.Shutdowns, now time.Time, targ
 	return res, nil
 }
 
-// isOutageStart checks if the period at index i is the START of a new outage
-func isOutageStart(items []dal.Status, index int, status dal.Status) bool {
+// IsOutageStart checks if the period at index i is the START of a new outage
+func IsOutageStart(items []dal.Status, index int, status dal.Status) bool {
 	if index < 0 || index >= len(items) {
 		return false
 	}
@@ -249,20 +249,20 @@ func isOutageStart(items []dal.Status, index int, status dal.Status) bool {
 	return previousStatus != currentStatus
 }
 
-// findPeriodIndex finds the index of the period that contains the given time
+// FindPeriodIndex finds the index of the period that contains the given time
 // A period contains a time if: period.From <= time < period.To
-func findPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
+func FindPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
 	targetHour := targetTime.Hour()
 	targetMin := targetTime.Minute()
 	targetMinutes := targetHour*60 + targetMin //nolint:mnd // hours to minutes
 
 	for i, period := range periods {
-		fromMinutes, err := parseTimeToMinutes(period.From)
+		fromMinutes, err := ParseTimeToMinutes(period.From)
 		if err != nil {
 			return 0, fmt.Errorf("parse period from: %w", err)
 		}
 
-		toMinutes, err := parseTimeToMinutes(period.To)
+		toMinutes, err := ParseTimeToMinutes(period.To)
 		if err != nil {
 			return 0, fmt.Errorf("parse period to: %w", err)
 		}
@@ -276,9 +276,9 @@ func findPeriodIndex(periods []dal.Period, targetTime time.Time) (int, error) {
 	return 0, errors.New("no matching period")
 }
 
-// parseTimeToMinutes parses a time string (e.g., "10:30" or "24:00") to total minutes since midnight
+// ParseTimeToMinutes parses a time string (e.g., "10:30" or "24:00") to total minutes since midnight
 // "24:00" is treated as 1440 minutes (end of day)
-func parseTimeToMinutes(timeStr string) (int, error) {
+func ParseTimeToMinutes(timeStr string) (int, error) {
 	parts := strings.Split(timeStr, ":")
 	if len(parts) != 2 { //nolint:mnd // HH:mm
 		return 0, fmt.Errorf("invalid time format: %s", timeStr)
@@ -302,13 +302,13 @@ func parseTimeToMinutes(timeStr string) (int, error) {
 	return hour*60 + minute, nil
 }
 
-// isWithinNotificationWindow checks if the hour is within the notification window (6 AM - 11 PM)
-func isWithinNotificationWindow(hour int) bool {
+// IsWithinNotificationWindow checks if the hour is within the notification window (6 AM - 11 PM)
+func IsWithinNotificationWindow(hour int) bool {
 	return hour >= 6 && hour < 23
 }
 
-// getSettingKeyForStatus returns the setting key for a given status
-func getSettingKeyForStatus(status dal.Status) dal.SettingKey {
+// GetSettingKeyForStatus returns the setting key for a given status
+func GetSettingKeyForStatus(status dal.Status) dal.SettingKey {
 	switch status {
 	case dal.OFF:
 		return dal.SettingNotifyOff
