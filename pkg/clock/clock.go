@@ -3,14 +3,23 @@ package clock
 import "time"
 
 type Clock struct {
+	loc *time.Location
 }
 
 func New() *Clock {
 	return &Clock{}
 }
 
+func NewWithLocation(loc *time.Location) *Clock {
+	return &Clock{loc: loc}
+}
+
 func (c *Clock) Now() time.Time {
-	return time.Now()
+	now := time.Now()
+	if c.loc != nil {
+		now = now.In(c.loc)
+	}
+	return now
 }
 
 type Mock struct {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
@@ -24,14 +23,16 @@ type SubscriptionsStore interface {
 
 type Subscriptions struct {
 	store SubscriptionsStore
+	clock Clock
 
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewSubscription(store SubscriptionsStore, log *slog.Logger) *Subscriptions {
+func NewSubscription(store SubscriptionsStore, clock Clock, log *slog.Logger) *Subscriptions {
 	return &Subscriptions{
 		store: store,
+		clock: clock,
 		log:   log.With("component", "service").With("service", "subscriptions"),
 		mx:    &sync.Mutex{},
 	}
@@ -79,7 +80,7 @@ func (s *Subscriptions) ToggleGroupSubscription(chatID int64, groupNum string) e
 	if !exists {
 		sub = dal.Subscription{
 			ChatID:    chatID,
-			CreatedAt: time.Now(),
+			CreatedAt: s.clock.Now(),
 			Groups:    make(map[string]struct{}),
 		}
 	}

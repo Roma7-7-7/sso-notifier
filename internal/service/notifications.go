@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/Roma7-7-7/telegram"
 
@@ -32,9 +31,8 @@ type Notifications struct {
 	subscriptions SubscriptionsStore
 	notifications NotificationsStore
 	telegram      TelegramClient
+	clock         Clock
 
-	loc *time.Location
-	now func() time.Time
 	log *slog.Logger
 	mx  *sync.Mutex
 }
@@ -44,7 +42,7 @@ func NewNotifications(
 	subscriptions SubscriptionsStore,
 	notifications NotificationsStore,
 	telegram TelegramClient,
-	loc *time.Location,
+	clock Clock,
 	log *slog.Logger,
 ) *Notifications {
 	return &Notifications{
@@ -52,11 +50,7 @@ func NewNotifications(
 		subscriptions: subscriptions,
 		notifications: notifications,
 		telegram:      telegram,
-
-		loc: loc,
-		now: func() time.Time {
-			return time.Now().In(loc)
-		},
+		clock:         clock,
 
 		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
@@ -68,8 +62,10 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
-	today := dal.TodayDate(s.loc)
-	msgBuilder, err := s.prepareMessageBuilder(ctx, today)
+	now := s.clock.Now()
+	today := dal.DateByTime(now)
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1)) //nolint:mnd // 1 day
+	msgBuilder, err := s.prepareMessageBuilder(ctx, today, tomorrow)
 	if err != nil {
 		if errors.Is(err, ErrShutdownsNotAvailable) {
 			s.log.InfoContext(ctx, "No shoutdown updates available")
@@ -84,7 +80,6 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 		return fmt.Errorf("getting all subscriptions: %w", err)
 	}
 
-	tomorrow := dal.TomorrowDate(s.loc)
 	for _, sub := range subs {
 		s.processSubscriptionNotification(ctx, sub, today, tomorrow, msgBuilder)
 	}
@@ -92,7 +87,7 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	return nil
 }
 
-func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {
+func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return nil, fmt.Errorf("getting shutdowns table for today: %w", err)
@@ -101,9 +96,9 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Dat
 		return nil, ErrShutdownsNotAvailable
 	}
 
-	msgBuilder := NewPowerSupplyScheduleMessageBuilder(todayTable, s.now())
+	msgBuilder := NewPowerSupplyScheduleMessageBuilder(todayTable, s.clock.Now())
 
-	tomorrowTable, hasTomorrow, err := s.shutdowns.GetShutdowns(dal.TomorrowDate(s.loc))
+	tomorrowTable, hasTomorrow, err := s.shutdowns.GetShutdowns(tomorrow)
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to get tomorrow's shutdowns", "error", err)
 	} else if hasTomorrow {
@@ -180,7 +175,7 @@ func (s *Notifications) updateNotificationStates(
 	msg PowerSupplyScheduleMessage,
 	log *slog.Logger,
 ) {
-	now := s.now()
+	now := s.clock.Now()
 
 	if len(msg.TodayUpdatedGroups) > 0 {
 		for groupNum, newHash := range msg.TodayUpdatedGroups {

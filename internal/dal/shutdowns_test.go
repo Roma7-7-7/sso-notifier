@@ -8,8 +8,8 @@ import (
 )
 
 func (s *BoltDBTestSuite) TestBoltDB_GetShutdowns() {
-	today := dal.TodayDate(time.UTC)
-	tomorrow := dal.TomorrowDate(time.UTC)
+	today := dal.DateByTime(time.Now())
+	tomorrow := dal.TomorrowDateByTime(time.Now().AddDate(0, 0, 1))
 	shutdowns, ok, err := s.store.GetShutdowns(today)
 	s.Require().NoError(err)
 	if s.False(ok) {

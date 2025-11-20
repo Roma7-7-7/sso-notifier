@@ -26,7 +26,13 @@ type Scheduler struct {
 	log *slog.Logger
 }
 
-func NewScheduler(conf *telegram.Config, shutdowns *Shutdowns, notifications *Notifications, alerts *Alerts, log *slog.Logger) *Scheduler {
+func NewScheduler(
+	conf *telegram.Config,
+	shutdowns *Shutdowns,
+	notifications *Notifications,
+	alerts *Alerts,
+	log *slog.Logger,
+) *Scheduler {
 	return &Scheduler{
 		conf: conf,
 
@@ -66,13 +72,14 @@ func (s *Scheduler) run(ctx context.Context, interval time.Duration, process str
 	}()
 
 	const heartbeatInterval = 5 * time.Minute
-	pastHeartbeat := time.Now().Add(-heartbeatInterval)
+	now := time.Now()
+	pastHeartbeat := now.Add(-heartbeatInterval)
 
 	log.InfoContext(ctx, "Starting scheduler", "interval", interval)
 	for {
-		if time.Now().After(pastHeartbeat) {
+		if now.After(pastHeartbeat) {
 			log.InfoContext(ctx, "Process is still running")
-			pastHeartbeat = time.Now()
+			pastHeartbeat = now
 		}
 
 		select {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -157,7 +158,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			s := service.NewShutdowns(tt.fields.store(ctrl), tt.fields.provider(ctrl), time.UTC, slog.New(slog.DiscardHandler))
+			s := service.NewShutdowns(tt.fields.store(ctrl), tt.fields.provider(ctrl), clock.NewMock(now), slog.New(slog.DiscardHandler))
 			tt.wantErr(t, s.Refresh(t.Context()), "Refresh(_)")
 		})
 	}

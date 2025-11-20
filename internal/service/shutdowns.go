@@ -27,17 +27,18 @@ type ShutdownsProvider interface {
 type Shutdowns struct {
 	store    ShutdownsStore
 	provider ShutdownsProvider
+	clock    Clock
 
 	loc *time.Location
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewShutdowns(store ShutdownsStore, provider ShutdownsProvider, loc *time.Location, log *slog.Logger) *Shutdowns {
+func NewShutdowns(store ShutdownsStore, provider ShutdownsProvider, clock Clock, log *slog.Logger) *Shutdowns {
 	return &Shutdowns{
 		store:    store,
 		provider: provider,
-		loc:      loc,
+		clock:    clock,
 		log:      log.With("component", "service").With("service", "shutdowns"),
 		mx:       &sync.Mutex{},
 	}
@@ -51,8 +52,8 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	ctx, cancelFunc := context.WithTimeout(ctx, time.Minute)
 	defer cancelFunc()
 
-	// Fetch today's schedule and check if tomorrow's is available
-	today := dal.TodayDate(s.loc)
+	now := s.clock.Now()
+	today := dal.DateByTime(now)
 	todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
 	if err != nil {
 		if !errors.Is(err, providers.ErrCheckNextDayAvailability) {
@@ -72,7 +73,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 		return nil
 	}
 
-	tomorrow := dal.TomorrowDate(s.loc)
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
 	tomorrowTable, err := s.provider.ShutdownsNext(ctx)
 	if err != nil {
 		// Log error but don't fail the entire refresh - today's data is already saved
