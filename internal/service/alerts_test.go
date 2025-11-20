@@ -12,6 +12,7 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 	"github.com/Roma7-7-7/telegram"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
@@ -681,9 +682,9 @@ func TestPreparePowerSupplyChangeAlerts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := service.PreparePowerSupplyChangeAlerts(tt.shutdowns, tt.now, tt.target)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, tt.want, got)
 			}
 		})
@@ -769,9 +770,9 @@ func TestParseTimeToMinutes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := service.ParseTimeToMinutes(tt.timeStr)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
 		})
@@ -1013,9 +1014,9 @@ func TestFindPeriodIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotIndex, err := service.FindPeriodIndex(tt.periods, tt.targetTime)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.wantIndex, gotIndex)
 			}
 		})
