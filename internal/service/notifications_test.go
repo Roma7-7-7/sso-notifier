@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Roma7-7-7/telegram"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
+
+	"github.com/Roma7-7-7/telegram"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
