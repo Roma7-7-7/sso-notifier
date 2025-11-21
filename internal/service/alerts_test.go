@@ -573,6 +573,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 				tt.fields.store(ctrl),
 				tt.fields.telegram(ctrl),
 				tt.fields.clock(),
+				time.Hour,
 				slog.New(slog.DiscardHandler),
 			)
 

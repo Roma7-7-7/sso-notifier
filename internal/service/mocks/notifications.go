@@ -11,6 +11,7 @@ package mocks
 
 import (
 	reflect "reflect"
+	time "time"
 
 	dal "github.com/Roma7-7-7/sso-notifier/internal/dal"
 	gomock "go.uber.org/mock/gomock"
@@ -38,6 +39,20 @@ func NewMockNotificationsStore(ctrl *gomock.Controller) *MockNotificationsStore 
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockNotificationsStore) EXPECT() *MockNotificationsStoreMockRecorder {
 	return m.recorder
+}
+
+// CleanupNotificationStates mocks base method.
+func (m *MockNotificationsStore) CleanupNotificationStates(olderThan time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CleanupNotificationStates", olderThan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CleanupNotificationStates indicates an expected call of CleanupNotificationStates.
+func (mr *MockNotificationsStoreMockRecorder) CleanupNotificationStates(olderThan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupNotificationStates", reflect.TypeOf((*MockNotificationsStore)(nil).CleanupNotificationStates), olderThan)
 }
 
 // GetNotificationState mocks base method.

@@ -20,6 +20,8 @@ type Config struct {
 	NotifyInterval           time.Duration `envconfig:"NOTIFY_INTERVAL" default:"5m"`
 	NotifyUpcomingInterval   time.Duration `envconfig:"NOTIFY_UPCOMING_INTERVAL" default:"1m"`
 	ScheduleURL              string        `envconfig:"SCHEDULE_URL" default:"https://oblenergo.cv.ua/shutdowns/"`
+	NotificationsStateTTL    time.Duration `envconfig:"NOTIFICATIONS_STATE_TTL" default:"24h"`
+	AlertsTTL                time.Duration `envconfig:"ALERTS_TTL" default:"24h"`
 	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN"`
 }
 

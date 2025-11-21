@@ -41,6 +41,20 @@ func (m *MockAlertsStore) EXPECT() *MockAlertsStoreMockRecorder {
 	return m.recorder
 }
 
+// CleanupAlerts mocks base method.
+func (m *MockAlertsStore) CleanupAlerts(olderThan time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CleanupAlerts", olderThan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CleanupAlerts indicates an expected call of CleanupAlerts.
+func (mr *MockAlertsStoreMockRecorder) CleanupAlerts(olderThan any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupAlerts", reflect.TypeOf((*MockAlertsStore)(nil).CleanupAlerts), olderThan)
+}
+
 // GetAlert mocks base method.
 func (m *MockAlertsStore) GetAlert(key dal.AlertKey) (time.Time, bool, error) {
 	m.ctrl.T.Helper()
