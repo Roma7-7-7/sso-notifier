@@ -18,6 +18,17 @@ type NotificationState struct {
 	Hashes map[string]string `json:"hashes"`
 }
 
+// CountNotificationStates total number of notification states
+func (s *BoltDB) CountNotificationStates() (int, error) {
+	res := 0
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(notificationsBucket))
+		res = b.Stats().KeyN
+		return nil
+	})
+	return res, err
+}
+
 // GetNotificationState retrieves notification state for a specific user and date
 func (s *BoltDB) GetNotificationState(chatID int64, date Date) (NotificationState, bool, error) {
 	var res NotificationState
@@ -68,6 +79,30 @@ func (s *BoltDB) PutNotificationState(state NotificationState) error {
 func (s *BoltDB) DeleteNotificationStates(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		return s.deleteNotificationStates(tx, chatID)
+	})
+}
+
+// CleanupNotificationStates remove notification states older than passed TTL
+func (s *BoltDB) CleanupNotificationStates(olderThan time.Duration) error {
+	if olderThan <= 0 {
+		return nil
+	}
+
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(notificationsBucket))
+		return b.ForEach(func(k, v []byte) error {
+			var state NotificationState
+			if err := json.Unmarshal(v, &state); err != nil {
+				return fmt.Errorf("unmarshal notification state for chatID=%d: %w", state.ChatID, err)
+			}
+			if state.SentAt.IsZero() {
+				return nil
+			}
+			if state.SentAt.After(s.clock.Now().Add(-olderThan)) {
+				return nil
+			}
+			return b.Delete(k)
+		})
 	})
 }
 
