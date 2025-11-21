@@ -308,7 +308,7 @@ func (h *Handler) Unsubscribe(c tb.Context) error {
 		h.log.Error("failed to unsubscribe",
 			"error", err,
 			"chatID", chatID)
-		return h.sendOrDelete(c, "Не вдалось відписатись. Будь ласка, спробуйте пізніше.", h.markups.main.subscribed.ReplyMarkup)
+		return h.sendOrDelete(c, genericErrorMsg, h.markups.main.subscribed.ReplyMarkup)
 	}
 
 	h.log.Info("user unsubscribed", "chatID", chatID)
