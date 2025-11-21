@@ -419,10 +419,11 @@ func getLabelForStatus(status dal.Status) string {
 
 // PowerSupplyScheduleLinearMessageBuilder builds linear timeline messages
 type PowerSupplyScheduleLinearMessageBuilder struct {
-	shutdowns    dal.Shutdowns
-	nextDayTable *dal.Shutdowns
-	now          time.Time
-	template     *template.Template
+	shutdowns        dal.Shutdowns
+	nextDayTable     *dal.Shutdowns
+	now              time.Time
+	template         *template.Template
+	withPeriodRanges bool // If true, shows "🟢 11:30 - 13:00" instead of "🟢 11:30"
 }
 
 // LinearGroupSchedule represents a linear timeline for a single group
@@ -460,6 +461,11 @@ func NewPowerSupplyScheduleLinearMessageBuilder(shutdowns dal.Shutdowns, now tim
 
 func (mb *PowerSupplyScheduleLinearMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *PowerSupplyScheduleLinearMessageBuilder {
 	mb.nextDayTable = &nextDayShutdowns
+	return mb
+}
+
+func (mb *PowerSupplyScheduleLinearMessageBuilder) WithPeriodRanges(enabled bool) *PowerSupplyScheduleLinearMessageBuilder {
+	mb.withPeriodRanges = enabled
 	return mb
 }
 
@@ -549,7 +555,7 @@ func (mb *PowerSupplyScheduleLinearMessageBuilder) processDateScheduleLinear(
 		joinedPeriods, joinedStatuses := join(shutdowns.Periods, group.Items)
 		cutPeriods, cutStatuses := cutByTime(filterTime, joinedPeriods, joinedStatuses)
 
-		timeline := buildLinearTimeline(cutPeriods, cutStatuses)
+		timeline := buildLinearTimeline(cutPeriods, cutStatuses, mb.withPeriodRanges)
 
 		result.Groups = append(result.Groups, LinearGroupSchedule{
 			GroupNum: groupNum,
@@ -561,7 +567,7 @@ func (mb *PowerSupplyScheduleLinearMessageBuilder) processDateScheduleLinear(
 	return result
 }
 
-func buildLinearTimeline(periods []dal.Period, statuses []dal.Status) string {
+func buildLinearTimeline(periods []dal.Period, statuses []dal.Status, showRanges bool) string {
 	if len(periods) == 0 {
 		return ""
 	}
@@ -569,7 +575,11 @@ func buildLinearTimeline(periods []dal.Period, statuses []dal.Status) string {
 	var parts []string
 	for i, period := range periods {
 		emoji := getEmojiForStatus(statuses[i])
-		parts = append(parts, fmt.Sprintf("%s %s", emoji, period.From))
+		if showRanges {
+			parts = append(parts, fmt.Sprintf("%s %s - %s", emoji, period.From, period.To))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s %s", emoji, period.From))
+		}
 	}
 
 	return strings.Join(parts, " | ")

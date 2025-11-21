@@ -45,9 +45,10 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 		now              func() time.Time
 	}
 	type args struct {
-		sub           dal.Subscription
-		todayState    dal.NotificationState
-		tomorrowState dal.NotificationState
+		sub              dal.Subscription
+		todayState       dal.NotificationState
+		tomorrowState    dal.NotificationState
+		withPeriodRanges bool
 	}
 	tests := []struct {
 		name       string
@@ -121,6 +122,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 						"4": testutil.AllStatesOnHash,
 					},
 				},
+				withPeriodRanges: true,
 			},
 			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
@@ -142,7 +144,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 
 📅 2025-11-10:
 Група 4: 
-🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+🟢 11:00 - 14:00 | 🟡 14:00 - 14:30 | 🔴 14:30 - 17:30 | 🟡 17:30 - 18:00 | 🟢 18:00 - 21:00 | 🟡 21:00 - 21:30 | 🔴 21:30 - 24:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -216,6 +218,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 						"5": testutil.AllStatesOnHash,
 					},
 				},
+				withPeriodRanges: true,
 			},
 			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
@@ -243,10 +246,10 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 
 📅 2025-11-10:
 Група 4: 
-🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+🔴 00:30 - 03:30 | 🟡 03:30 - 04:00 | 🟢 04:00 - 07:00 | 🟡 07:00 - 07:30 | 🔴 07:30 - 10:30 | 🟡 10:30 - 11:00 | 🟢 11:00 - 14:00 | 🟡 14:00 - 14:30 | 🔴 14:30 - 17:30 | 🟡 17:30 - 18:00 | 🟢 18:00 - 21:00 | 🟡 21:00 - 21:30 | 🔴 21:30 - 24:00
 
 Група 5: 
-🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+🟢 00:00 - 03:00 | 🟡 03:00 - 03:30 | 🔴 03:30 - 06:30 | 🟡 06:30 - 07:00 | 🟢 07:00 - 10:00 | 🟡 10:00 - 10:30 | 🔴 10:30 - 13:30 | 🟡 13:30 - 14:00 | 🟢 14:00 - 17:00 | 🟡 17:00 - 17:30 | 🔴 17:30 - 20:30 | 🟡 20:30 - 21:00 | 🟢 21:00 - 24:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -1503,7 +1506,8 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name+"_original", func(t *testing.T) {
 			mb := service.NewPowerSupplyScheduleMessageBuilder(tt.fields.shutdowns, tt.fields.now())
-			lmb := service.NewPowerSupplyScheduleLinearMessageBuilder(tt.fields.shutdowns, tt.fields.now())
+			lmb := service.NewPowerSupplyScheduleLinearMessageBuilder(tt.fields.shutdowns, tt.fields.now()).
+				WithPeriodRanges(tt.args.withPeriodRanges)
 			if tt.fields.nextDayShutdowns != nil {
 				mb.WithNextDay(*tt.fields.nextDayShutdowns)
 				lmb.WithNextDay(*tt.fields.nextDayShutdowns)
