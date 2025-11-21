@@ -92,6 +92,9 @@ func (s *BoltDB) CleanupNotificationStates(olderThan time.Duration) error {
 		b := tx.Bucket([]byte(notificationsBucket))
 		return b.ForEach(func(k, v []byte) error {
 			var state NotificationState
+			if v == nil {
+				return nil
+			}
 			if err := json.Unmarshal(v, &state); err != nil {
 				return fmt.Errorf("unmarshal notification state for chatID=%d: %w", state.ChatID, err)
 			}
