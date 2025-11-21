@@ -24,6 +24,17 @@ const (
 	SettingNotifyMaybe SettingKey = "notify_maybe_10min"
 )
 
+// CountAlerts total number of alerts
+func (s *BoltDB) CountAlerts() (int, error) {
+	res := 0
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(alertsBucket))
+		res = b.Stats().KeyN
+		return nil
+	})
+	return res, err
+}
+
 // GetAlert checks if an alert was already sent for the given key
 func (s *BoltDB) GetAlert(key AlertKey) (time.Time, bool, error) {
 	var sentAt time.Time
@@ -76,6 +87,33 @@ func (s *BoltDB) DeleteAlert(key AlertKey) error {
 func (s *BoltDB) DeleteAlerts(chatID int64) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		return s.deleteAlerts(tx, chatID)
+	})
+}
+
+// CleanupAlerts remove alerts that are older than passed TTL
+func (s *BoltDB) CleanupAlerts(olderThan time.Duration) error {
+	if olderThan <= 0 {
+		return nil
+	}
+
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(alertsBucket))
+		return b.ForEach(func(k, v []byte) error {
+			if v == nil {
+				return nil
+			}
+
+			sentAt, parseErr := time.Parse(time.RFC3339, string(v))
+			if parseErr != nil {
+				return nil
+			}
+
+			if sentAt.After(s.clock.Now().Add(-olderThan)) {
+				return nil
+			}
+
+			return b.Delete(k)
+		})
 	})
 }
 
