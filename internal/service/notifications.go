@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/Roma7-7-7/telegram"
 
@@ -26,6 +27,7 @@ type TelegramClient interface {
 type NotificationsStore interface {
 	GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
 	PutNotificationState(state dal.NotificationState) error
+	CleanupNotificationStates(olderThan time.Duration) error
 }
 
 type Notifications struct {
@@ -35,8 +37,9 @@ type Notifications struct {
 	telegram      TelegramClient
 	clock         Clock
 
-	log *slog.Logger
-	mx  *sync.Mutex
+	notificationsTTL time.Duration
+	log              *slog.Logger
+	mx               *sync.Mutex
 }
 
 func NewNotifications(
@@ -45,14 +48,16 @@ func NewNotifications(
 	notifications NotificationsStore,
 	telegram TelegramClient,
 	clock Clock,
+	notificationsTTL time.Duration,
 	log *slog.Logger,
 ) *Notifications {
 	return &Notifications{
-		shutdowns:     shutdowns,
-		subscriptions: subscriptions,
-		notifications: notifications,
-		telegram:      telegram,
-		clock:         clock,
+		notificationsTTL: notificationsTTL,
+		shutdowns:        shutdowns,
+		subscriptions:    subscriptions,
+		notifications:    notifications,
+		telegram:         telegram,
+		clock:            clock,
 
 		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
@@ -87,6 +92,14 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Notifications) Cleanup(ctx context.Context) error {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.log.InfoContext(ctx, "cleaning up")
+	return s.notifications.CleanupNotificationStates(s.notificationsTTL) //nolint:wrapcheck // it's ok
 }
 
 func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {

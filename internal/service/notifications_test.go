@@ -676,6 +676,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				tt.fields.notifications(ctrl),
 				tt.fields.telegram(ctrl),
 				tt.fields.clock,
+				time.Hour,
 				slog.New(slog.DiscardHandler),
 			)
 			tt.wantErr(t, s.NotifyShutdownUpdates(t.Context()), "NotifyShutdownUpdates(_)")

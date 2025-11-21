@@ -176,3 +176,62 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteNotificationStates() {
 		}
 	}
 }
+
+func (s *BoltDBTestSuite) TestBoltDB_CleanupNotificationStates() {
+	date := dal.Date{
+		Year:  2025,
+		Month: time.November,
+		Day:   23,
+	}
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(1, date).WithSentAt(time.Date(2025, time.November, 23, 1, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(2, date).WithSentAt(time.Date(2025, time.November, 23, 2, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(3, date).WithSentAt(time.Date(2025, time.November, 23, 3, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(4, date).WithSentAt(time.Date(2025, time.November, 23, 4, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(5, date).WithSentAt(time.Date(2025, time.November, 23, 5, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(6, date).WithSentAt(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(7, date).WithSentAt(time.Date(2025, time.November, 23, 7, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(8, date).WithSentAt(time.Date(2025, time.November, 23, 8, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(9, date).WithSentAt(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC)).Build()))
+	s.Require().NoError(s.store.PutNotificationState(testutil.NewNotificationState(10, date).WithSentAt(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC)).Build()))
+
+	s.clockMock.Set(time.Date(2025, time.November, 23, 11, 0, 0, 0, time.UTC))
+
+	count, err := s.store.CountNotificationStates()
+	s.Require().NoError(err)
+	s.Require().Equal(10, count)
+
+	s.Require().NoError(s.store.CleanupNotificationStates(12 * time.Hour))
+	count, err = s.store.CountNotificationStates()
+	s.Require().NoError(err)
+	s.Require().Equal(10, count)
+
+	s.Require().NoError(s.store.CleanupNotificationStates(6 * time.Hour))
+	count, err = s.store.CountNotificationStates()
+	s.Require().NoError(err)
+	s.Require().Equal(5, count)
+	state, ok, err := s.store.GetNotificationState(6, date)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(6, date).WithSentAt(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC)).Build(), state)
+	}
+
+	s.Require().NoError(s.store.CleanupNotificationStates(3 * time.Hour))
+	count, err = s.store.CountNotificationStates()
+	s.Require().NoError(err)
+	s.Require().Equal(2, count)
+	state, ok, err = s.store.GetNotificationState(9, date)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(9, date).WithSentAt(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC)).Build(), state)
+	}
+
+	s.Require().NoError(s.store.CleanupNotificationStates(time.Hour + time.Minute))
+	count, err = s.store.CountNotificationStates()
+	s.Require().NoError(err)
+	s.Require().Equal(1, count)
+	state, ok, err = s.store.GetNotificationState(10, date)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(10, date).WithSentAt(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC)).Build(), state)
+	}
+}

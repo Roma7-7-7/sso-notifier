@@ -25,6 +25,7 @@ const (
 type AlertsStore interface {
 	GetAlert(key dal.AlertKey) (time.Time, bool, error)
 	PutAlert(key dal.AlertKey, sentAt time.Time) error
+	CleanupAlerts(olderThan time.Duration) error
 }
 
 type (
@@ -36,8 +37,9 @@ type (
 		messageBuilder *PowerSupplyChangeMessageBuilder
 		clock          Clock
 
-		log *slog.Logger
-		mx  *sync.Mutex
+		alertsTTL time.Duration
+		log       *slog.Logger
+		mx        *sync.Mutex
 	}
 )
 
@@ -55,6 +57,7 @@ func NewAlerts(
 	alerts AlertsStore,
 	telegram TelegramClient,
 	clock Clock,
+	alertsTTL time.Duration,
 	log *slog.Logger,
 ) *Alerts {
 	return &Alerts{
@@ -64,6 +67,7 @@ func NewAlerts(
 		telegram:       telegram,
 		messageBuilder: NewPowerSupplyChangeMessageBuilder(),
 		clock:          clock,
+		alertsTTL:      alertsTTL,
 
 		log: log.With("component", "service").With("service", "alerts"),
 		mx:  &sync.Mutex{},
@@ -119,6 +123,14 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Alerts) Cleanup(ctx context.Context) error {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.log.InfoContext(ctx, "cleaning up")
+	return s.store.CleanupAlerts(s.alertsTTL) //nolint:wrapcheck // it's ok
 }
 
 func (s *Alerts) processSubscriptionAlert(

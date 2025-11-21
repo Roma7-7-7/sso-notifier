@@ -110,3 +110,68 @@ func (s *BoltDBTestSuite) TestBoltDB_DeleteAlerts() {
 		}
 	}
 }
+
+func (s *BoltDBTestSuite) TestBoltDB_CleanupAlerts() {
+	key1 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "1")
+	key2 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "2")
+	key3 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "3")
+	key4 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "4")
+	key5 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "5")
+	key6 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "6")
+	key7 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "7")
+	key8 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "8")
+	key9 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "9")
+	key10 := dal.BuildAlertKey(1, "2025-11-23", "11:00", string(dal.ON), "10")
+
+	s.Require().NoError(s.store.PutAlert(key1, time.Date(2025, time.November, 23, 1, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key1)
+	s.Require().NoError(s.store.PutAlert(key2, time.Date(2025, time.November, 23, 2, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key2)
+	s.Require().NoError(s.store.PutAlert(key3, time.Date(2025, time.November, 23, 3, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key3)
+	s.Require().NoError(s.store.PutAlert(key4, time.Date(2025, time.November, 23, 4, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key4)
+	s.Require().NoError(s.store.PutAlert(key5, time.Date(2025, time.November, 23, 5, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key5)
+	s.Require().NoError(s.store.PutAlert(key6, time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key6)
+	s.Require().NoError(s.store.PutAlert(key7, time.Date(2025, time.November, 23, 7, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key7)
+	s.Require().NoError(s.store.PutAlert(key8, time.Date(2025, time.November, 23, 8, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key8)
+	s.Require().NoError(s.store.PutAlert(key9, time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key9)
+	s.Require().NoError(s.store.PutAlert(key10, time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC)), "PutAlert err for key: %s", key10)
+
+	s.clockMock.Set(time.Date(2025, time.November, 23, 11, 0, 0, 0, time.UTC))
+
+	count, err := s.store.CountAlerts()
+	s.Require().NoError(err)
+	s.Require().Equal(10, count)
+
+	s.Require().NoError(s.store.CleanupAlerts(12 * time.Hour))
+	count, err = s.store.CountAlerts()
+	s.Require().NoError(err)
+	s.Require().Equal(10, count)
+
+	s.Require().NoError(s.store.CleanupAlerts(6 * time.Hour))
+	count, err = s.store.CountAlerts()
+	s.Require().NoError(err)
+	s.Require().Equal(5, count)
+	alert, ok, err := s.store.GetAlert(key6)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC), alert)
+	}
+
+	s.Require().NoError(s.store.CleanupAlerts(3 * time.Hour))
+	count, err = s.store.CountAlerts()
+	s.Require().NoError(err)
+	s.Require().Equal(2, count)
+	alert, ok, err = s.store.GetAlert(key9)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC), alert)
+	}
+
+	s.Require().NoError(s.store.CleanupAlerts(time.Hour + time.Minute))
+	count, err = s.store.CountAlerts()
+	s.Require().NoError(err)
+	s.Require().Equal(1, count)
+	alert, ok, err = s.store.GetAlert(key10)
+	s.Require().NoError(err)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC), alert)
+	}
+}

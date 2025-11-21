@@ -46,23 +46,33 @@ func NewScheduler(
 
 func (s *Scheduler) Start(ctx context.Context) {
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		s.run(ctx, s.conf.RefreshShutdownsInterval, "refresh_shutdowns", s.shutdowns.Refresh)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		s.run(ctx, s.conf.NotifyInterval, "notify_shutdown_updates", s.notifications.NotifyShutdownUpdates)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyPowerSupplyChanges)
-	}()
+	})
+	wg.Go(func() {
+		s.run(ctx, s.conf.CleanupInterval, "cleanup", s.runCleanups)
+	})
 
 	wg.Wait()
+}
+
+func (s *Scheduler) runCleanups(ctx context.Context) error {
+	s.log.InfoContext(ctx, "starting cleanups")
+	err := s.notifications.Cleanup(ctx)
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to cleanup notifications", "error", err)
+	}
+	err = s.alerts.Cleanup(ctx)
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to cleanup alerts", "error", err)
+	}
+	return nil
 }
 
 func (s *Scheduler) run(ctx context.Context, interval time.Duration, process string, fn processFn) {

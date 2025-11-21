@@ -72,8 +72,8 @@ func run(ctx context.Context) int {
 	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
 	shutdownsSvc := service.NewShutdowns(store, provider, c, log)
 	subscriptionsSvc := service.NewSubscription(store, c, log)
-	notificationsSvc := service.NewNotifications(store, store, store, sender, c, log)
-	alertsSvc := service.NewAlerts(store, store, store, sender, c, log)
+	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log)
+	alertsSvc := service.NewAlerts(store, store, store, sender, c, conf.AlertsTTL, log)
 	handler := telegram.NewHandler(subscriptionsSvc, conf.GroupsCount, log)
 
 	bot, err := telegram.NewBot(conf, handler, log)

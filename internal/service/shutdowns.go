@@ -29,7 +29,6 @@ type Shutdowns struct {
 	provider ShutdownsProvider
 	clock    Clock
 
-	loc *time.Location
 	log *slog.Logger
 	mx  *sync.Mutex
 }
