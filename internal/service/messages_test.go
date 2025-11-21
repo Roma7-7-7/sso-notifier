@@ -45,16 +45,18 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 		now              func() time.Time
 	}
 	type args struct {
-		sub           dal.Subscription
-		todayState    dal.NotificationState
-		tomorrowState dal.NotificationState
+		sub              dal.Subscription
+		todayState       dal.NotificationState
+		tomorrowState    dal.NotificationState
+		withPeriodRanges bool
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    service.PowerSupplyScheduleMessage
-		wantErr assert.ErrorAssertionFunc
+		name       string
+		fields     fields
+		args       args
+		want       service.PowerSupplyScheduleMessage
+		wantLinear service.PowerSupplyScheduleMessage
+		wantErr    assert.ErrorAssertionFunc
 	}{
 		// ===================== Single group ===================== //
 		{
@@ -89,6 +91,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -107,6 +122,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 						"4": testutil.AllStatesOnHash,
 					},
 				},
+				withPeriodRanges: true,
 			},
 			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
@@ -116,6 +132,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
   🟢 Заживлено: 11:00 - 14:00; 18:00 - 21:00;
   🟡 Можливо заживлено: 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
   🔴 Відключено: 14:30 - 17:30; 21:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 11:00 - 14:00 | 🟡 14:00 - 14:30 | 🔴 14:30 - 17:30 | 🟡 17:30 - 18:00 | 🟢 18:00 - 21:00 | 🟡 21:00 - 21:30 | 🔴 21:30 - 24:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -155,6 +184,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 21:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 
@@ -176,6 +218,7 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 						"5": testutil.AllStatesOnHash,
 					},
 				},
+				withPeriodRanges: true,
 			},
 			want: service.PowerSupplyScheduleMessage{
 				Text: `Графік стабілізаційних відключень:
@@ -190,6 +233,23 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
   🟢 Заживлено: 00:00 - 03:00; 07:00 - 10:00; 14:00 - 17:00; 21:00 - 24:00;
   🟡 Можливо заживлено: 03:00 - 03:30; 06:30 - 07:00; 10:00 - 10:30; 13:30 - 14:00; 17:00 - 17:30; 20:30 - 21:00;
   🔴 Відключено: 03:30 - 06:30; 10:30 - 13:30; 17:30 - 20:30;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 00:30 - 03:30 | 🟡 03:30 - 04:00 | 🟢 04:00 - 07:00 | 🟡 07:00 - 07:30 | 🔴 07:30 - 10:30 | 🟡 10:30 - 11:00 | 🟢 11:00 - 14:00 | 🟡 14:00 - 14:30 | 🔴 14:30 - 17:30 | 🟡 17:30 - 18:00 | 🟢 18:00 - 21:00 | 🟡 21:00 - 21:30 | 🔴 21:30 - 24:00
+
+Група 5: 
+🟢 00:00 - 03:00 | 🟡 03:00 - 03:30 | 🔴 03:30 - 06:30 | 🟡 06:30 - 07:00 | 🟢 07:00 - 10:00 | 🟡 10:00 - 10:30 | 🔴 10:30 - 13:30 | 🟡 13:30 - 14:00 | 🟢 14:00 - 17:00 | 🟡 17:00 - 17:30 | 🔴 17:30 - 20:30 | 🟡 20:30 - 21:00 | 🟢 21:00 - 24:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -239,6 +299,23 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 5: 
+🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -268,6 +345,23 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 
 Група 5:
   🟢 Заживлено: 21:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 21:30
+
+Група 5: 
+🟢 21:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -327,6 +421,26 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					"4": defaultTomorrowHash,
 				},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -377,6 +491,26 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					"4": defaultTomorrowHash,
 				},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -416,6 +550,26 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
   🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
   🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
   🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+				},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 21:30
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -491,6 +645,34 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					"5": defaultTomorrowHash,
 				},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 5: 
+🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+Група 5: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -544,6 +726,34 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
   🟢 Заживлено: 00:00 - 04:00; 09:00 - 13:00; 18:00 - 22:00;
   🟡 Можливо заживлено: 04:00 - 04:30; 08:30 - 09:00; 13:00 - 13:30; 17:30 - 18:00; 22:00 - 22:30;
   🔴 Відключено: 04:30 - 08:30; 13:30 - 17:30; 22:30 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 5: 
+🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+Група 5: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -615,6 +825,34 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 					"5": defaultTomorrowHash,
 				},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 21:30
+
+Група 5: 
+🟢 21:00
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+Група 5: 
+🟢 00:00 | 🟡 04:00 | 🔴 04:30 | 🟡 08:30 | 🟢 09:00 | 🟡 13:00 | 🔴 13:30 | 🟡 17:30 | 🟢 18:00 | 🟡 22:00 | 🔴 22:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": defaultTomorrowHash,
+					"5": defaultTomorrowHash,
+				},
+			},
 			wantErr: assert.NoError,
 		},
 		// ===================== No changes ===================== //
@@ -638,6 +876,11 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 			},
 			want: service.PowerSupplyScheduleMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -666,6 +909,11 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 			},
 			want: service.PowerSupplyScheduleMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -701,6 +949,11 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 			},
 			want: service.PowerSupplyScheduleMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
 				Text:                  ``,
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
@@ -744,6 +997,11 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		// ===================== Partial changes ===================== //
@@ -774,6 +1032,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 📅 2025-11-10:
 Група 5:
   🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"5": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 5: 
+🟢 00:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -817,6 +1088,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 📅 2025-11-11:
 Група 4:
   🔴 Відключено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOffHash,
+				},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-11:
+Група 4: 
+🔴 00:00
 
 `,
 				TodayUpdatedGroups: map[string]string{},
@@ -869,6 +1153,26 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 📅 2025-11-11:
 Група 4:
   🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 00:00
+
+
+📅 2025-11-11:
+Група 4: 
+🟢 00:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -939,6 +1243,31 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 1: 
+🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+Група 2: 
+🟢 00:30 | 🟡 03:30 | 🔴 04:00 | 🟡 07:00 | 🟢 07:30 | 🟡 10:30 | 🔴 11:00 | 🟡 14:00 | 🟢 14:30 | 🟡 17:30 | 🔴 18:00 | 🟡 21:00 | 🟢 21:30
+
+Група 11: 
+🔴 00:00 | 🟡 03:00 | 🟢 03:30 | 🟡 06:30 | 🔴 07:00 | 🟡 10:00 | 🟢 10:30 | 🟡 13:30 | 🔴 14:00 | 🟡 17:00 | 🟢 17:30 | 🟡 20:30 | 🔴 21:00
+
+Група 12: 
+🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"1":  testutil.StubGroupHashes[1],
+					"2":  testutil.StubGroupHashes[2],
+					"11": testutil.StubGroupHashes[11],
+					"12": testutil.StubGroupHashes[12],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -984,6 +1313,23 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 5: 
+🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+					"5": testutil.StubGroupHashes[5],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -1011,6 +1357,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 📅 2025-11-10:
 Група 4:
   🟢 Заживлено: 00:00 - 24:00;
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOnHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🟢 00:00
 
 `,
 				TodayUpdatedGroups: map[string]string{
@@ -1052,6 +1411,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 00:00
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.AllStatesOffHash,
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -1086,6 +1458,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text: `Графік стабілізаційних відключень:
+
+📅 2025-11-10:
+Група 4: 
+🔴 21:30
+
+`,
+				TodayUpdatedGroups: map[string]string{
+					"4": testutil.StubGroupHashes[4],
+				},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 		{
@@ -1110,18 +1495,30 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				TodayUpdatedGroups:    map[string]string{},
 				TomorrowUpdatedGroups: map[string]string{},
 			},
+			wantLinear: service.PowerSupplyScheduleMessage{
+				Text:                  ``,
+				TodayUpdatedGroups:    map[string]string{},
+				TomorrowUpdatedGroups: map[string]string{},
+			},
 			wantErr: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name+"_original", func(t *testing.T) {
 			mb := service.NewPowerSupplyScheduleMessageBuilder(tt.fields.shutdowns, tt.fields.now())
+			lmb := service.NewPowerSupplyScheduleLinearMessageBuilder(tt.fields.shutdowns, tt.fields.now()).
+				WithPeriodRanges(tt.args.withPeriodRanges)
 			if tt.fields.nextDayShutdowns != nil {
 				mb.WithNextDay(*tt.fields.nextDayShutdowns)
+				lmb.WithNextDay(*tt.fields.nextDayShutdowns)
 			}
 			got, err := mb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
-			if tt.wantErr(t, err) {
-				assert.Equal(t, tt.want, got)
+			if tt.wantErr(t, err, "service.PowerSupplyScheduleMessageBuilder.Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.want, got, "service.PowerSupplyScheduleMessageBuilder.Build() error = %v, wantErr %v", err, tt.want)
+			}
+			got, err = lmb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
+			if tt.wantErr(t, err, "service.PowerSupplyScheduleLinearMessageBuilder.Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.wantLinear, got, "service.PowerSupplyScheduleLinearMessageBuilder.Build(%v)", tt.want)
 			}
 		})
 	}

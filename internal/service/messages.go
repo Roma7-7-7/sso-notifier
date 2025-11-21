@@ -416,3 +416,182 @@ func getLabelForStatus(status dal.Status) string {
 		return "Невідомий статус"
 	}
 }
+
+// PowerSupplyScheduleLinearMessageBuilder builds linear timeline messages
+type PowerSupplyScheduleLinearMessageBuilder struct {
+	shutdowns        dal.Shutdowns
+	nextDayTable     *dal.Shutdowns
+	now              time.Time
+	template         *template.Template
+	withPeriodRanges bool // If true, shows "🟢 11:30 - 13:00" instead of "🟢 11:30"
+}
+
+// LinearGroupSchedule represents a linear timeline for a single group
+type LinearGroupSchedule struct {
+	GroupNum string
+	Timeline string
+}
+
+// LinearDateSchedule represents a linear schedule for a single date
+type LinearDateSchedule struct {
+	Date   string
+	Groups []LinearGroupSchedule
+}
+
+// LinearNotificationMessage represents the complete linear notification structure
+type LinearNotificationMessage struct {
+	Dates []LinearDateSchedule
+}
+
+func NewPowerSupplyScheduleLinearMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *PowerSupplyScheduleLinearMessageBuilder {
+	templ := template.Must(template.New("linear_message").Parse(`Графік стабілізаційних відключень:
+{{range .Dates}}
+📅 {{.Date}}:
+{{range .Groups}}Група {{.GroupNum}}: 
+{{.Timeline}}
+
+{{end}}{{end}}`))
+
+	return &PowerSupplyScheduleLinearMessageBuilder{
+		shutdowns: shutdowns,
+		now:       now,
+		template:  templ,
+	}
+}
+
+func (mb *PowerSupplyScheduleLinearMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *PowerSupplyScheduleLinearMessageBuilder {
+	mb.nextDayTable = &nextDayShutdowns
+	return mb
+}
+
+func (mb *PowerSupplyScheduleLinearMessageBuilder) WithPeriodRanges(enabled bool) *PowerSupplyScheduleLinearMessageBuilder {
+	mb.withPeriodRanges = enabled
+	return mb
+}
+
+//nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
+func (mb *PowerSupplyScheduleLinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
+	result := PowerSupplyScheduleMessage{
+		TodayUpdatedGroups:    make(map[string]string),
+		TomorrowUpdatedGroups: make(map[string]string),
+	}
+
+	groupNums := make([]string, 0, len(sub.Groups))
+	for groupNum := range sub.Groups {
+		groupNums = append(groupNums, groupNum)
+	}
+
+	sort.Slice(groupNums, func(i, j int) bool {
+		numI, _ := strconv.Atoi(groupNums[i])
+		numJ, _ := strconv.Atoi(groupNums[j])
+		return numI < numJ
+	})
+
+	const maxDates = 2
+	dateSchedules := make([]LinearDateSchedule, 0, maxDates)
+
+	todaySchedule := mb.processDateScheduleLinear(mb.shutdowns, todayState, groupNums, mb.now)
+	if len(todaySchedule.UpdatedGroups) > 0 {
+		dateSchedules = append(dateSchedules, LinearDateSchedule{
+			Date:   mb.shutdowns.Date,
+			Groups: todaySchedule.Groups,
+		})
+		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
+	}
+
+	if mb.nextDayTable != nil {
+		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location())
+		tomorrowSchedule := mb.processDateScheduleLinear(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
+		if len(tomorrowSchedule.UpdatedGroups) > 0 {
+			dateSchedules = append(dateSchedules, LinearDateSchedule{
+				Date:   mb.nextDayTable.Date,
+				Groups: tomorrowSchedule.Groups,
+			})
+			result.TomorrowUpdatedGroups = tomorrowSchedule.UpdatedGroups
+		}
+	}
+
+	if len(dateSchedules) == 0 {
+		return result, nil
+	}
+
+	msg, err := mb.renderLinearMessage(dateSchedules)
+	if err != nil {
+		return PowerSupplyScheduleMessage{}, fmt.Errorf("render linear message: %w", err)
+	}
+
+	result.Text = msg
+	return result, nil
+}
+
+type linearDateScheduleResult struct {
+	Groups        []LinearGroupSchedule
+	UpdatedGroups map[string]string
+}
+
+func (mb *PowerSupplyScheduleLinearMessageBuilder) processDateScheduleLinear(
+	shutdowns dal.Shutdowns,
+	notifState dal.NotificationState,
+	groupNums []string,
+	filterTime time.Time,
+) linearDateScheduleResult {
+	result := linearDateScheduleResult{
+		Groups:        make([]LinearGroupSchedule, 0),
+		UpdatedGroups: make(map[string]string),
+	}
+
+	for _, groupNum := range groupNums {
+		currentHash := notifState.Hashes[groupNum]
+
+		group, ok := shutdowns.Groups[groupNum]
+		if !ok {
+			continue
+		}
+
+		newHash := shutdownGroupHash(group)
+		if currentHash == newHash {
+			continue
+		}
+
+		joinedPeriods, joinedStatuses := join(shutdowns.Periods, group.Items)
+		cutPeriods, cutStatuses := cutByTime(filterTime, joinedPeriods, joinedStatuses)
+
+		timeline := buildLinearTimeline(cutPeriods, cutStatuses, mb.withPeriodRanges)
+
+		result.Groups = append(result.Groups, LinearGroupSchedule{
+			GroupNum: groupNum,
+			Timeline: timeline,
+		})
+		result.UpdatedGroups[groupNum] = newHash
+	}
+
+	return result
+}
+
+func buildLinearTimeline(periods []dal.Period, statuses []dal.Status, showRanges bool) string {
+	if len(periods) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for i, period := range periods {
+		emoji := getEmojiForStatus(statuses[i])
+		if showRanges {
+			parts = append(parts, fmt.Sprintf("%s %s - %s", emoji, period.From, period.To))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s %s", emoji, period.From))
+		}
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+func (mb *PowerSupplyScheduleLinearMessageBuilder) renderLinearMessage(dates []LinearDateSchedule) (string, error) {
+	msg := LinearNotificationMessage{
+		Dates: dates,
+	}
+
+	var buf bytes.Buffer
+	err := mb.template.Execute(&buf, msg)
+	return buf.String(), err
+}

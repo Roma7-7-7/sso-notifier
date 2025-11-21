@@ -102,7 +102,7 @@ func (s *Notifications) Cleanup(ctx context.Context) error {
 	return s.notifications.CleanupNotificationStates(s.notificationsTTL) //nolint:wrapcheck // it's ok
 }
 
-func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {
+func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleLinearMessageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns table for today: %w", err)
@@ -111,7 +111,7 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Dat
 		return nil, ErrShutdownsNotAvailable
 	}
 
-	msgBuilder := NewPowerSupplyScheduleMessageBuilder(todayTable, s.clock.Now())
+	msgBuilder := NewPowerSupplyScheduleLinearMessageBuilder(todayTable, s.clock.Now())
 
 	tomorrowTable, hasTomorrow, err := s.shutdowns.GetShutdowns(tomorrow)
 	if err != nil {
@@ -129,7 +129,7 @@ func (s *Notifications) processSubscriptionNotification(
 	ctx context.Context,
 	sub dal.Subscription,
 	today, tomorrow dal.Date,
-	msgBuilder *PowerSupplyScheduleMessageBuilder,
+	msgBuilder *PowerSupplyScheduleLinearMessageBuilder,
 ) {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
