@@ -208,6 +208,7 @@ linters:
           - wrapcheck
           - revive
           - lll
+          - gochecknoglobals
         path: _test\.go
       - linters:
           - gocognit
