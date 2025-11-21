@@ -56,6 +56,7 @@ func (mb *PowerSupplyScheduleMessageBuilder) WithNextDay(nextDayShutdowns dal.Sh
 // Build generates a notification message for a subscription
 // Returns PowerSupplyScheduleMessage with message and hash updates, or empty result if no changes
 // If builder has next day data, tomorrowState must be provided
+// nolint:dupl // this will be removed soon
 func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
 	result := PowerSupplyScheduleMessage{
 		TodayUpdatedGroups:    make(map[string]string),
