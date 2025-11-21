@@ -86,31 +86,6 @@ func TestBoltDBTestSuite(t *testing.T) {
 	suite.Run(t, new(BoltDBTestSuite))
 }
 
-type nowWrapper struct {
-	now func() time.Time
-}
-
-func (w *nowWrapper) Call() time.Time {
-	if w.now != nil {
-		return w.now()
-	}
-	return time.Now()
-}
-
-func (w *nowWrapper) SetF(now func() time.Time) {
-	w.now = now
-}
-
-func (w *nowWrapper) Set(v time.Time) {
-	w.now = func() time.Time {
-		return v
-	}
-}
-
-func (w *nowWrapper) Reset() {
-	w.now = time.Now
-}
-
 func (s *BoltDBTestSuite) TestBoltDB_Purge() {
 	// Setup: Create 3 subscriptions with different chatIDs
 	chatID1 := int64(101)

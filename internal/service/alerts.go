@@ -125,11 +125,12 @@ func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	return nil
 }
 
-func (s *Alerts) Cleanup(_ context.Context) error {
+func (s *Alerts) Cleanup(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	return s.store.CleanupAlerts(s.alertsTTL)
+	s.log.InfoContext(ctx, "cleaning up")
+	return s.store.CleanupAlerts(s.alertsTTL) //nolint:wrapcheck // it's ok
 }
 
 func (s *Alerts) processSubscriptionAlert(

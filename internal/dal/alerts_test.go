@@ -151,8 +151,8 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupAlerts() {
 	s.Require().Equal(5, count)
 	alert, ok, err := s.store.GetAlert(key6)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC), alert)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC), alert)
 	}
 
 	s.Require().NoError(s.store.CleanupAlerts(3 * time.Hour))
@@ -161,8 +161,8 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupAlerts() {
 	s.Require().Equal(2, count)
 	alert, ok, err = s.store.GetAlert(key9)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC), alert)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC), alert)
 	}
 
 	s.Require().NoError(s.store.CleanupAlerts(time.Hour + time.Minute))
@@ -171,7 +171,7 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupAlerts() {
 	s.Require().Equal(1, count)
 	alert, ok, err = s.store.GetAlert(key10)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC), alert)
+	if s.True(ok) {
+		s.Equal(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC), alert)
 	}
 }

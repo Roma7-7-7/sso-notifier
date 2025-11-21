@@ -105,7 +105,7 @@ func (s *BoltDB) CleanupAlerts(olderThan time.Duration) error {
 
 			sentAt, parseErr := time.Parse(time.RFC3339, string(v))
 			if parseErr != nil {
-				return nil
+				return fmt.Errorf("parse data: %w", parseErr)
 			}
 
 			if sentAt.After(s.clock.Now().Add(-olderThan)) {

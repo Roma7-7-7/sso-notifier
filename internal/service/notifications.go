@@ -94,11 +94,12 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	return nil
 }
 
-func (s *Notifications) Cleanup(_ context.Context) error {
+func (s *Notifications) Cleanup(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
-	
-	return s.notifications.CleanupNotificationStates(s.notificationsTTL)
+
+	s.log.InfoContext(ctx, "cleaning up")
+	return s.notifications.CleanupNotificationStates(s.notificationsTTL) //nolint:wrapcheck // it's ok
 }
 
 func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleMessageBuilder, error) {

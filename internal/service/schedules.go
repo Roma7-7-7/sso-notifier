@@ -63,7 +63,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) runCleanups(ctx context.Context) error {
-	s.log.Info("starting cleanups")
+	s.log.InfoContext(ctx, "starting cleanups")
 	err := s.notifications.Cleanup(ctx)
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to cleanup notifications", "error", err)

@@ -211,8 +211,8 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupNotificationStates() {
 	s.Require().Equal(5, count)
 	state, ok, err := s.store.GetNotificationState(6, date)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(testutil.NewNotificationState(6, date).WithSentAt(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC)).Build(), state)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(6, date).WithSentAt(time.Date(2025, time.November, 23, 6, 0, 0, 0, time.UTC)).Build(), state)
 	}
 
 	s.Require().NoError(s.store.CleanupNotificationStates(3 * time.Hour))
@@ -221,8 +221,8 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupNotificationStates() {
 	s.Require().Equal(2, count)
 	state, ok, err = s.store.GetNotificationState(9, date)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(testutil.NewNotificationState(9, date).WithSentAt(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC)).Build(), state)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(9, date).WithSentAt(time.Date(2025, time.November, 23, 9, 0, 0, 0, time.UTC)).Build(), state)
 	}
 
 	s.Require().NoError(s.store.CleanupNotificationStates(time.Hour + time.Minute))
@@ -231,7 +231,7 @@ func (s *BoltDBTestSuite) TestBoltDB_CleanupNotificationStates() {
 	s.Require().Equal(1, count)
 	state, ok, err = s.store.GetNotificationState(10, date)
 	s.Require().NoError(err)
-	if s.Assert().True(ok) {
-		s.Assert().Equal(testutil.NewNotificationState(10, date).WithSentAt(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC)).Build(), state)
+	if s.True(ok) {
+		s.Equal(testutil.NewNotificationState(10, date).WithSentAt(time.Date(2025, time.November, 23, 10, 0, 0, 0, time.UTC)).Build(), state)
 	}
 }
