@@ -598,3 +598,365 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_Callback(t *testing.T) {
+	type fields struct {
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+	}
+	type args struct {
+		c func(*gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_subscribe",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().GetSubscribedGroups(chatID).Return([]string{"2"}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "subscribe",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Оберіть групи для підписки
+(натисніть щоб додати/видалити)`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_manage_groups",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().GetSubscribedGroups(chatID).Return([]string{"2"}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "subscribe",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Оберіть групи для підписки
+(натисніть щоб додати/видалити)`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_unsubscribe",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().Unsubscribe(chatID).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "\funsubscribe",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Ви відписані`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_settings",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "settings",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+
+Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_toggle_notify_off",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyOff, true).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "toggle_notify_off",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+
+Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_toggle_notify_on",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyOn, true).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "toggle_notify_on",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+
+Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_toggle_notify_maybe",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleSetting(chatID, dal.SettingNotifyMaybe, true).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "toggle_notify_maybe",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+
+Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_back_from_settings",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSubscribedGroups(chatID).Return([]string{"1"}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "back_from_settings",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Привіт! Ви підписані на групи: 1`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_back",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSubscribedGroups(chatID).Return([]string{"1"}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "back",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Привіт! Ви підписані на групи: 1`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_toggle_group_5",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().ToggleGroupSubscription(chatID, "5").Return(nil)
+					res.EXPECT().GetSubscribedGroups(chatID).Return([]string{"1", "5"}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "toggle_group_5",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`✅ Підписано на групу 5
+
+Оберіть групи для підписки
+(натисніть щоб додати/видалити)`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_unknown_data",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "unknown",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_respond",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(assert.AnError)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "unknown",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_nil_callback",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil).AnyTimes()
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := telegram.NewHandler(
+				tt.fields.subscriptions(ctrl),
+				12,
+				slog.New(slog.DiscardHandler),
+			)
+			tt.wantErr(t, h.Callback(tt.args.c(ctrl)), "Callback(_)")
+		})
+	}
+}

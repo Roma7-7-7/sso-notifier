@@ -233,7 +233,7 @@ func (h *Handler) Callback(c tb.Context) error {
 	callback := c.Callback()
 	if callback == nil {
 		h.log.Debug("callback router called with nil callback")
-		return nil
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 
 	chatID := c.Sender().ID
@@ -296,8 +296,8 @@ func (h *Handler) Callback(c tb.Context) error {
 		return h.ToggleGroupHandler(groupNum)(c)
 
 	default:
-		h.log.Debug("no handler matched for callback", "data", data)
-		return nil
+		h.log.Info("no handler matched for callback", "data", data)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
 }
 
