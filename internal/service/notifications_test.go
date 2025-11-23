@@ -466,8 +466,6 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 			fields: fields{
 				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(ctrl)
-					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
-					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
 					return res
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
@@ -497,6 +495,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
 					return res
 				},
 				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
@@ -509,7 +508,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				clock: clock.NewMock(now),
 			},
-			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get shutdowns table for today: "),
+			wantErr: assert.NoError,
 		},
 		{
 			name: "error_no_shutdowns_yet",
@@ -521,6 +520,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
 					return res
 				},
 				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {

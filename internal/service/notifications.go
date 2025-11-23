@@ -20,27 +20,37 @@ import (
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
-type TelegramClient interface {
-	SendMessage(context.Context, string, string) error
-}
+type (
+	TelegramClient interface {
+		SendMessage(context.Context, string, string) error
+	}
 
-type NotificationsStore interface {
-	GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
-	PutNotificationState(state dal.NotificationState) error
-	CleanupNotificationStates(olderThan time.Duration) error
-}
+	NotificationsStore interface {
+		GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
+		PutNotificationState(state dal.NotificationState) error
+		CleanupNotificationStates(olderThan time.Duration) error
+	}
 
-type Notifications struct {
-	shutdowns     ShutdownsStore
-	subscriptions SubscriptionsStore
-	notifications NotificationsStore
-	telegram      TelegramClient
-	clock         Clock
+	messageBuildStrategy interface {
+		Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error)
+	}
 
-	notificationsTTL time.Duration
-	log              *slog.Logger
-	mx               *sync.Mutex
-}
+	MessageBuilder struct {
+		messageBuildStrategy
+	}
+
+	Notifications struct {
+		shutdowns     ShutdownsStore
+		subscriptions SubscriptionsStore
+		notifications NotificationsStore
+		telegram      TelegramClient
+		clock         Clock
+
+		notificationsTTL time.Duration
+		log              *slog.Logger
+		mx               *sync.Mutex
+	}
+)
 
 func NewNotifications(
 	shutdowns ShutdownsStore,
@@ -69,26 +79,17 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
-	now := s.clock.Now()
-	today := dal.DateByTime(now)
-	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
-	msgBuilder, err := s.prepareMessageBuilder(ctx, today, tomorrow)
-	if err != nil {
-		if errors.Is(err, ErrShutdownsNotAvailable) {
-			s.log.InfoContext(ctx, "No shoutdown updates available")
-			return nil
-		}
-
-		return fmt.Errorf("prepare message builder: %w", err)
-	}
-
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
 		return fmt.Errorf("get all subscriptions: %w", err)
 	}
 
+	now := s.clock.Now()
+	today := dal.DateByTime(now)
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
+
 	for _, sub := range subs {
-		s.processSubscriptionNotification(ctx, sub, today, tomorrow, msgBuilder)
+		s.processSubscriptionNotification(ctx, sub, today, tomorrow)
 	}
 
 	return nil
@@ -102,7 +103,7 @@ func (s *Notifications) Cleanup(ctx context.Context) error {
 	return s.notifications.CleanupNotificationStates(s.notificationsTTL) //nolint:wrapcheck // it's ok
 }
 
-func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*PowerSupplyScheduleLinearMessageBuilder, error) {
+func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*MessageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns table for today: %w", err)
@@ -121,7 +122,9 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Dat
 		s.log.DebugContext(ctx, "Including tomorrow's schedule in notifications")
 	}
 
-	return msgBuilder, nil
+	return &MessageBuilder{
+		messageBuildStrategy: msgBuilder,
+	}, nil
 }
 
 // processSubscriptionNotification processes notification for a single subscription
@@ -129,10 +132,20 @@ func (s *Notifications) processSubscriptionNotification(
 	ctx context.Context,
 	sub dal.Subscription,
 	today, tomorrow dal.Date,
-	msgBuilder *PowerSupplyScheduleLinearMessageBuilder,
 ) {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
+
+	msgBuilder, err := s.prepareMessageBuilder(ctx, today, tomorrow)
+	if err != nil {
+		if errors.Is(err, ErrShutdownsNotAvailable) {
+			s.log.InfoContext(ctx, "No shoutdown updates available")
+			return
+		}
+
+		s.log.ErrorContext(ctx, "Failed to prepare shoutdown updates message builder", "error", err)
+		return
+	}
 
 	todayState, err := s.getOrCreateNotificationState(chatID, today)
 	if err != nil {
