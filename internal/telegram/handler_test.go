@@ -573,6 +573,393 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 	}
 }
 
+func TestHandler_SettingsAlerts(t *testing.T) {
+	type fields struct {
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+	}
+	type args struct {
+		c func(*gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_subscribed",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingNotifyOn:    true,
+						dal.SettingNotifyMaybe: false,
+						dal.SettingNotifyOff:   true,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`🔔 Попереджати за 10 хвилин до:
+
+ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_not_subscribed",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(false, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_settings",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_is_subscribed",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(false, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), 12, slog.New(slog.DiscardHandler))
+			tt.wantErr(t, h.SettingsAlerts(tt.args.c(ctrl)), "SettingsAlerts(_)")
+		})
+	}
+}
+
+func TestHandler_SettingsNotificationsFormat(t *testing.T) {
+	type fields struct {
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+	}
+	type args struct {
+		c func(*gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_subscribed_with_linear_format",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_subscribed_with_grouped_format",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatGrouped,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_not_subscribed",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(false, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Налаштування доступні тільки для підписаних користувачів. Спочатку підпішіться на оновлення.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_settings",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_is_subscribed",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(false, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), 12, slog.New(slog.DiscardHandler))
+			tt.wantErr(t, h.SettingsNotificationsFormat(tt.args.c(ctrl)), "SettingsNotificationsFormat(_)")
+		})
+	}
+}
+
+func TestHandler_SetFormatHandler(t *testing.T) {
+	type fields struct {
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+	}
+	type args struct {
+		format string
+		ctx    func(*gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_set_linear",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinear).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				format: dal.ShutdownsMessageFormatLinear,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_linear_with_range",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinearWithRange).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinearWithRange,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				format: dal.ShutdownsMessageFormatLinearWithRange,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_grouped",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatGrouped).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatGrouped,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				format: dal.ShutdownsMessageFormatGrouped,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_set_setting",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinear).Return(assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				format: dal.ShutdownsMessageFormatLinear,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_get_settings",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinear).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(nil, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				format: dal.ShutdownsMessageFormatLinear,
+				ctx: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), 12, slog.New(slog.DiscardHandler))
+			fn := h.SetFormatHandler(tt.args.format)
+			tt.wantErr(t, fn(tt.args.ctx(ctrl)), "SetFormatHandler(_)")
+		})
+	}
+}
+
 func TestHandler_Callback(t *testing.T) {
 	type fields struct {
 		subscriptions func(*gomock.Controller) telegram.Subscriptions
@@ -840,6 +1227,191 @@ func TestHandler_Callback(t *testing.T) {
 
 Оберіть групи для підписки
 (натисніть щоб додати/видалити)`, gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_settings_alerts",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingNotifyOn:    true,
+						dal.SettingNotifyMaybe: false,
+						dal.SettingNotifyOff:   false,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "settings_alerts",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_settings_notifications_format",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "settings_notifications_format",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_format_linear",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinear).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "set_format_linear",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_format_linear_with_range",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatLinearWithRange).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinearWithRange,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "set_format_linear_with_range",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_format_grouped",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().SetSetting(chatID, dal.SettingShutdownsMessageFormat, dal.ShutdownsMessageFormatGrouped).Return(nil)
+					res.EXPECT().GetSettings(chatID).Return(map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatGrouped,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "set_format_grouped",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_back_from_alerts",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "back_from_alerts",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_back_from_format",
+			fields: fields{
+				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+					res := mocks.NewMockSubscriptions(ctrl)
+					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Respond().Return(nil)
+					res.EXPECT().Callback().Return(&tb.Callback{
+						Data: "back_from_format",
+					}).AnyTimes()
+					res.EXPECT().Delete().Return(nil)
+					res.EXPECT().Send(gomock.Any(), gomock.Not(gomock.Nil())).Return(nil)
 					return res
 				},
 			},

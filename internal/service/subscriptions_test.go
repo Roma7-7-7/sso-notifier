@@ -758,3 +758,218 @@ func TestSubscriptions_ToggleSetting(t *testing.T) {
 		})
 	}
 }
+
+func TestSubscriptions_SetSetting(t *testing.T) {
+	type fields struct {
+		store func(*testing.T, *gomock.Controller) service.SubscriptionsStore
+	}
+	type args struct {
+		chatID int64
+		key    dal.SettingKey
+		value  interface{}
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success_set_string_setting",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{},
+					}, true, nil)
+					res.EXPECT().PutSubscription(*testutil.NewSubscriptionMatcher(t, dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{
+							dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+						},
+					})).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_set_bool_setting",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{},
+					}, true, nil)
+					res.EXPECT().PutSubscription(*testutil.NewSubscriptionMatcher(t, dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{
+							dal.SettingNotifyOff: true,
+						},
+					})).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingNotifyOff,
+				value:  true,
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_overwrite_existing_setting",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{
+							dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatGrouped,
+						},
+					}, true, nil)
+					res.EXPECT().PutSubscription(*testutil.NewSubscriptionMatcher(t, dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{
+							dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+						},
+					})).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "success_nil_settings_map",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: nil,
+					}, true, nil)
+					res.EXPECT().PutSubscription(*testutil.NewSubscriptionMatcher(t, dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{
+							dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+						},
+					})).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_subscription_not_found",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, nil)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.Error,
+		},
+		{
+			name: "error_get_subscription",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{}, false, assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.Error,
+		},
+		{
+			name: "error_put_subscription",
+			fields: fields{
+				store: func(t *testing.T, ctrl *gomock.Controller) service.SubscriptionsStore {
+					t.Helper()
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetSubscription(chatID).Return(dal.Subscription{
+						ChatID: chatID,
+						Groups: map[string]struct{}{
+							"1": {},
+						},
+						Settings: map[dal.SettingKey]interface{}{},
+					}, true, nil)
+					res.EXPECT().PutSubscription(gomock.Any()).Return(assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				chatID: chatID,
+				key:    dal.SettingShutdownsMessageFormat,
+				value:  dal.ShutdownsMessageFormatLinear,
+			},
+			wantErr: assert.Error,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			s := service.NewSubscription(tt.fields.store(t, ctrl), clock.NewMock(time.Now()), slog.New(slog.DiscardHandler))
+			tt.wantErr(t, s.SetSetting(tt.args.chatID, tt.args.key, tt.args.value), fmt.Sprintf("SetSetting(%v, %v, %v)", tt.args.chatID, tt.args.key, tt.args.value))
+		})
+	}
+}

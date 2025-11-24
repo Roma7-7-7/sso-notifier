@@ -200,7 +200,7 @@ func (h *Handler) SettingsAlerts(c tb.Context) error {
 	}
 
 	if !subscribed {
-		return h.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпішіться на оновлення.", h.markups.main.unsubscribed.ReplyMarkup)
+		return h.sendOrDelete(c, "Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", h.markups.main.unsubscribed.ReplyMarkup)
 	}
 
 	settings, err := h.subscriptions.GetSettings(chatID)
