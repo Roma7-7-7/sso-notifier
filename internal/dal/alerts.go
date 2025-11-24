@@ -19,9 +19,14 @@ func BuildAlertKey(chatID int64, date, timeStr, status, group string) AlertKey {
 type SettingKey string
 
 const (
-	SettingNotifyOn    SettingKey = "notify_on_10min"
-	SettingNotifyOff   SettingKey = "notify_off_10min"
-	SettingNotifyMaybe SettingKey = "notify_maybe_10min"
+	SettingNotifyOn               SettingKey = "notify_on_10min"
+	SettingNotifyOff              SettingKey = "notify_off_10min"
+	SettingNotifyMaybe            SettingKey = "notify_maybe_10min"
+	SettingShutdownsMessageFormat SettingKey = "shutdowns_message_format"
+
+	ShutdownsMessageFormatLinear          = "linear"
+	ShutdownsMessageFormatLinearWithRange = "linear_with_range"
+	ShutdownsMessageFormatGrouped         = "grouped"
 )
 
 // CountAlerts total number of alerts

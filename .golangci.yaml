@@ -209,6 +209,7 @@ linters:
           - revive
           - lll
           - gochecknoglobals
+          - exhaustive
         path: _test\.go
       - linters:
           - gocognit

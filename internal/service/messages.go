@@ -19,7 +19,7 @@ type (
 		TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
 	}
 
-	PowerSupplyScheduleMessageBuilder struct {
+	GroupedMessageBuilder struct {
 		shutdowns    dal.Shutdowns
 		nextDayTable *dal.Shutdowns // Optional next day shutdowns
 		now          time.Time
@@ -28,35 +28,30 @@ type (
 	}
 )
 
-func NewPowerSupplyScheduleMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *PowerSupplyScheduleMessageBuilder {
-	// powerSupplyScheduleMessageTemplate is the main notification template
-	// IMPORTANT: If you change this template or the rendering logic below, you must also update:
-	// - internal/service/TEMPLATES.md - Update examples and documentation
-	// - CLAUDE.md - Update message format examples in "PowerSupplyScheduleMessage Templates" section
-	templ := template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
+//nolint:gochecknoglobals // template must be initialized once
+var groupedTempl = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
 {{range .Dates}}
 📅 {{.Date}}:
 {{range .Groups}}Група {{.GroupNum}}:
 {{range .StatusLines}}{{if .Periods}}  {{.Emoji}} {{.Label}}:{{range .Periods}} {{.From}} - {{.To}};{{end}}
 {{end}}{{end}}
 {{end}}{{end}}`))
-	return &PowerSupplyScheduleMessageBuilder{
+
+func NewGroupedMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *GroupedMessageBuilder {
+	return &GroupedMessageBuilder{
 		shutdowns: shutdowns,
 		now:       now,
 
-		template: templ,
+		template: groupedTempl,
 	}
 }
 
-func (mb *PowerSupplyScheduleMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *PowerSupplyScheduleMessageBuilder {
+func (mb *GroupedMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) {
 	mb.nextDayTable = &nextDayShutdowns
-	return mb
 }
 
-// Build generates a notification message for a subscription
-// Returns PowerSupplyScheduleMessage with message and hash updates, or empty result if no changes
-// If builder has next day data, tomorrowState must be provided
-func (mb *PowerSupplyScheduleMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
+//nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
+func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
 	result := PowerSupplyScheduleMessage{
 		TodayUpdatedGroups:    make(map[string]string),
 		TomorrowUpdatedGroups: make(map[string]string),
@@ -125,7 +120,7 @@ type dateScheduleResult struct {
 }
 
 // processDateSchedule processes shutdown schedule for a single date
-func (mb *PowerSupplyScheduleMessageBuilder) processDateSchedule(
+func (mb *GroupedMessageBuilder) processDateSchedule(
 	shutdowns dal.Shutdowns,
 	notifState dal.NotificationState,
 	groupNums []string,
@@ -162,7 +157,7 @@ func (mb *PowerSupplyScheduleMessageBuilder) processDateSchedule(
 }
 
 // renderMultiDateMessage renders a message for multiple dates
-func (mb *PowerSupplyScheduleMessageBuilder) renderMultiDateMessage(dates []DateSchedule) (string, error) {
+func (mb *GroupedMessageBuilder) renderMultiDateMessage(dates []DateSchedule) (string, error) {
 	msg := NotificationMessage{
 		Dates: dates,
 	}
@@ -417,8 +412,8 @@ func getLabelForStatus(status dal.Status) string {
 	}
 }
 
-// PowerSupplyScheduleLinearMessageBuilder builds linear timeline messages
-type PowerSupplyScheduleLinearMessageBuilder struct {
+// LinearMessageBuilder builds linear timeline messages
+type LinearMessageBuilder struct {
 	shutdowns        dal.Shutdowns
 	nextDayTable     *dal.Shutdowns
 	now              time.Time
@@ -443,8 +438,8 @@ type LinearNotificationMessage struct {
 	Dates []LinearDateSchedule
 }
 
-func NewPowerSupplyScheduleLinearMessageBuilder(shutdowns dal.Shutdowns, now time.Time) *PowerSupplyScheduleLinearMessageBuilder {
-	templ := template.Must(template.New("linear_message").Parse(`Графік стабілізаційних відключень:
+//nolint:gochecknoglobals // template must be initialized once
+var linearTempl = template.Must(template.New("linear_message").Parse(`Графік стабілізаційних відключень:
 {{range .Dates}}
 📅 {{.Date}}:
 {{range .Groups}}Група {{.GroupNum}}: 
@@ -452,25 +447,21 @@ func NewPowerSupplyScheduleLinearMessageBuilder(shutdowns dal.Shutdowns, now tim
 
 {{end}}{{end}}`))
 
-	return &PowerSupplyScheduleLinearMessageBuilder{
-		shutdowns: shutdowns,
-		now:       now,
-		template:  templ,
+func NewLinearMessageBuilder(shutdowns dal.Shutdowns, withPeriodRange bool, now time.Time) *LinearMessageBuilder {
+	return &LinearMessageBuilder{
+		shutdowns:        shutdowns,
+		now:              now,
+		template:         linearTempl,
+		withPeriodRanges: withPeriodRange,
 	}
 }
 
-func (mb *PowerSupplyScheduleLinearMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) *PowerSupplyScheduleLinearMessageBuilder {
+func (mb *LinearMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) {
 	mb.nextDayTable = &nextDayShutdowns
-	return mb
-}
-
-func (mb *PowerSupplyScheduleLinearMessageBuilder) WithPeriodRanges(enabled bool) *PowerSupplyScheduleLinearMessageBuilder {
-	mb.withPeriodRanges = enabled
-	return mb
 }
 
 //nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
-func (mb *PowerSupplyScheduleLinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
+func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
 	result := PowerSupplyScheduleMessage{
 		TodayUpdatedGroups:    make(map[string]string),
 		TomorrowUpdatedGroups: make(map[string]string),
@@ -529,7 +520,7 @@ type linearDateScheduleResult struct {
 	UpdatedGroups map[string]string
 }
 
-func (mb *PowerSupplyScheduleLinearMessageBuilder) processDateScheduleLinear(
+func (mb *LinearMessageBuilder) processDateScheduleLinear(
 	shutdowns dal.Shutdowns,
 	notifState dal.NotificationState,
 	groupNums []string,
@@ -586,7 +577,7 @@ func buildLinearTimeline(periods []dal.Period, statuses []dal.Status, showRanges
 	return strings.Join(parts, " | ")
 }
 
-func (mb *PowerSupplyScheduleLinearMessageBuilder) renderLinearMessage(dates []LinearDateSchedule) (string, error) {
+func (mb *LinearMessageBuilder) renderLinearMessage(dates []LinearDateSchedule) (string, error) {
 	msg := LinearNotificationMessage{
 		Dates: dates,
 	}
