@@ -1512,12 +1512,12 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 				lmb.WithNextDay(*tt.fields.nextDayShutdowns)
 			}
 			got, err := mb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
-			if tt.wantErr(t, err, "service.GroupedMessageBuilder.Build(%v)", tt.args.sub) {
-				assert.Equalf(t, tt.want, got, "service.GroupedMessageBuilder.Build() error = %v, wantErr %v", err, tt.want)
+			if tt.wantErr(t, err, "service.MessageBuilder[Grouped].Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.want, got, "service.MessageBuilder[Grouped].Build() error = %v, wantErr %v", err, tt.want)
 			}
 			got, err = lmb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
-			if tt.wantErr(t, err, "service.LinearMessageBuilder.Build(%v)", tt.args.sub) {
-				assert.Equalf(t, tt.wantLinear, got, "service.LinearMessageBuilder.Build(%v)", tt.want)
+			if tt.wantErr(t, err, "service.MessageBuilder[Linear].Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.wantLinear, got, "service.MessageBuilder[Grouped].Build(%v)", tt.want)
 			}
 		})
 	}
