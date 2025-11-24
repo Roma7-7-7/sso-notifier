@@ -96,7 +96,28 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
 					res := mocks.NewMockTelegramClient(ctrl)
-					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any())
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, `Графік стабілізаційних відключень:
+
+📅 2025-11-20:
+Група 1: 
+🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+Група 3: 
+🟢 00:00 | 🟡 02:00 | 🔴 02:30 | 🟡 05:30 | 🟢 06:00 | 🟡 09:00 | 🔴 09:30 | 🟡 12:30 | 🟢 13:00 | 🟡 16:00 | 🔴 16:30 | 🟡 19:30 | 🟢 20:00 | 🟡 23:00 | 🔴 23:30
+
+Група 5: 
+🟢 00:00 | 🟡 01:00 | 🔴 01:30 | 🟡 04:30 | 🟢 05:00 | 🟡 08:00 | 🔴 08:30 | 🟡 11:30 | 🟢 12:00 | 🟡 15:00 | 🔴 15:30 | 🟡 18:30 | 🟢 19:00 | 🟡 22:00 | 🔴 22:30
+
+Група 7: 
+🟡 00:00 | 🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 9: 
+🔴 00:00 | 🟡 02:30 | 🟢 03:00 | 🟡 06:00 | 🔴 06:30 | 🟡 09:30 | 🟢 10:00 | 🟡 13:00 | 🔴 13:30 | 🟡 16:30 | 🟢 17:00 | 🟡 20:00 | 🔴 20:30 | 🟡 23:30
+
+Група 11: 
+🔴 00:00 | 🟡 01:30 | 🟢 02:00 | 🟡 05:00 | 🔴 05:30 | 🟡 08:30 | 🟢 09:00 | 🟡 12:00 | 🔴 12:30 | 🟡 15:30 | 🟢 16:00 | 🟡 19:00 | 🔴 19:30 | 🟡 22:30 | 🟢 23:00
+
+`)
 					return res
 				},
 				clock: clock.NewMock(now),
@@ -114,7 +135,11 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
-					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{defaultSubscription}, nil)
+					cpy := defaultSubscription
+					cpy.Settings = map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinear,
+					}
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{cpy}, nil)
 					return res
 				},
 				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
@@ -146,7 +171,48 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
 					res := mocks.NewMockTelegramClient(ctrl)
-					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any())
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, `Графік стабілізаційних відключень:
+
+📅 2025-11-20:
+Група 1: 
+🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+Група 3: 
+🟢 00:00 | 🟡 02:00 | 🔴 02:30 | 🟡 05:30 | 🟢 06:00 | 🟡 09:00 | 🔴 09:30 | 🟡 12:30 | 🟢 13:00 | 🟡 16:00 | 🔴 16:30 | 🟡 19:30 | 🟢 20:00 | 🟡 23:00 | 🔴 23:30
+
+Група 5: 
+🟢 00:00 | 🟡 01:00 | 🔴 01:30 | 🟡 04:30 | 🟢 05:00 | 🟡 08:00 | 🔴 08:30 | 🟡 11:30 | 🟢 12:00 | 🟡 15:00 | 🔴 15:30 | 🟡 18:30 | 🟢 19:00 | 🟡 22:00 | 🔴 22:30
+
+Група 7: 
+🟡 00:00 | 🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 9: 
+🔴 00:00 | 🟡 02:30 | 🟢 03:00 | 🟡 06:00 | 🔴 06:30 | 🟡 09:30 | 🟢 10:00 | 🟡 13:00 | 🔴 13:30 | 🟡 16:30 | 🟢 17:00 | 🟡 20:00 | 🔴 20:30 | 🟡 23:30
+
+Група 11: 
+🔴 00:00 | 🟡 01:30 | 🟢 02:00 | 🟡 05:00 | 🔴 05:30 | 🟡 08:30 | 🟢 09:00 | 🟡 12:00 | 🔴 12:30 | 🟡 15:30 | 🟢 16:00 | 🟡 19:00 | 🔴 19:30 | 🟡 22:30 | 🟢 23:00
+
+
+📅 2025-11-20:
+Група 1: 
+🟢 00:00 | 🟡 03:00 | 🔴 03:30 | 🟡 06:30 | 🟢 07:00 | 🟡 10:00 | 🔴 10:30 | 🟡 13:30 | 🟢 14:00 | 🟡 17:00 | 🔴 17:30 | 🟡 20:30 | 🟢 21:00
+
+Група 3: 
+🟢 00:00 | 🟡 02:00 | 🔴 02:30 | 🟡 05:30 | 🟢 06:00 | 🟡 09:00 | 🔴 09:30 | 🟡 12:30 | 🟢 13:00 | 🟡 16:00 | 🔴 16:30 | 🟡 19:30 | 🟢 20:00 | 🟡 23:00 | 🔴 23:30
+
+Група 5: 
+🟢 00:00 | 🟡 01:00 | 🔴 01:30 | 🟡 04:30 | 🟢 05:00 | 🟡 08:00 | 🔴 08:30 | 🟡 11:30 | 🟢 12:00 | 🟡 15:00 | 🔴 15:30 | 🟡 18:30 | 🟢 19:00 | 🟡 22:00 | 🔴 22:30
+
+Група 7: 
+🟡 00:00 | 🔴 00:30 | 🟡 03:30 | 🟢 04:00 | 🟡 07:00 | 🔴 07:30 | 🟡 10:30 | 🟢 11:00 | 🟡 14:00 | 🔴 14:30 | 🟡 17:30 | 🟢 18:00 | 🟡 21:00 | 🔴 21:30
+
+Група 9: 
+🔴 00:00 | 🟡 02:30 | 🟢 03:00 | 🟡 06:00 | 🔴 06:30 | 🟡 09:30 | 🟢 10:00 | 🟡 13:00 | 🔴 13:30 | 🟡 16:30 | 🟢 17:00 | 🟡 20:00 | 🔴 20:30 | 🟡 23:30
+
+Група 11: 
+🔴 00:00 | 🟡 01:30 | 🟢 02:00 | 🟡 05:00 | 🔴 05:30 | 🟡 08:30 | 🟢 09:00 | 🟡 12:00 | 🔴 12:30 | 🟡 15:30 | 🟢 16:00 | 🟡 19:00 | 🔴 19:30 | 🟡 22:30 | 🟢 23:00
+
+`)
 					return res
 				},
 				clock: clock.NewMock(now),
@@ -164,7 +230,11 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
-					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					cpy := singleSubscription
+					cpy.Settings = map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatLinearWithRange,
+					}
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{cpy}, nil)
 					return res
 				},
 				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
@@ -181,7 +251,13 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
 					res := mocks.NewMockTelegramClient(ctrl)
-					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any())
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, `Графік стабілізаційних відключень:
+
+📅 2025-11-20:
+Група 1: 
+🟢 00:00 - 03:00 | 🟡 03:00 - 03:30 | 🔴 03:30 - 06:30 | 🟡 06:30 - 07:00 | 🟢 07:00 - 10:00 | 🟡 10:00 - 10:30 | 🔴 10:30 - 13:30 | 🟡 13:30 - 14:00 | 🟢 14:00 - 17:00 | 🟡 17:00 - 17:30 | 🔴 17:30 - 20:30 | 🟡 20:30 - 21:00 | 🟢 21:00 - 24:00
+
+`)
 					return res
 				},
 				clock: clock.NewMock(now),
@@ -199,7 +275,11 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
 					res := mocks.NewMockSubscriptionsStore(ctrl)
-					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{defaultSubscription}, nil)
+					cpy := defaultSubscription
+					cpy.Settings = map[dal.SettingKey]any{
+						dal.SettingShutdownsMessageFormat: dal.ShutdownsMessageFormatGrouped,
+					}
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{cpy}, nil)
 					return res
 				},
 				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
@@ -227,7 +307,30 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				},
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
 					res := mocks.NewMockTelegramClient(ctrl)
-					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any())
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, `Графік стабілізаційних відключень:
+
+📅 2025-11-20:
+Група 3:
+  🟢 Заживлено: 00:00 - 02:00; 06:00 - 09:00; 13:00 - 16:00; 20:00 - 23:00;
+  🟡 Можливо заживлено: 02:00 - 02:30; 05:30 - 06:00; 09:00 - 09:30; 12:30 - 13:00; 16:00 - 16:30; 19:30 - 20:00; 23:00 - 23:30;
+  🔴 Відключено: 02:30 - 05:30; 09:30 - 12:30; 16:30 - 19:30; 23:30 - 24:00;
+
+Група 7:
+  🟢 Заживлено: 04:00 - 07:00; 11:00 - 14:00; 18:00 - 21:00;
+  🟡 Можливо заживлено: 00:00 - 00:30; 03:30 - 04:00; 07:00 - 07:30; 10:30 - 11:00; 14:00 - 14:30; 17:30 - 18:00; 21:00 - 21:30;
+  🔴 Відключено: 00:30 - 03:30; 07:30 - 10:30; 14:30 - 17:30; 21:30 - 24:00;
+
+Група 9:
+  🟢 Заживлено: 03:00 - 06:00; 10:00 - 13:00; 17:00 - 20:00;
+  🟡 Можливо заживлено: 02:30 - 03:00; 06:00 - 06:30; 09:30 - 10:00; 13:00 - 13:30; 16:30 - 17:00; 20:00 - 20:30; 23:30 - 24:00;
+  🔴 Відключено: 00:00 - 02:30; 06:30 - 09:30; 13:30 - 16:30; 20:30 - 23:30;
+
+Група 11:
+  🟢 Заживлено: 02:00 - 05:00; 09:00 - 12:00; 16:00 - 19:00; 23:00 - 24:00;
+  🟡 Можливо заживлено: 01:30 - 02:00; 05:00 - 05:30; 08:30 - 09:00; 12:00 - 12:30; 15:30 - 16:00; 19:00 - 19:30; 22:30 - 23:00;
+  🔴 Відключено: 00:00 - 01:30; 05:30 - 08:30; 12:30 - 15:30; 19:30 - 22:30;
+
+`)
 					return res
 				},
 				clock: clock.NewMock(now),

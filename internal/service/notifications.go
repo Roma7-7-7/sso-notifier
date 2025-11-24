@@ -32,10 +32,11 @@ type (
 	}
 
 	messageBuildStrategy interface {
+		WithNextDay(nextDayShutdowns dal.Shutdowns)
 		Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error)
 	}
 
-	MessageBuilder struct {
+	messageBuilder struct {
 		messageBuildStrategy
 	}
 
@@ -103,7 +104,7 @@ func (s *Notifications) Cleanup(ctx context.Context) error {
 	return s.notifications.CleanupNotificationStates(s.notificationsTTL) //nolint:wrapcheck // it's ok
 }
 
-func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Date, tomorrow dal.Date) (*MessageBuilder, error) {
+func (s *Notifications) prepareMessageBuilder(ctx context.Context, sub dal.Subscription, today dal.Date, tomorrow dal.Date) (*messageBuilder, error) {
 	todayTable, ok, err := s.shutdowns.GetShutdowns(today)
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns table for today: %w", err)
@@ -111,19 +112,29 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, today dal.Dat
 	if !ok {
 		return nil, ErrShutdownsNotAvailable
 	}
-
-	msgBuilder := NewPowerSupplyScheduleLinearMessageBuilder(todayTable, s.clock.Now())
+	var strategy messageBuildStrategy
+	switch sub.Settings[dal.SettingShutdownsMessageFormat] {
+	case dal.ShutdownsMessageFormatGrouped:
+		strategy = NewGroupedMessageBuilder(todayTable, s.clock.Now())
+	case dal.ShutdownsMessageFormatLinear:
+		strategy = NewLinearMessageBuilder(todayTable, false, s.clock.Now())
+	case dal.ShutdownsMessageFormatLinearWithRange:
+		strategy = NewLinearMessageBuilder(todayTable, true, s.clock.Now())
+	default:
+		s.log.WarnContext(ctx, "Unknown shutdown message format. Fallback to default linear without range", "format", dal.SettingShutdownsMessageFormat)
+		strategy = NewLinearMessageBuilder(todayTable, false, s.clock.Now())
+	}
 
 	tomorrowTable, hasTomorrow, err := s.shutdowns.GetShutdowns(tomorrow)
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to get tomorrow's shutdowns", "error", err)
 	} else if hasTomorrow {
-		msgBuilder.WithNextDay(tomorrowTable)
+		strategy.WithNextDay(tomorrowTable)
 		s.log.DebugContext(ctx, "Including tomorrow's schedule in notifications")
 	}
 
-	return &MessageBuilder{
-		messageBuildStrategy: msgBuilder,
+	return &messageBuilder{
+		messageBuildStrategy: strategy,
 	}, nil
 }
 
@@ -136,7 +147,7 @@ func (s *Notifications) processSubscriptionNotification(
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
 
-	msgBuilder, err := s.prepareMessageBuilder(ctx, today, tomorrow)
+	msgBuilder, err := s.prepareMessageBuilder(ctx, sub, today, tomorrow)
 	if err != nil {
 		if errors.Is(err, ErrShutdownsNotAvailable) {
 			s.log.InfoContext(ctx, "No shoutdown updates available")

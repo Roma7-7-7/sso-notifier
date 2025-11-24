@@ -1505,20 +1505,19 @@ func TestPowerSupplyScheduleMessageBuilder_Build(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name+"_original", func(t *testing.T) {
-			mb := service.NewPowerSupplyScheduleMessageBuilder(tt.fields.shutdowns, tt.fields.now())
-			lmb := service.NewPowerSupplyScheduleLinearMessageBuilder(tt.fields.shutdowns, tt.fields.now()).
-				WithPeriodRanges(tt.args.withPeriodRanges)
+			mb := service.NewGroupedMessageBuilder(tt.fields.shutdowns, tt.fields.now())
+			lmb := service.NewLinearMessageBuilder(tt.fields.shutdowns, tt.args.withPeriodRanges, tt.fields.now())
 			if tt.fields.nextDayShutdowns != nil {
 				mb.WithNextDay(*tt.fields.nextDayShutdowns)
 				lmb.WithNextDay(*tt.fields.nextDayShutdowns)
 			}
 			got, err := mb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
-			if tt.wantErr(t, err, "service.PowerSupplyScheduleMessageBuilder.Build(%v)", tt.args.sub) {
-				assert.Equalf(t, tt.want, got, "service.PowerSupplyScheduleMessageBuilder.Build() error = %v, wantErr %v", err, tt.want)
+			if tt.wantErr(t, err, "service.GroupedMessageBuilder.Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.want, got, "service.GroupedMessageBuilder.Build() error = %v, wantErr %v", err, tt.want)
 			}
 			got, err = lmb.Build(tt.args.sub, tt.args.todayState, tt.args.tomorrowState)
-			if tt.wantErr(t, err, "service.PowerSupplyScheduleLinearMessageBuilder.Build(%v)", tt.args.sub) {
-				assert.Equalf(t, tt.wantLinear, got, "service.PowerSupplyScheduleLinearMessageBuilder.Build(%v)", tt.want)
+			if tt.wantErr(t, err, "service.LinearMessageBuilder.Build(%v)", tt.args.sub) {
+				assert.Equalf(t, tt.wantLinear, got, "service.LinearMessageBuilder.Build(%v)", tt.want)
 			}
 		})
 	}
