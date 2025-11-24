@@ -57,24 +57,20 @@ func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorro
 		TomorrowUpdatedGroups: make(map[string]string),
 	}
 
-	// Collect and sort group numbers to ensure deterministic order
 	groupNums := make([]string, 0, len(sub.Groups))
 	for groupNum := range sub.Groups {
 		groupNums = append(groupNums, groupNum)
 	}
 
-	// Sort numerically (e.g., "1", "2", "11" -> 1, 2, 11 not "1", "11", "2")
 	sort.Slice(groupNums, func(i, j int) bool {
 		numI, _ := strconv.Atoi(groupNums[i])
 		numJ, _ := strconv.Atoi(groupNums[j])
 		return numI < numJ
 	})
 
-	// Collect date schedules (today + tomorrow max)
 	const maxDates = 2
 	dateSchedules := make([]DateSchedule, 0, maxDates)
 
-	// Process today's schedule
 	todaySchedule := mb.processDateSchedule(mb.shutdowns, todayState, groupNums, mb.now)
 	if len(todaySchedule.UpdatedGroups) > 0 {
 		dateSchedules = append(dateSchedules, DateSchedule{
@@ -84,10 +80,8 @@ func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorro
 		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
 	}
 
-	// Process tomorrow's schedule if available
 	if mb.nextDayTable != nil {
-		// For tomorrow, show all periods (start from midnight)
-		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location()) // Use arbitrary date with 00:00
+		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location())
 		tomorrowSchedule := mb.processDateSchedule(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
 		if len(tomorrowSchedule.UpdatedGroups) > 0 {
 			dateSchedules = append(dateSchedules, DateSchedule{
@@ -102,8 +96,7 @@ func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorro
 		return result, nil
 	}
 
-	// Render multi-date message
-	msg, err := mb.renderMultiDateMessage(dateSchedules)
+	msg, err := mb.renderMessage(dateSchedules)
 	if err != nil {
 		return PowerSupplyScheduleMessage{}, fmt.Errorf("render message: %w", err)
 	}
@@ -156,8 +149,7 @@ func (mb *GroupedMessageBuilder) processDateSchedule(
 	return result
 }
 
-// renderMultiDateMessage renders a message for multiple dates
-func (mb *GroupedMessageBuilder) renderMultiDateMessage(dates []DateSchedule) (string, error) {
+func (mb *GroupedMessageBuilder) renderMessage(dates []DateSchedule) (string, error) {
 	msg := NotificationMessage{
 		Dates: dates,
 	}
@@ -481,7 +473,7 @@ func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrow
 	const maxDates = 2
 	dateSchedules := make([]LinearDateSchedule, 0, maxDates)
 
-	todaySchedule := mb.processDateScheduleLinear(mb.shutdowns, todayState, groupNums, mb.now)
+	todaySchedule := mb.processDateSchedule(mb.shutdowns, todayState, groupNums, mb.now)
 	if len(todaySchedule.UpdatedGroups) > 0 {
 		dateSchedules = append(dateSchedules, LinearDateSchedule{
 			Date:   mb.shutdowns.Date,
@@ -492,7 +484,7 @@ func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrow
 
 	if mb.nextDayTable != nil {
 		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location())
-		tomorrowSchedule := mb.processDateScheduleLinear(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
+		tomorrowSchedule := mb.processDateSchedule(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
 		if len(tomorrowSchedule.UpdatedGroups) > 0 {
 			dateSchedules = append(dateSchedules, LinearDateSchedule{
 				Date:   mb.nextDayTable.Date,
@@ -506,12 +498,13 @@ func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrow
 		return result, nil
 	}
 
-	msg, err := mb.renderLinearMessage(dateSchedules)
+	msg, err := mb.renderMessage(dateSchedules)
 	if err != nil {
-		return PowerSupplyScheduleMessage{}, fmt.Errorf("render linear message: %w", err)
+		return PowerSupplyScheduleMessage{}, fmt.Errorf("render message: %w", err)
 	}
 
 	result.Text = msg
+
 	return result, nil
 }
 
@@ -520,7 +513,7 @@ type linearDateScheduleResult struct {
 	UpdatedGroups map[string]string
 }
 
-func (mb *LinearMessageBuilder) processDateScheduleLinear(
+func (mb *LinearMessageBuilder) processDateSchedule(
 	shutdowns dal.Shutdowns,
 	notifState dal.NotificationState,
 	groupNums []string,
@@ -577,7 +570,7 @@ func buildLinearTimeline(periods []dal.Period, statuses []dal.Status, showRanges
 	return strings.Join(parts, " | ")
 }
 
-func (mb *LinearMessageBuilder) renderLinearMessage(dates []LinearDateSchedule) (string, error) {
+func (mb *LinearMessageBuilder) renderMessage(dates []LinearDateSchedule) (string, error) {
 	msg := LinearNotificationMessage{
 		Dates: dates,
 	}
