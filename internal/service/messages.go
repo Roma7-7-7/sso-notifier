@@ -26,6 +26,15 @@ type (
 
 		template *template.Template
 	}
+
+	messageBuildStrategy interface {
+		WithNextDay(nextDayShutdowns dal.Shutdowns)
+		Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error)
+	}
+
+	messageBuilder struct {
+		messageBuildStrategy
+	}
 )
 
 //nolint:gochecknoglobals // template must be initialized once
@@ -106,20 +115,74 @@ func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorro
 	return result, nil
 }
 
-// dateScheduleResult holds the result of processing a single date's schedule
-type dateScheduleResult struct {
-	Groups        []GroupSchedule
+//nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
+func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
+	result := PowerSupplyScheduleMessage{
+		TodayUpdatedGroups:    make(map[string]string),
+		TomorrowUpdatedGroups: make(map[string]string),
+	}
+
+	groupNums := make([]string, 0, len(sub.Groups))
+	for groupNum := range sub.Groups {
+		groupNums = append(groupNums, groupNum)
+	}
+
+	sort.Slice(groupNums, func(i, j int) bool {
+		numI, _ := strconv.Atoi(groupNums[i])
+		numJ, _ := strconv.Atoi(groupNums[j])
+		return numI < numJ
+	})
+
+	const maxDates = 2
+	dateSchedules := make([]LinearDateSchedule, 0, maxDates)
+
+	todaySchedule := mb.processDateSchedule(mb.shutdowns, todayState, groupNums, mb.now)
+	if len(todaySchedule.UpdatedGroups) > 0 {
+		dateSchedules = append(dateSchedules, LinearDateSchedule{
+			Date:   mb.shutdowns.Date,
+			Groups: todaySchedule.Groups,
+		})
+		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
+	}
+
+	if mb.nextDayTable != nil {
+		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location())
+		tomorrowSchedule := mb.processDateSchedule(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
+		if len(tomorrowSchedule.UpdatedGroups) > 0 {
+			dateSchedules = append(dateSchedules, LinearDateSchedule{
+				Date:   mb.nextDayTable.Date,
+				Groups: tomorrowSchedule.Groups,
+			})
+			result.TomorrowUpdatedGroups = tomorrowSchedule.UpdatedGroups
+		}
+	}
+
+	if len(dateSchedules) == 0 {
+		return result, nil
+	}
+
+	msg, err := mb.renderMessage(dateSchedules)
+	if err != nil {
+		return PowerSupplyScheduleMessage{}, fmt.Errorf("render message: %w", err)
+	}
+
+	result.Text = msg
+
+	return result, nil
+}
+
+type dateScheduleResult[G any] struct {
+	Groups        []G
 	UpdatedGroups map[string]string
 }
 
-// processDateSchedule processes shutdown schedule for a single date
 func (mb *GroupedMessageBuilder) processDateSchedule(
 	shutdowns dal.Shutdowns,
 	notifState dal.NotificationState,
 	groupNums []string,
 	filterTime time.Time,
-) dateScheduleResult {
-	result := dateScheduleResult{
+) dateScheduleResult[GroupSchedule] {
+	result := dateScheduleResult[GroupSchedule]{
 		Groups:        make([]GroupSchedule, 0),
 		UpdatedGroups: make(map[string]string),
 	}
@@ -143,6 +206,45 @@ func (mb *GroupedMessageBuilder) processDateSchedule(
 		groupSchedule := buildGroupSchedule(groupNum, cutPeriods, cutStatuses)
 
 		result.Groups = append(result.Groups, groupSchedule)
+		result.UpdatedGroups[groupNum] = newHash
+	}
+
+	return result
+}
+
+func (mb *LinearMessageBuilder) processDateSchedule(
+	shutdowns dal.Shutdowns,
+	notifState dal.NotificationState,
+	groupNums []string,
+	filterTime time.Time,
+) dateScheduleResult[LinearGroupSchedule] {
+	result := dateScheduleResult[LinearGroupSchedule]{
+		Groups:        make([]LinearGroupSchedule, 0),
+		UpdatedGroups: make(map[string]string),
+	}
+
+	for _, groupNum := range groupNums {
+		currentHash := notifState.Hashes[groupNum]
+
+		group, ok := shutdowns.Groups[groupNum]
+		if !ok {
+			continue
+		}
+
+		newHash := shutdownGroupHash(group)
+		if currentHash == newHash {
+			continue
+		}
+
+		joinedPeriods, joinedStatuses := join(shutdowns.Periods, group.Items)
+		cutPeriods, cutStatuses := cutByTime(filterTime, joinedPeriods, joinedStatuses)
+
+		timeline := buildLinearTimeline(cutPeriods, cutStatuses, mb.withPeriodRanges)
+
+		result.Groups = append(result.Groups, LinearGroupSchedule{
+			GroupNum: groupNum,
+			Timeline: timeline,
+		})
 		result.UpdatedGroups[groupNum] = newHash
 	}
 
@@ -450,106 +552,6 @@ func NewLinearMessageBuilder(shutdowns dal.Shutdowns, withPeriodRange bool, now 
 
 func (mb *LinearMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) {
 	mb.nextDayTable = &nextDayShutdowns
-}
-
-//nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
-func (mb *LinearMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
-	result := PowerSupplyScheduleMessage{
-		TodayUpdatedGroups:    make(map[string]string),
-		TomorrowUpdatedGroups: make(map[string]string),
-	}
-
-	groupNums := make([]string, 0, len(sub.Groups))
-	for groupNum := range sub.Groups {
-		groupNums = append(groupNums, groupNum)
-	}
-
-	sort.Slice(groupNums, func(i, j int) bool {
-		numI, _ := strconv.Atoi(groupNums[i])
-		numJ, _ := strconv.Atoi(groupNums[j])
-		return numI < numJ
-	})
-
-	const maxDates = 2
-	dateSchedules := make([]LinearDateSchedule, 0, maxDates)
-
-	todaySchedule := mb.processDateSchedule(mb.shutdowns, todayState, groupNums, mb.now)
-	if len(todaySchedule.UpdatedGroups) > 0 {
-		dateSchedules = append(dateSchedules, LinearDateSchedule{
-			Date:   mb.shutdowns.Date,
-			Groups: todaySchedule.Groups,
-		})
-		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
-	}
-
-	if mb.nextDayTable != nil {
-		tomorrowTime := time.Date(2000, 1, 1, 0, 0, 0, 0, mb.now.Location())
-		tomorrowSchedule := mb.processDateSchedule(*mb.nextDayTable, tomorrowState, groupNums, tomorrowTime)
-		if len(tomorrowSchedule.UpdatedGroups) > 0 {
-			dateSchedules = append(dateSchedules, LinearDateSchedule{
-				Date:   mb.nextDayTable.Date,
-				Groups: tomorrowSchedule.Groups,
-			})
-			result.TomorrowUpdatedGroups = tomorrowSchedule.UpdatedGroups
-		}
-	}
-
-	if len(dateSchedules) == 0 {
-		return result, nil
-	}
-
-	msg, err := mb.renderMessage(dateSchedules)
-	if err != nil {
-		return PowerSupplyScheduleMessage{}, fmt.Errorf("render message: %w", err)
-	}
-
-	result.Text = msg
-
-	return result, nil
-}
-
-type linearDateScheduleResult struct {
-	Groups        []LinearGroupSchedule
-	UpdatedGroups map[string]string
-}
-
-func (mb *LinearMessageBuilder) processDateSchedule(
-	shutdowns dal.Shutdowns,
-	notifState dal.NotificationState,
-	groupNums []string,
-	filterTime time.Time,
-) linearDateScheduleResult {
-	result := linearDateScheduleResult{
-		Groups:        make([]LinearGroupSchedule, 0),
-		UpdatedGroups: make(map[string]string),
-	}
-
-	for _, groupNum := range groupNums {
-		currentHash := notifState.Hashes[groupNum]
-
-		group, ok := shutdowns.Groups[groupNum]
-		if !ok {
-			continue
-		}
-
-		newHash := shutdownGroupHash(group)
-		if currentHash == newHash {
-			continue
-		}
-
-		joinedPeriods, joinedStatuses := join(shutdowns.Periods, group.Items)
-		cutPeriods, cutStatuses := cutByTime(filterTime, joinedPeriods, joinedStatuses)
-
-		timeline := buildLinearTimeline(cutPeriods, cutStatuses, mb.withPeriodRanges)
-
-		result.Groups = append(result.Groups, LinearGroupSchedule{
-			GroupNum: groupNum,
-			Timeline: timeline,
-		})
-		result.UpdatedGroups[groupNum] = newHash
-	}
-
-	return result
 }
 
 func buildLinearTimeline(periods []dal.Period, statuses []dal.Status, showRanges bool) string {

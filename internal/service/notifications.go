@@ -31,15 +31,6 @@ type (
 		CleanupNotificationStates(olderThan time.Duration) error
 	}
 
-	messageBuildStrategy interface {
-		WithNextDay(nextDayShutdowns dal.Shutdowns)
-		Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error)
-	}
-
-	messageBuilder struct {
-		messageBuildStrategy
-	}
-
 	Notifications struct {
 		shutdowns     ShutdownsStore
 		subscriptions SubscriptionsStore
