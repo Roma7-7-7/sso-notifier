@@ -407,7 +407,6 @@ func TestHandler_Settings(t *testing.T) {
 				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
 					res := mocks.NewMockSubscriptions(ctrl)
 					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
-					res.EXPECT().GetSettings(chatID).Return(nil, nil)
 					return res
 				},
 			},
@@ -416,11 +415,9 @@ func TestHandler_Settings(t *testing.T) {
 					res := mocks.NewMockTelebotContext(ctrl)
 					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
 					res.EXPECT().Callback().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+					res.EXPECT().Send(`⚙️ Налаштування
 
-Попереджати за 10 хвилин до:
-
-ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+Оберіть розділ налаштувань:`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
 				},
 			},
@@ -441,27 +438,6 @@ func TestHandler_Settings(t *testing.T) {
 					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
 					res.EXPECT().Callback().Return(nil)
 					res.EXPECT().Send(`Налаштування доступні тільки для підписаних користувачів. Спочатку підпишіться на оновлення.`, gomock.Not(gomock.Nil())).Return(nil)
-					return res
-				},
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "error_get_settings",
-			fields: fields{
-				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
-					res := mocks.NewMockSubscriptions(ctrl)
-					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
-					res.EXPECT().GetSettings(chatID).Return(nil, assert.AnError)
-					return res
-				},
-			},
-			args: args{
-				c: func(ctrl *gomock.Controller) tb.Context {
-					res := mocks.NewMockTelebotContext(ctrl)
-					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
-					res.EXPECT().Callback().Return(nil)
-					res.EXPECT().Send(`Щось пішло не так. Будь ласка, спробуйте пізніше.`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
 				},
 			},
@@ -533,9 +509,7 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 					res := mocks.NewMockTelebotContext(ctrl)
 					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
 					res.EXPECT().Callback().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
-
-Попереджати за 10 хвилин до:
+					res.EXPECT().Send(`🔔 Попереджати за 10 хвилин до:
 
 ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
@@ -692,7 +666,6 @@ func TestHandler_Callback(t *testing.T) {
 				subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
 					res := mocks.NewMockSubscriptions(ctrl)
 					res.EXPECT().IsSubscribed(chatID).Return(true, nil)
-					res.EXPECT().GetSettings(chatID).Return(nil, nil)
 					return res
 				},
 			},
@@ -705,11 +678,9 @@ func TestHandler_Callback(t *testing.T) {
 						Data: "settings",
 					}).AnyTimes()
 					res.EXPECT().Delete().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
+					res.EXPECT().Send(`⚙️ Налаштування
 
-Попереджати за 10 хвилин до:
-
-ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
+Оберіть розділ налаштувань:`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
 				},
 			},
@@ -734,9 +705,7 @@ func TestHandler_Callback(t *testing.T) {
 						Data: "toggle_notify_off",
 					}).AnyTimes()
 					res.EXPECT().Delete().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
-
-Попереджати за 10 хвилин до:
+					res.EXPECT().Send(`🔔 Попереджати за 10 хвилин до:
 
 ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
@@ -763,9 +732,7 @@ func TestHandler_Callback(t *testing.T) {
 						Data: "toggle_notify_on",
 					}).AnyTimes()
 					res.EXPECT().Delete().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
-
-Попереджати за 10 хвилин до:
+					res.EXPECT().Send(`🔔 Попереджати за 10 хвилин до:
 
 ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
 					return res
@@ -792,9 +759,7 @@ func TestHandler_Callback(t *testing.T) {
 						Data: "toggle_notify_maybe",
 					}).AnyTimes()
 					res.EXPECT().Delete().Return(nil)
-					res.EXPECT().Send(`⚙️ Налаштування сповіщень
-
-Попереджати за 10 хвилин до:
+					res.EXPECT().Send(`🔔 Попереджати за 10 хвилин до:
 
 ℹ️ Сповіщення надсилаються з 6:00 до 23:00`, gomock.Not(gomock.Nil())).Return(nil)
 					return res

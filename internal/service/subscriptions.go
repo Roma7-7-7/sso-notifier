@@ -171,3 +171,32 @@ func (s *Subscriptions) ToggleSetting(chatID int64, key dal.SettingKey, defaultV
 
 	return nil
 }
+
+// SetSetting sets a setting value for a user
+func (s *Subscriptions) SetSetting(chatID int64, key dal.SettingKey, value interface{}) error {
+	sub, exists, err := s.store.GetSubscription(chatID)
+	if err != nil {
+		return fmt.Errorf("get subscription: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("subscription for chatID %d: %w", chatID, ErrSubscriptionNotFound)
+	}
+
+	if sub.Settings == nil {
+		sub.Settings = make(map[dal.SettingKey]interface{})
+	}
+
+	sub.Settings[key] = value
+
+	if err := s.store.PutSubscription(sub); err != nil {
+		return fmt.Errorf("put subscription: %w", err)
+	}
+
+	s.log.Debug("set setting",
+		"chatID", chatID,
+		"key", key,
+		"value", value)
+
+	return nil
+}
