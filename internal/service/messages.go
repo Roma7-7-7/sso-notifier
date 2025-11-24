@@ -28,6 +28,7 @@ type (
 	}
 )
 
+//nolint:gochecknoglobals // template must be initialized once
 var groupedTempl = template.Must(template.New("message").Parse(`Графік стабілізаційних відключень:
 {{range .Dates}}
 📅 {{.Date}}:
@@ -49,9 +50,7 @@ func (mb *GroupedMessageBuilder) WithNextDay(nextDayShutdowns dal.Shutdowns) {
 	mb.nextDayTable = &nextDayShutdowns
 }
 
-// Build generates a notification message for a subscription
-// Returns PowerSupplyScheduleMessage with message and hash updates, or empty result if no changes
-// If builder has next day data, tomorrowState must be provided
+//nolint:dupl // other method to be removed soon. this one to be covered by https://github.com/Roma7-7-7/sso-notifier/issues/61
 func (mb *GroupedMessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState dal.NotificationState) (PowerSupplyScheduleMessage, error) {
 	result := PowerSupplyScheduleMessage{
 		TodayUpdatedGroups:    make(map[string]string),
@@ -439,6 +438,7 @@ type LinearNotificationMessage struct {
 	Dates []LinearDateSchedule
 }
 
+//nolint:gochecknoglobals // template must be initialized once
 var linearTempl = template.Must(template.New("linear_message").Parse(`Графік стабілізаційних відключень:
 {{range .Dates}}
 📅 {{.Date}}:
