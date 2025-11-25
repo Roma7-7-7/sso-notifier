@@ -11,7 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	tc "github.com/Roma7-7-7/telegram"
-	
+
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram/mocks"
 )
