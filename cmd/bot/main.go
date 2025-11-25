@@ -15,6 +15,7 @@ import (
 
 	tc "github.com/Roma7-7-7/telegram"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/config"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
@@ -33,7 +34,7 @@ func main() {
 }
 
 func run(ctx context.Context) int {
-	conf, err := telegram.NewConfig(ctx)
+	conf, err := config.NewConfig(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to create configuration", "error", err) //nolint:sloglint // not initialized yet
 		return 1

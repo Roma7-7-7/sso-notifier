@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
+	"github.com/Roma7-7-7/sso-notifier/internal/config"
 )
 
 type Clock interface {
@@ -17,7 +17,7 @@ type Clock interface {
 type processFn func(ctx context.Context) error
 
 type Scheduler struct {
-	conf *telegram.Config
+	conf *config.Config
 
 	shutdowns     *Shutdowns
 	notifications *Notifications
@@ -27,7 +27,7 @@ type Scheduler struct {
 }
 
 func NewScheduler(
-	conf *telegram.Config,
+	conf *config.Config,
 	shutdowns *Shutdowns,
 	notifications *Notifications,
 	alerts *Alerts,

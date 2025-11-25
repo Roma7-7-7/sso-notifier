@@ -7,6 +7,8 @@ import (
 	"time"
 
 	tb "gopkg.in/telebot.v3"
+
+	"github.com/Roma7-7-7/sso-notifier/internal/config"
 )
 
 type Bot struct {
@@ -17,7 +19,7 @@ type Bot struct {
 	log *slog.Logger
 }
 
-func NewBot(config *Config, handler *Handler, log *slog.Logger) (*Bot, error) {
+func NewBot(config *config.Config, handler *Handler, log *slog.Logger) (*Bot, error) {
 	bot, err := tb.NewBot(tb.Settings{
 		Token:  config.TelegramToken,
 		Poller: &tb.LongPoller{Timeout: 5 * time.Second}, //nolint:mnd // it's ok
