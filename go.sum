@@ -60,12 +60,8 @@ github.com/DataDog/datadog-go v3.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/PuerkitoBio/goquery v1.11.0 h1:jZ7pwMQXIITcUXNH83LLk+txlaEy6NVOfTuP43xxfqw=
 github.com/PuerkitoBio/goquery v1.11.0/go.mod h1:wQHgxUOU3JGuj3oD/QFfxUdlzW6xPHfqyHre6VMY4DQ=
-github.com/Roma7-7-7/telegram v0.0.0-20251111115938-e5cc638d5740 h1:J8f3NisQ0aRN0DJyAZPCntB9YOWuEduRQ2yuwVzc6wc=
-github.com/Roma7-7-7/telegram v0.0.0-20251111115938-e5cc638d5740/go.mod h1:cB3HO227JvQYqa2NEDDauhi4lPVGm0FJlDvawJH6NRQ=
-github.com/Roma7-7-7/telegram v0.0.0-20251125104452-9616bc823b86 h1:XKXe6Plvbau3o4TA2j7cCdhS3E/h32EQR49gLCDiM+c=
-github.com/Roma7-7-7/telegram v0.0.0-20251125104452-9616bc823b86/go.mod h1:cB3HO227JvQYqa2NEDDauhi4lPVGm0FJlDvawJH6NRQ=
-github.com/Roma7-7-7/telegram v0.0.0-20251125105036-4e8c0f7d74e3 h1:MU4dqCmmWI71HgQvXJlnU2gSO3CuDayR8H/8Qp68UzI=
-github.com/Roma7-7-7/telegram v0.0.0-20251125105036-4e8c0f7d74e3/go.mod h1:cB3HO227JvQYqa2NEDDauhi4lPVGm0FJlDvawJH6NRQ=
+github.com/Roma7-7-7/telegram v0.0.0-20251125113559-5142e2c67873 h1:6QL30OX+bbfgRtEWxqTaNx9rvQqPQrEcIJt6XtWU9Z8=
+github.com/Roma7-7-7/telegram v0.0.0-20251125113559-5142e2c67873/go.mod h1:cB3HO227JvQYqa2NEDDauhi4lPVGm0FJlDvawJH6NRQ=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
