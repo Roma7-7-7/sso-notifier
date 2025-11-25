@@ -13,10 +13,14 @@ import (
 
 var ErrSubscriptionNotFound = errors.New("subscription not found")
 
-type SubscriptionsStore interface {
+type SubscriptionsReaderStore interface {
 	ExistsSubscription(chatID int64) (bool, error)
 	GetAllSubscriptions() ([]dal.Subscription, error)
 	GetSubscription(chatID int64) (dal.Subscription, bool, error)
+}
+
+type SubscriptionsStore interface {
+	SubscriptionsReaderStore
 	PutSubscription(sub dal.Subscription) error
 	Purge(chatID int64) error
 }

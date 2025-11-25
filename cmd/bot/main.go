@@ -69,7 +69,10 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken)
+	middlewares := []tc.MiddlewareFunc{
+		telegram.NewOnForbiddenMarkToPurgeMiddleware(store, log).Handle,
+	}
+	sender := tc.NewClient(http.DefaultClient, conf.TelegramToken, tc.WithMiddlewares(middlewares...))
 	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
 	shutdownsSvc := service.NewShutdowns(store, provider, c, log)
 	subscriptionsSvc := service.NewSubscription(store, c, log)
