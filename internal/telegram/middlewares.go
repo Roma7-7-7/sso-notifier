@@ -8,17 +8,13 @@ import (
 	"github.com/Roma7-7-7/telegram"
 )
 
-type SubscriptionsStore interface {
-	Purge(chatID int64) error
-}
-
 type PurgeOnForbiddenMiddleware struct {
-	subscriptions SubscriptionsStore
+	subscriptions Subscriptions
 
 	log *slog.Logger
 }
 
-func NewOnForbiddenMarkToPurgeMiddleware(subscriptions SubscriptionsStore, log *slog.Logger) *PurgeOnForbiddenMiddleware {
+func NewPurgeOnForbiddenMiddleware(subscriptions Subscriptions, log *slog.Logger) *PurgeOnForbiddenMiddleware {
 	return &PurgeOnForbiddenMiddleware{
 		subscriptions: subscriptions,
 		log:           log,
@@ -40,7 +36,7 @@ func (m *PurgeOnForbiddenMiddleware) Handle(next telegram.Handler) telegram.Hand
 				m.log.WarnContext(ctx, "ChatID is not a number", "chatID", chatID, "error", err)
 				return rootErr
 			}
-			err = m.subscriptions.Purge(chatID)
+			err = m.subscriptions.Unsubscribe(chatID)
 			if err != nil {
 				m.log.ErrorContext(ctx, "Mark to purge failed", "chatID", chatID, "error", err)
 				return rootErr
