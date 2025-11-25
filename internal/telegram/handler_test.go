@@ -573,6 +573,74 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 	}
 }
 
+func TestHandler_GetSchedule(t *testing.T) {
+	type fields struct {
+		notifications func(*gomock.Controller) telegram.Notifications
+	}
+	type args struct {
+		c func(*gomock.Controller) tb.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr assert.ErrorAssertionFunc
+	}{
+		{
+			name: "success",
+			fields: fields{
+				notifications: func(ctrl *gomock.Controller) telegram.Notifications {
+					res := mocks.NewMockNotifications(ctrl)
+					res.EXPECT().NotifyPowerSupplySchedule(gomock.Any(), chatID).Return(nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_notify",
+			fields: fields{
+				notifications: func(ctrl *gomock.Controller) telegram.Notifications {
+					res := mocks.NewMockNotifications(ctrl)
+					res.EXPECT().NotifyPowerSupplySchedule(gomock.Any(), chatID).Return(assert.AnError)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send("Щось пішло не так. Будь ласка, спробуйте пізніше.", gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctr := gomock.NewController(t)
+			defer ctr.Finish()
+
+			h := telegram.NewHandler(
+				nil,
+				tt.fields.notifications(ctr),
+				12,
+				slog.New(slog.DiscardHandler),
+			)
+			tt.wantErr(t, h.GetSchedule(tt.args.c(ctr)), "GetSchedule(_)")
+		})
+	}
+}
+
 func TestHandler_SettingsAlerts(t *testing.T) {
 	type fields struct {
 		subscriptions func(*gomock.Controller) telegram.Subscriptions

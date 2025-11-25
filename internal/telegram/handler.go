@@ -17,6 +17,8 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/subscriptions.go . Subscriptions
 
+//go:generate mockgen -package mocks -destination mocks/notifications.go . Notifications
+
 const genericErrorMsg = "Щось пішло не так. Будь ласка, спробуйте пізніше."
 
 type Subscriptions interface {
@@ -171,20 +173,6 @@ func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) erro
 	}
 }
 
-func (h *Handler) GetSchedule(c tb.Context) error {
-	chatID := c.Sender().ID
-	h.log.Debug("schedule handler called", "chatID", chatID)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
-	if err != nil {
-		h.log.Error("failed to notify power supply schedule", "chatID", chatID)
-		return h.sendOrDelete(c, genericErrorMsg, nil)
-	}
-	return nil
-}
-
 func (h *Handler) Settings(c tb.Context) error {
 	chatID := c.Sender().ID
 	h.log.Debug("settings handler called", "chatID", chatID)
@@ -207,6 +195,20 @@ func (h *Handler) Settings(c tb.Context) error {
 		"Оберіть розділ налаштувань:"
 
 	return h.sendOrDelete(c, message, markup)
+}
+
+func (h *Handler) GetSchedule(c tb.Context) error {
+	chatID := c.Sender().ID
+	h.log.Debug("schedule handler called", "chatID", chatID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
+	if err != nil {
+		h.log.Error("failed to notify power supply schedule", "chatID", chatID)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
+	}
+	return nil
 }
 
 func (h *Handler) SettingsAlerts(c tb.Context) error {

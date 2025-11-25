@@ -95,7 +95,7 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 		return fmt.Errorf("get subscription: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("chatID %d: %w", chatID, ErrSubscriptionNotFound)
+		return fmt.Errorf("%w: chatID=%d", ErrSubscriptionNotFound, chatID)
 	}
 
 	now := s.clock.Now()
@@ -123,8 +123,7 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 	err = s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), text)
 	if err != nil {
 		if !errors.Is(err, telegram.ErrForbidden) {
-			log.ErrorContext(ctx, "failed to send message", "error", err)
-			return nil
+			return fmt.Errorf("send message: %w", err)
 		}
 
 		log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
