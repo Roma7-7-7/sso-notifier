@@ -4,12 +4,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 	tb "gopkg.in/telebot.v3"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram/mocks"
 )

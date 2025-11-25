@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/config"
 	"go.etcd.io/bbolt"
 
 	tc "github.com/Roma7-7-7/telegram"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/config"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"

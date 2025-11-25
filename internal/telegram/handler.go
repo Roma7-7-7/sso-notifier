@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	tb "gopkg.in/telebot.v3"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/service"
 )
 
 //go:generate mockgen -package mocks -destination mocks/telebot.go -mock_names Context=MockTelebotContext gopkg.in/telebot.v3/ Context
