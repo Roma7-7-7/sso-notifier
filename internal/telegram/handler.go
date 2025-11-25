@@ -201,7 +201,7 @@ func (h *Handler) GetSchedule(c tb.Context) error {
 	chatID := c.Sender().ID
 	h.log.Debug("schedule handler called", "chatID", chatID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:mnd // 5 seconds timeout
 	defer cancel()
 	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
 	if err != nil {
