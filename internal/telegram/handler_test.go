@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 	tb "gopkg.in/telebot.v3"
@@ -619,6 +620,26 @@ func TestHandler_GetSchedule(t *testing.T) {
 					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
 					res.EXPECT().Callback().Return(nil)
 					res.EXPECT().Send("Щось пішло не так. Будь ласка, спробуйте пізніше.", gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_unsubscribed",
+			fields: fields{
+				notifications: func(ctrl *gomock.Controller) telegram.Notifications {
+					res := mocks.NewMockNotifications(ctrl)
+					res.EXPECT().NotifyPowerSupplySchedule(gomock.Any(), chatID).Return(service.ErrSubscriptionNotFound)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send("Графік електропостачання доступний тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", gomock.Not(gomock.Nil())).Return(nil)
 					return res
 				},
 			},

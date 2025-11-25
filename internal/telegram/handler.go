@@ -2,12 +2,14 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	tb "gopkg.in/telebot.v3"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -205,6 +207,9 @@ func (h *Handler) GetSchedule(c tb.Context) error {
 	defer cancel()
 	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
 	if err != nil {
+		if errors.Is(err, service.ErrSubscriptionNotFound) {
+			return h.sendOrDelete(c, "Графік електропостачання доступний тільки для підписаних користувачів. Спочатку підпишіться на оновлення.", nil)
+		}
 		h.log.Error("failed to notify power supply schedule", "chatID", chatID)
 		return h.sendOrDelete(c, genericErrorMsg, nil)
 	}
