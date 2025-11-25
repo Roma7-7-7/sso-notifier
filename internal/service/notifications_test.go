@@ -653,7 +653,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				time.Hour,
 				slog.New(slog.DiscardHandler),
 			)
-			tt.wantErr(t, s.NotifyShutdownUpdates(t.Context()), "NotifyShutdownUpdates(_)")
+			tt.wantErr(t, s.NotifyPowerSupplyScheduleUpdates(t.Context()), "NotifyPowerSupplyScheduleUpdates(_)")
 		})
 	}
 }

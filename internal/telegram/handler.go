@@ -1,10 +1,12 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	tb "gopkg.in/telebot.v3"
 
@@ -27,17 +29,23 @@ type Subscriptions interface {
 	SetSetting(chatID int64, key dal.SettingKey, value interface{}) error
 }
 
+type Notifications interface {
+	NotifyPowerSupplySchedule(ctx context.Context, chatID int64) error
+}
+
 type Handler struct {
 	subscriptions Subscriptions
+	notifications Notifications
 
 	markups *markups
 
 	log *slog.Logger
 }
 
-func NewHandler(subscriptions Subscriptions, groupsCount int, log *slog.Logger) *Handler {
+func NewHandler(subscriptions Subscriptions, notifications Notifications, groupsCount int, log *slog.Logger) *Handler {
 	return &Handler{
 		subscriptions: subscriptions,
+		notifications: notifications,
 		markups:       newMarkups(groupsCount),
 		log:           log,
 	}
@@ -161,6 +169,20 @@ func (h *Handler) ToggleGroupHandler(groupNumber string) func(c tb.Context) erro
 
 		return h.sendOrDelete(c, message, markup)
 	}
+}
+
+func (h *Handler) GetSchedule(c tb.Context) error {
+	chatID := c.Sender().ID
+	h.log.Debug("schedule handler called", "chatID", chatID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
+	if err != nil {
+		h.log.Error("failed to notify power supply schedule", "chatID", chatID)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
+	}
+	return nil
 }
 
 func (h *Handler) Settings(c tb.Context) error {

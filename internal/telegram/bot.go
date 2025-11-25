@@ -39,8 +39,9 @@ func (b *Bot) Start(ctx context.Context) error {
 	// Register command handlers
 	b.bot.Handle("/start", b.handler.Start)
 	b.bot.Handle("/subscribe", b.handler.ManageGroups)
-	b.bot.Handle("/unsubscribe", b.handler.Unsubscribe)
+	b.bot.Handle("/schedule", b.handler.GetSchedule)
 	b.bot.Handle("/settings", b.handler.Settings)
+	b.bot.Handle("/unsubscribe", b.handler.Unsubscribe)
 
 	b.bot.Handle(tb.OnCallback, b.handler.Callback)
 
