@@ -7,7 +7,7 @@ import (
 	"time"
 
 	tb "gopkg.in/telebot.v3"
-	
+
 	"github.com/Roma7-7-7/sso-notifier/internal/config"
 )
 
