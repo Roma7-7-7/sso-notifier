@@ -66,7 +66,7 @@ func NewNotifications(
 	}
 }
 
-func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
+func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
@@ -82,6 +82,55 @@ func (s *Notifications) NotifyShutdownUpdates(ctx context.Context) error {
 
 	for _, sub := range subs {
 		s.processSubscriptionNotification(ctx, sub, today, tomorrow)
+	}
+
+	return nil
+}
+
+func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID int64) error {
+	log := s.log.With("chatID", chatID)
+	log.DebugContext(ctx, "Notifying about shoutdown updates")
+	sub, ok, err := s.subscriptions.GetSubscription(chatID)
+	if err != nil {
+		return fmt.Errorf("get subscription: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("%w: chatID=%d", ErrSubscriptionNotFound, chatID)
+	}
+
+	now := s.clock.Now()
+	today := dal.DateByTime(now)
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
+	text := ""
+	mb, err := s.prepareMessageBuilder(ctx, sub, today, tomorrow)
+	if err != nil {
+		if !errors.Is(err, ErrShutdownsNotAvailable) {
+			return fmt.Errorf("prepare message: %w", err)
+		}
+		log.DebugContext(ctx, "Shutdowns are not yet available", "error", err)
+		text = "Графік стабілізаційних відключень ще не доступний. Спробуйте пізніше."
+	}
+
+	if text == "" {
+		// Passing empty states because we are not going to update them in any case
+		msg, err := mb.Build(sub, dal.NotificationState{}, dal.NotificationState{})
+		if err != nil {
+			return fmt.Errorf("build message: %w", err)
+		}
+		text = msg.Text
+	}
+
+	err = s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), text)
+	if err != nil {
+		if !errors.Is(err, telegram.ErrForbidden) {
+			return fmt.Errorf("send message: %w", err)
+		}
+
+		log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
+		if err := s.subscriptions.Purge(chatID); err != nil {
+			log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
+		}
+		return nil
 	}
 
 	return nil
@@ -127,7 +176,6 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, sub dal.Subsc
 	return mb, nil
 }
 
-// processSubscriptionNotification processes notification for a single subscription
 func (s *Notifications) processSubscriptionNotification(
 	ctx context.Context,
 	sub dal.Subscription,

@@ -50,7 +50,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 		s.run(ctx, s.conf.RefreshShutdownsInterval, "refresh_shutdowns", s.shutdowns.Refresh)
 	})
 	wg.Go(func() {
-		s.run(ctx, s.conf.NotifyInterval, "notify_shutdown_updates", s.notifications.NotifyShutdownUpdates)
+		s.run(ctx, s.conf.NotifyInterval, "notify_shutdown_updates", s.notifications.NotifyPowerSupplyScheduleUpdates)
 	})
 	wg.Go(func() {
 		s.run(ctx, s.conf.NotifyUpcomingInterval, "notify_upcoming_change", s.alerts.NotifyPowerSupplyChanges)
