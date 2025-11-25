@@ -31,7 +31,7 @@ func (m *PurgeOnForbiddenMiddleware) Handle(next telegram.Handler) telegram.Hand
 				m.log.WarnContext(ctx, "ChatID is not present in telegram context")
 				return rootErr
 			}
-			chatID, err := strconv.ParseInt(chatIDStr, 10, 64) //nolint:mnd
+			chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 			if err != nil {
 				m.log.WarnContext(ctx, "ChatID is not a number", "chatID", chatID, "error", err)
 				return rootErr
