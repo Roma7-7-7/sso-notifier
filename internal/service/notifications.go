@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Roma7-7-7/telegram"
-
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
@@ -25,15 +23,19 @@ type (
 		SendMessage(context.Context, string, string) error
 	}
 
-	NotificationsStore interface {
+	NotificationsReaderStore interface {
 		GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
+	}
+
+	NotificationsStore interface {
+		NotificationsReaderStore
 		PutNotificationState(state dal.NotificationState) error
 		CleanupNotificationStates(olderThan time.Duration) error
 	}
 
 	Notifications struct {
-		shutdowns     ShutdownsStore
-		subscriptions SubscriptionsStore
+		shutdowns     ShutdownsReaderStore
+		subscriptions SubscriptionsReaderStore
 		notifications NotificationsStore
 		telegram      TelegramClient
 		clock         Clock
@@ -45,8 +47,8 @@ type (
 )
 
 func NewNotifications(
-	shutdowns ShutdownsStore,
-	subscriptions SubscriptionsStore,
+	shutdowns ShutdownsReaderStore,
+	subscriptions SubscriptionsReaderStore,
 	notifications NotificationsStore,
 	telegram TelegramClient,
 	clock Clock,
@@ -122,15 +124,7 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 
 	err = s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), text)
 	if err != nil {
-		if !errors.Is(err, telegram.ErrForbidden) {
-			return fmt.Errorf("send message: %w", err)
-		}
-
-		log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
-		if err := s.subscriptions.Purge(chatID); err != nil {
-			log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
-		}
-		return nil
+		return fmt.Errorf("send message: %w", err)
 	}
 
 	return nil
@@ -154,14 +148,14 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, sub dal.Subsc
 	}
 	var mb *MessageBuilder
 	switch sub.Settings[dal.SettingShutdownsMessageFormat] {
-	case dal.ShutdownsMessageFormatGrouped:
-		mb = NewGroupedMessageBuilder(todayTable, s.clock.Now())
-	case dal.ShutdownsMessageFormatLinear:
+	case nil, "", dal.ShutdownsMessageFormatLinear:
 		mb = NewLinearMessageBuilder(todayTable, false, s.clock.Now())
 	case dal.ShutdownsMessageFormatLinearWithRange:
 		mb = NewLinearMessageBuilder(todayTable, true, s.clock.Now())
+	case dal.ShutdownsMessageFormatGrouped:
+		mb = NewGroupedMessageBuilder(todayTable, s.clock.Now())
 	default:
-		s.log.WarnContext(ctx, "Unknown shutdown message format. Fallback to default linear without range", "format", dal.SettingShutdownsMessageFormat)
+		s.log.WarnContext(ctx, "Unknown shutdown message format. Fallback to default linear without range", "format", sub.Settings[dal.SettingShutdownsMessageFormat])
 		mb = NewLinearMessageBuilder(todayTable, false, s.clock.Now())
 	}
 
@@ -217,15 +211,7 @@ func (s *Notifications) processSubscriptionNotification(
 	}
 
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), msg.Text); err != nil {
-		if !errors.Is(err, telegram.ErrForbidden) {
-			log.ErrorContext(ctx, "failed to send message", "error", err)
-			return
-		}
-
-		log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
-		if err := s.subscriptions.Purge(chatID); err != nil {
-			log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
-		}
+		log.ErrorContext(ctx, "failed to send message", "chatID", chatID, "error", err)
 		return
 	}
 

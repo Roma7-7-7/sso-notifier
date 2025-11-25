@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Roma7-7-7/telegram"
-
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 )
 
@@ -22,16 +20,20 @@ const (
 
 //go:generate mockgen -package mocks -destination mocks/alerts.go . AlertsStore
 
-type AlertsStore interface {
+type AlertsReaderStore interface {
 	GetAlert(key dal.AlertKey) (time.Time, bool, error)
+}
+
+type AlertsStore interface {
+	AlertsReaderStore
 	PutAlert(key dal.AlertKey, sentAt time.Time) error
 	CleanupAlerts(olderThan time.Duration) error
 }
 
 type (
 	Alerts struct {
-		shutdowns      ShutdownsStore
-		subscriptions  SubscriptionsStore
+		shutdowns      ShutdownsReaderStore
+		subscriptions  SubscriptionsReaderStore
 		store          AlertsStore
 		telegram       TelegramClient
 		messageBuilder *PowerSupplyChangeMessageBuilder
@@ -52,8 +54,8 @@ type Alert struct {
 }
 
 func NewAlerts(
-	shutdowns ShutdownsStore,
-	subscriptions SubscriptionsStore,
+	shutdowns ShutdownsReaderStore,
+	subscriptions SubscriptionsReaderStore,
 	alerts AlertsStore,
 	telegram TelegramClient,
 	clock Clock,
@@ -170,15 +172,7 @@ func (s *Alerts) processSubscriptionAlert(
 		return nil
 	}
 	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), message); err != nil {
-		if !errors.Is(err, telegram.ErrForbidden) {
-			return fmt.Errorf("send telegram message: %w", err)
-		}
-
-		s.log.InfoContext(ctx, "bot is blocked by user. purging subscription and other data", "chatID", chatID, "error", err)
-		if err := s.subscriptions.Purge(chatID); err != nil {
-			s.log.ErrorContext(ctx, "failed to purge subscription", "chatID", chatID, "error", err)
-		}
-		return nil
+		return fmt.Errorf("send message: %w", err)
 	}
 
 	log.InfoContext(ctx, "sent upcoming notification", "alertCount", len(filteredAlerts))

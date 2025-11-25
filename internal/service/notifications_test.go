@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
-	"github.com/Roma7-7-7/telegram"
-
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
@@ -473,36 +471,6 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
 					res := mocks.NewMockTelegramClient(ctrl)
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(assert.AnError)
-					return res
-				},
-				clock: clock.NewMock(now),
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "error_send_message_forbidden",
-			fields: fields{
-				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
-					res := mocks.NewMockShutdownsStore(ctrl)
-					res.EXPECT().GetShutdowns(today).Return(defaultShutdowns, true, nil)
-					res.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil)
-					return res
-				},
-				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
-					res := mocks.NewMockSubscriptionsStore(ctrl)
-					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
-					res.EXPECT().Purge(chatID).Return(nil)
-					return res
-				},
-				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
-					res := mocks.NewMockNotificationsStore(ctrl)
-					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
-					res.EXPECT().GetNotificationState(chatID, tomorrow).Return(dal.NotificationState{}, false, nil)
-					return res
-				},
-				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
-					res := mocks.NewMockTelegramClient(ctrl)
-					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(telegram.ErrForbidden)
 					return res
 				},
 				clock: clock.NewMock(now),

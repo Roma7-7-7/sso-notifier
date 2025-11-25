@@ -14,8 +14,12 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStore,ShutdownsProvider
 
-type ShutdownsStore interface {
+type ShutdownsReaderStore interface {
 	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)
+}
+
+type ShutdownsStore interface {
+	ShutdownsReaderStore
 	PutShutdowns(d dal.Date, s dal.Shutdowns) error
 }
 
