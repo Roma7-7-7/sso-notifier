@@ -72,7 +72,7 @@ internal/
 
 ### Prerequisites
 
-- Go 1.25.3 or higher
+- Go 1.25.4 or higher
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 
 ### Installation
