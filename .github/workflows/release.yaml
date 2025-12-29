@@ -67,15 +67,18 @@ jobs:
             **Changes:**
             ${{ github.event.head_commit.message }}
 
-            **Binary:**
-            - `sso-notifier` - Telegram bot for power outage notifications
+            **Binaries:**
+            - `sso-notifier-amd64` - Telegram bot for AMD64/x86_64 (Intel/AMD processors)
+            - `sso-notifier-arm64` - Telegram bot for ARM64 (AWS Graviton, Apple Silicon, etc.)
             - `VERSION` - Version information
 
             **Deployment:**
             Download the binary for your platform and run with required environment variables.
+            The deployment scripts will automatically detect your architecture.
             See README for configuration details.
           files: |
-            bin/sso-notifier
+            bin/sso-notifier-amd64
+            bin/sso-notifier-arm64
             bin/VERSION
           draft: false
           prerelease: false
