@@ -23,7 +23,8 @@ build:
 ci-build:
 	go mod download
 	mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier ./cmd/bot/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier-amd64 ./cmd/bot/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier-arm64 ./cmd/bot/main.go
 	echo "Version: $(VERSION)\nBuild Time: $(BUILD_TIME)" > ./bin/VERSION
 
 testserver:

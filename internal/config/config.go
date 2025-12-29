@@ -34,12 +34,20 @@ func NewConfig(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("envconfig process: %w", err)
 	}
 
-	if res.Dev {
+	// If token is already provided via environment variable, use it (skip SSM)
+	if res.TelegramToken != "" {
 		return res, nil
 	}
+
+	// In dev mode, token must be provided via environment variable
+	if res.Dev {
+		return nil, errors.New("telegram token is required (set TELEGRAM_TOKEN environment variable)")
+	}
+
+	// In production without env token, try to fetch from SSM
 	res.TelegramToken, err = getSSMToken(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get token from SSM (set TELEGRAM_TOKEN env var to skip SSM): %w", err)
 	}
 
 	if res.TelegramToken == "" {

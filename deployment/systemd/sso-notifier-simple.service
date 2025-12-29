@@ -1,0 +1,35 @@
+[Unit]
+Description=SSO Notifier Telegram Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+Group={{SERVICE_USER}}
+WorkingDirectory=/opt/sso-notifier
+
+# Load environment variables from file
+EnvironmentFile=/opt/sso-notifier/.env
+
+ExecStart=/opt/sso-notifier/bin/sso-notifier
+
+# Restart configuration
+Restart=always
+RestartSec=10s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sso-notifier
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

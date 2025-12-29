@@ -966,9 +966,26 @@ This ensures the migration system can track itself from the start.
 
 All configuration via environment variables using `envconfig`:
 
+### Token Configuration
+
+The `TELEGRAM_TOKEN` can be provided in three ways (priority order):
+
+1. **Environment variable** (recommended for simple deployments):
+   - Set `TELEGRAM_TOKEN=your_token` in environment or `.env` file
+   - Skips AWS SSM lookup entirely
+
+2. **AWS SSM Parameter Store** (production EC2 deployments):
+   - If `TELEGRAM_TOKEN` env var is not set and `DEV=false`
+   - Fetches from `/sso-notifier-bot/prod/telegram-token` parameter
+   - Requires IAM permissions for `ssm:GetParameter` and `kms:Decrypt`
+
+3. **Dev mode requirement**:
+   - If `DEV=true`, token MUST be provided via environment variable
+   - SSM lookup is skipped in dev mode
+
 ### Required Variables
 
-- `TELEGRAM_TOKEN`: Telegram bot token from @BotFather
+- `TELEGRAM_TOKEN`: Telegram bot token from @BotFather (can be env var or SSM)
 
 ### Optional Variables (with defaults)
 
@@ -1075,18 +1092,52 @@ func (m *MockStore) GetShutdowns() (dal.Shutdowns, bool, error) {
 
 ## Deployment
 
+The bot supports two deployment modes:
+
+### Deployment Options
+
+1. **Simple Deployment** (recommended for most users)
+   - Works on any Linux server (Hetzner, Contabo, OVH, etc.)
+   - No AWS dependencies
+   - Configuration via `/opt/sso-notifier/.env` file
+   - Manual backups (SCP from local machine)
+   - See `deployment/SIMPLE-DEPLOYMENT.md`
+
+2. **AWS EC2 Deployment**
+   - Automated S3 backups
+   - AWS SSM Parameter Store for secrets
+   - IAM role-based authentication
+   - See `deployment/README.md` (EC2 section)
+
+### Multi-Architecture Support
+
+The build system produces binaries for both architectures:
+
+- `sso-notifier-amd64`: For Intel/AMD x86_64 processors (most VPS providers)
+- `sso-notifier-arm64`: For ARM64 processors (AWS Graviton, Apple Silicon)
+
+The `deploy.sh` script automatically detects the server architecture using `uname -m` and downloads the correct binary.
+
 ### Binary
 
 - CGO disabled (`CGO_ENABLED=0`) for static linking
 - Single binary with no dependencies
-- Cross-platform compatible
+- Cross-platform compatible (Linux AMD64 and ARM64)
 
 ### Storage
 
-- Database: `data/app.db`
+- Database: `data/sso-notifier.db` (or configured via `DB_PATH`)
 - Logs: stdout (JSON or text)
 
 ### Backup System
+
+**Simple Deployment:**
+- Manual backups recommended
+- From laptop: `scp user@server:/opt/sso-notifier/data/sso-notifier.db ~/backups/`
+- Can automate with local cron job
+- See `deployment/SIMPLE-DEPLOYMENT.md` for examples
+
+**AWS EC2 Deployment:**
 
 The project includes automated backup functionality for the BoltDB database:
 

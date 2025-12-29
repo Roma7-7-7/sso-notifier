@@ -62,6 +62,24 @@ else
     CURRENT_VERSION="none"
 fi
 
+# Detect architecture
+ARCH=$(uname -m)
+case "${ARCH}" in
+    x86_64)
+        BINARY_NAME="sso-notifier-amd64"
+        ;;
+    aarch64|arm64)
+        BINARY_NAME="sso-notifier-arm64"
+        ;;
+    *)
+        log_error "Unsupported architecture: ${ARCH}"
+        log_error "Supported architectures: x86_64 (amd64), aarch64/arm64"
+        exit 1
+        ;;
+esac
+
+log "Detected architecture: ${ARCH} (will download ${BINARY_NAME})"
+
 # Create temporary directory for download
 TMP_DIR=$(mktemp -d)
 trap "rm -rf ${TMP_DIR}" EXIT
@@ -73,9 +91,9 @@ DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSI
 
 cd "${TMP_DIR}"
 
-# Download sso-notifier binary
-if ! curl -L -o sso-notifier "${DOWNLOAD_URL}/sso-notifier"; then
-    log_error "Failed to download sso-notifier binary"
+# Download architecture-specific binary
+if ! curl -L -o sso-notifier "${DOWNLOAD_URL}/${BINARY_NAME}"; then
+    log_error "Failed to download ${BINARY_NAME} binary"
     exit 1
 fi
 
