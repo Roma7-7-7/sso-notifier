@@ -93,6 +93,16 @@ func loadPage(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns from page=%s: %w", url, err)
 	}
+
+	// The website is behind Cloudflare which applies bot protection based on IP reputation and request fingerprinting.
+	// Some cloud providers have IP ranges flagged as higher risk. Adding browser-like headers helps bypass this protection.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Referer", "https://oblenergo.cv.ua/")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns from page=%s: %w", url, err)
