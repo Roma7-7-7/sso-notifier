@@ -18,8 +18,8 @@ import (
 
 func TestShutdowns_Refresh(t *testing.T) {
 	now := time.Now().UTC()
-	todayDate := dal.Date{Year: now.Year(), Month: now.Month(), Day: now.Day()}
-	tomorrowDate := dal.Date{Year: now.Year(), Month: now.Month(), Day: now.Day() + 1}
+	todayDate := dal.DateByTime(now)
+	tomorrowDate := dal.DateByTime(now.AddDate(0, 0, 1))
 	defaultTodayShutdowns := testutil.NewShutdowns().WithDate(now.Format(time.DateOnly)).Build()
 	defaultTomorrowShutdowns := testutil.NewShutdowns().WithDate(now.AddDate(0, 0, 1).Format(time.DateOnly)).Build()
 
