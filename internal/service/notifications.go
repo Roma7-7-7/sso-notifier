@@ -126,7 +126,7 @@ func (s *Notifications) notifyEmergency(ctx context.Context) error {
 			continue
 		}
 
-		msg := "Запроваджено екстренні відключення по Чернівецькій області. Графіки погодинних відключень тимчасово не діють."
+		msg := "⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️"
 		if err := s.telegram.SendMessage(ctx, strconv.FormatInt(sub.ChatID, 10), msg); err != nil {
 			s.log.ErrorContext(ctx, "failed to send emergency message", "chatID", sub.ChatID, "error", err)
 			continue
