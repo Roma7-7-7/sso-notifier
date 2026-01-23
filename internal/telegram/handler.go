@@ -213,7 +213,7 @@ func (h *Handler) GetSchedule(c tb.Context) error {
 
 	emergencyState, _ := h.emergency.GetEmergencyState()
 	if emergencyState.Active {
-		return h.sendOrDelete(c, "Режим аварії. Графік відключень наразі недоступний.", nil)
+		return h.sendOrDelete(c, "Запроваджено екстренні відключення по Чернівецькій області. Графіки погодинних відключень тимчасово не діють.", nil)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:mnd // 5 seconds timeout
