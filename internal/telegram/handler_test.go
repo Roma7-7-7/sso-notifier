@@ -655,6 +655,32 @@ func TestHandler_GetSchedule(t *testing.T) {
 			},
 			wantErr: assert.NoError,
 		},
+		{
+			name: "emergency_mode_returns_emergency_message",
+			fields: fields{
+				notifications: func(ctrl *gomock.Controller) telegram.Notifications {
+					res := mocks.NewMockNotifications(ctrl)
+					return res
+				},
+				emergency: func(ctrl *gomock.Controller) telegram.EmergencyStore {
+					res := mocks.NewMockEmergencyStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active: true,
+					}, nil)
+					return res
+				},
+			},
+			args: args{
+				c: func(ctrl *gomock.Controller) tb.Context {
+					res := mocks.NewMockTelebotContext(ctrl)
+					res.EXPECT().Sender().Return(defaultUser).AnyTimes()
+					res.EXPECT().Callback().Return(nil)
+					res.EXPECT().Send("⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️", gomock.Not(gomock.Nil())).Return(nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

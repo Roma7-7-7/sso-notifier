@@ -103,11 +103,11 @@ func (s *Notifications) notifyEmergency(ctx context.Context, today dal.Date) err
 
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
-		return fmt.Errorf("get subscriptions: %w", err)
+		return fmt.Errorf("get all subscriptions: %w", err)
 	}
 
 	for _, sub := range subs {
-		state, _, err := s.notifications.GetNotificationState(sub.ChatID, today)
+		state, err := s.getOrCreateNotificationState(sub.ChatID, today)
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to get emergency notification state", "chatID", sub.ChatID, "error", err)
 			continue
@@ -124,8 +124,9 @@ func (s *Notifications) notifyEmergency(ctx context.Context, today dal.Date) err
 		}
 
 		state.Emergency = true
-		// clear hashes so when emergency end we'll send latest schedule
-		for g := range state.Hashes {
+		state.SentAt = s.clock.Now()
+		// clear hashes so when emergency ends we'll send latest schedule
+		for g := range sub.Groups {
 			state.Hashes[g] = ""
 		}
 		if err := s.notifications.PutNotificationState(state); err != nil {

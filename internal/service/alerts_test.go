@@ -550,6 +550,39 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 			},
 			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get shutdowns: "),
 		},
+		{
+			name: "skip_alerts_during_emergency_mode",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					return res
+				},
+				store: func(ctrl *gomock.Controller) service.AlertsStore {
+					res := mocks.NewMockAlertsStore(ctrl)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				emergency: func(ctrl *gomock.Controller) service.AlertsEmergencyStore {
+					res := mocks.NewMockAlertsEmergencyStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active:    true,
+						StartedAt: time.Date(2025, time.November, 20, 10, 0, 0, 0, time.UTC),
+					}, nil)
+					return res
+				},
+				clock: func() service.Clock {
+					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
+				},
+			},
+			wantErr: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

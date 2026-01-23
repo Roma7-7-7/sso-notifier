@@ -619,6 +619,107 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 			},
 			wantErr: assert.NoError,
 		},
+		{
+			name: "emergency_mode_notifies_users",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active:    true,
+						StartedAt: now.Add(-time.Hour),
+					}, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					res.EXPECT().PutNotificationState(dal.NotificationState{
+						ChatID:    chatID,
+						Date:      today.ToKey(),
+						SentAt:    now,
+						Hashes:    map[string]string{"1": ""},
+						Emergency: true,
+					}).Return(nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, "⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️").Return(nil)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "emergency_mode_skips_already_notified_users",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active:    true,
+						StartedAt: now.Add(-time.Hour),
+					}, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{
+						ChatID:    chatID,
+						Date:      today.ToKey(),
+						SentAt:    now.Add(-30 * time.Minute),
+						Emergency: true,
+					}, true, nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "emergency_mode_send_error_continues",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active:    true,
+						StartedAt: now.Add(-time.Hour),
+					}, nil)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					res.EXPECT().GetAllSubscriptions().Return([]dal.Subscription{singleSubscription}, nil)
+					return res
+				},
+				notifications: func(ctrl *gomock.Controller) service.NotificationsStore {
+					res := mocks.NewMockNotificationsStore(ctrl)
+					res.EXPECT().GetNotificationState(chatID, today).Return(dal.NotificationState{}, false, nil)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(assert.AnError)
+					return res
+				},
+				clock: clock.NewMock(now),
+			},
+			wantErr: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
