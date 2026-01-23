@@ -18,7 +18,7 @@ const (
 	defaultAlertWindowMinutes = 10
 )
 
-//go:generate mockgen -package mocks -destination mocks/alerts.go . AlertsStore
+//go:generate mockgen -package mocks -destination mocks/alerts.go . AlertsStore,AlertsEmergencyStore
 
 type AlertsReaderStore interface {
 	GetAlert(key dal.AlertKey) (time.Time, bool, error)
@@ -30,11 +30,16 @@ type AlertsStore interface {
 	CleanupAlerts(olderThan time.Duration) error
 }
 
+type AlertsEmergencyStore interface {
+	GetEmergencyState() (dal.EmergencyState, error)
+}
+
 type (
 	Alerts struct {
 		shutdowns      ShutdownsReaderStore
 		subscriptions  SubscriptionsReaderStore
 		store          AlertsStore
+		emergency      AlertsEmergencyStore
 		telegram       TelegramClient
 		messageBuilder *PowerSupplyChangeMessageBuilder
 		clock          Clock
@@ -57,6 +62,7 @@ func NewAlerts(
 	shutdowns ShutdownsReaderStore,
 	subscriptions SubscriptionsReaderStore,
 	alerts AlertsStore,
+	emergency AlertsEmergencyStore,
 	telegram TelegramClient,
 	clock Clock,
 	alertsTTL time.Duration,
@@ -66,6 +72,7 @@ func NewAlerts(
 		shutdowns:      shutdowns,
 		subscriptions:  subscriptions,
 		store:          alerts,
+		emergency:      emergency,
 		telegram:       telegram,
 		messageBuilder: NewPowerSupplyChangeMessageBuilder(),
 		clock:          clock,
@@ -80,6 +87,16 @@ func NewAlerts(
 func (s *Alerts) NotifyPowerSupplyChanges(ctx context.Context) error {
 	s.mx.Lock()
 	defer s.mx.Unlock()
+
+	emergencyState, err := s.emergency.GetEmergencyState()
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to get emergency state", "error", err)
+	}
+
+	if emergencyState.Active {
+		s.log.DebugContext(ctx, "skipping alerts - emergency mode active")
+		return nil
+	}
 
 	now := s.clock.Now()
 	s.log.InfoContext(ctx, "checking for upcoming shutdowns", "time", now.Format("15:04"))

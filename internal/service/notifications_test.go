@@ -49,10 +49,17 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 
 	singleSubscription := testutil.NewSubscription(chatID).WithGroups("1").Build()
 
+	defaultEmergency := func(ctrl *gomock.Controller) service.NotificationsEmergencyStore {
+		res := mocks.NewMockNotificationsEmergencyStore(ctrl)
+		res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil).AnyTimes()
+		return res
+	}
+
 	type fields struct {
 		shutdowns     func(*gomock.Controller) service.ShutdownsStore
 		subscriptions func(*gomock.Controller) service.SubscriptionsStore
 		notifications func(*gomock.Controller) service.NotificationsStore
+		emergency     func(*gomock.Controller) service.NotificationsEmergencyStore
 		telegram      func(*gomock.Controller) service.TelegramClient
 		clock         service.Clock
 	}
@@ -118,7 +125,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 `)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -213,7 +221,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 `)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -258,7 +267,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 `)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -331,7 +341,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 `)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -369,7 +380,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -409,7 +421,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(nil)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -444,7 +457,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(nil)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -473,7 +487,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(assert.AnError)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -501,7 +516,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -528,7 +544,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -552,7 +569,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get all subscriptions: "),
 		},
@@ -577,7 +595,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -602,7 +621,8 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
-				clock: clock.NewMock(now),
+				clock:     clock.NewMock(now),
+				emergency: defaultEmergency,
 			},
 			wantErr: assert.NoError,
 		},
@@ -616,6 +636,7 @@ func TestNotifications_NotifyShutdownUpdates(t *testing.T) {
 				tt.fields.shutdowns(ctrl),
 				tt.fields.subscriptions(ctrl),
 				tt.fields.notifications(ctrl),
+				tt.fields.emergency(ctrl),
 				tt.fields.telegram(ctrl),
 				tt.fields.clock,
 				time.Hour,
@@ -892,6 +913,7 @@ func TestNotifications_NotifyPowerSupplySchedule(t *testing.T) {
 			s := service.NewNotifications(
 				tt.fields.shutdowns(ctrl),
 				tt.fields.subscriptions(ctrl),
+				nil,
 				nil,
 				tt.fields.telegram(ctrl),
 				tt.fields.clock,

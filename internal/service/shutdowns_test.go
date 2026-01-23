@@ -23,9 +23,16 @@ func TestShutdowns_Refresh(t *testing.T) {
 	defaultTodayShutdowns := testutil.NewShutdowns().WithDate(now.Format(time.DateOnly)).Build()
 	defaultTomorrowShutdowns := testutil.NewShutdowns().WithDate(now.AddDate(0, 0, 1).Format(time.DateOnly)).Build()
 
+	defaultEmergency := func(c *gomock.Controller) service.ShutdownsEmergencyStore {
+		res := mocks.NewMockShutdownsEmergencyStore(c)
+		res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil).AnyTimes()
+		return res
+	}
+
 	type fields struct {
-		store    func(*gomock.Controller) service.ShutdownsStore
-		provider func(*gomock.Controller) service.ShutdownsProvider
+		store     func(*gomock.Controller) service.ShutdownsStore
+		emergency func(*gomock.Controller) service.ShutdownsEmergencyStore
+		provider  func(*gomock.Controller) service.ShutdownsProvider
 	}
 	tests := []struct {
 		name    string
@@ -40,6 +47,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, false, nil)
@@ -57,6 +65,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(tomorrowDate, defaultTomorrowShutdowns).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, true, nil)
@@ -75,6 +84,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(tomorrowDate, defaultTomorrowShutdowns).Return(assert.AnError)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, true, nil)
@@ -92,6 +102,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, true, nil)
@@ -109,6 +120,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(assert.AnError)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, true, nil)
@@ -126,6 +138,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res := mocks.NewMockShutdownsStore(c)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(dal.Shutdowns{}, true, assert.AnError)
@@ -144,6 +157,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
 					res := mocks.NewMockShutdownsProvider(c)
 					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, false, providers.ErrCheckNextDayAvailability)
@@ -158,7 +172,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			s := service.NewShutdowns(tt.fields.store(ctrl), tt.fields.provider(ctrl), clock.NewMock(now), slog.New(slog.DiscardHandler))
+			s := service.NewShutdowns(tt.fields.store(ctrl), tt.fields.emergency(ctrl), tt.fields.provider(ctrl), clock.NewMock(now), slog.New(slog.DiscardHandler))
 			tt.wantErr(t, s.Refresh(t.Context()), "Refresh(_)")
 		})
 	}

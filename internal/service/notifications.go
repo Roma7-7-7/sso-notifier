@@ -14,7 +14,7 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
 
-//go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore
+//go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore,NotificationsEmergencyStore
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
@@ -33,10 +33,17 @@ type (
 		CleanupNotificationStates(olderThan time.Duration) error
 	}
 
+	NotificationsEmergencyStore interface {
+		GetEmergencyState() (dal.EmergencyState, error)
+		GetEmergencyNotification(chatID int64) (time.Time, bool, error)
+		SetEmergencyNotification(chatID int64, sentAt time.Time) error
+	}
+
 	Notifications struct {
 		shutdowns     ShutdownsReaderStore
 		subscriptions SubscriptionsReaderStore
 		notifications NotificationsStore
+		emergency     NotificationsEmergencyStore
 		telegram      TelegramClient
 		clock         Clock
 
@@ -50,6 +57,7 @@ func NewNotifications(
 	shutdowns ShutdownsReaderStore,
 	subscriptions SubscriptionsReaderStore,
 	notifications NotificationsStore,
+	emergency NotificationsEmergencyStore,
 	telegram TelegramClient,
 	clock Clock,
 	notificationsTTL time.Duration,
@@ -60,6 +68,7 @@ func NewNotifications(
 		shutdowns:        shutdowns,
 		subscriptions:    subscriptions,
 		notifications:    notifications,
+		emergency:        emergency,
 		telegram:         telegram,
 		clock:            clock,
 
@@ -73,6 +82,15 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
+	emergencyState, err := s.emergency.GetEmergencyState()
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to get emergency state", "error", err)
+	}
+
+	if emergencyState.Active {
+		return s.notifyEmergency(ctx)
+	}
+
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
 		return fmt.Errorf("get all subscriptions: %w", err)
@@ -84,6 +102,41 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 
 	for _, sub := range subs {
 		s.processSubscriptionNotification(ctx, sub, today, tomorrow)
+	}
+
+	return nil
+}
+
+func (s *Notifications) notifyEmergency(ctx context.Context) error {
+	s.log.InfoContext(ctx, "processing emergency notifications")
+
+	subs, err := s.subscriptions.GetAllSubscriptions()
+	if err != nil {
+		return fmt.Errorf("get subscriptions: %w", err)
+	}
+
+	for _, sub := range subs {
+		_, notified, err := s.emergency.GetEmergencyNotification(sub.ChatID)
+		if err != nil {
+			s.log.ErrorContext(ctx, "failed to check emergency notification", "chatID", sub.ChatID, "error", err)
+			continue
+		}
+
+		if notified {
+			continue
+		}
+
+		msg := "Режим аварії. Графік відключень наразі недоступний через аварійну ситуацію."
+		if err := s.telegram.SendMessage(ctx, strconv.FormatInt(sub.ChatID, 10), msg); err != nil {
+			s.log.ErrorContext(ctx, "failed to send emergency message", "chatID", sub.ChatID, "error", err)
+			continue
+		}
+
+		if err := s.emergency.SetEmergencyNotification(sub.ChatID, s.clock.Now()); err != nil {
+			s.log.ErrorContext(ctx, "failed to mark emergency notification", "chatID", sub.ChatID, "error", err)
+		}
+
+		s.log.InfoContext(ctx, "sent emergency notification", "chatID", sub.ChatID)
 	}
 
 	return nil

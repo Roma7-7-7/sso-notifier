@@ -56,6 +56,7 @@ External Provider Layer (HTML Scraping)
 
 - Uses `slog` for structured logging (not `log`)
 - Error wrapping with `fmt.Errorf("context: %w", err)`
+- **Always wrap errors from public methods** - never return bare errors from public function calls
 - Context passed to all I/O operations
 - Ukrainian strings for user-facing messages
 
