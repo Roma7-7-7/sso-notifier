@@ -12,10 +12,11 @@ import (
 const notificationsBucket = "notifications"
 
 type NotificationState struct {
-	ChatID int64             `json:"chat_id"`
-	Date   string            `json:"date"`
-	SentAt time.Time         `json:"sent_at"`
-	Hashes map[string]string `json:"hashes"`
+	ChatID    int64             `json:"chat_id"`
+	Date      string            `json:"date"`
+	SentAt    time.Time         `json:"sent_at"`
+	Hashes    map[string]string `json:"hashes"`
+	Emergency bool              `json:"emergency,omitempty"`
 }
 
 // CountNotificationStates total number of notification states

@@ -18,7 +18,7 @@ var chernivtsiWithoutNextDay []byte
 //go:embed testdata/chernivtsi_with_next_day.html
 var chernivtsiWithNextDay []byte
 
-//go:embed testdata/chernivtsi_no_schedule.html
+//go:embed testdata/chernivtsi_emergency.html
 var chernivtsiNoSchedule []byte
 
 func TestChernivtsiProvider_Shutdowns(t *testing.T) {

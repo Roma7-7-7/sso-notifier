@@ -41,10 +41,6 @@ func (s *BoltDB) Purge(chatID int64) error {
 			return fmt.Errorf("delete subscriber with id=%d: %w", chatID, err)
 		}
 
-		if err := s.deleteEmergencyNotification(tx, chatID); err != nil {
-			return fmt.Errorf("delete emergency notification for id=%d: %w", chatID, err)
-		}
-
 		return nil
 	}); err != nil {
 		return err

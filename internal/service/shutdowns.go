@@ -12,15 +12,17 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 )
 
-//go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStore,ShutdownsProvider,ShutdownsEmergencyStore
+//go:generate mockgen -package mocks -destination mocks/shutdowns.go . ShutdownsStore,ShutdownsProvider
 
 type ShutdownsReaderStore interface {
 	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)
+	GetEmergencyState() (dal.EmergencyState, error)
 }
 
 type ShutdownsStore interface {
 	ShutdownsReaderStore
 	PutShutdowns(d dal.Date, s dal.Shutdowns) error
+	SetEmergencyState(state dal.EmergencyState) error
 }
 
 type ShutdownsProvider interface {
@@ -28,30 +30,22 @@ type ShutdownsProvider interface {
 	ShutdownsNext(ctx context.Context) (dal.Shutdowns, error)
 }
 
-type ShutdownsEmergencyStore interface {
-	GetEmergencyState() (dal.EmergencyState, error)
-	SetEmergencyState(state dal.EmergencyState) error
-	ClearAllEmergencyNotifications() error
-}
-
 type Shutdowns struct {
-	store     ShutdownsStore
-	emergency ShutdownsEmergencyStore
-	provider  ShutdownsProvider
-	clock     Clock
+	store    ShutdownsStore
+	provider ShutdownsProvider
+	clock    Clock
 
 	log *slog.Logger
 	mx  *sync.Mutex
 }
 
-func NewShutdowns(store ShutdownsStore, emergency ShutdownsEmergencyStore, provider ShutdownsProvider, clock Clock, log *slog.Logger) *Shutdowns {
+func NewShutdowns(store ShutdownsStore, provider ShutdownsProvider, clock Clock, log *slog.Logger) *Shutdowns {
 	return &Shutdowns{
-		store:     store,
-		emergency: emergency,
-		provider:  provider,
-		clock:     clock,
-		log:       log.With("component", "service").With("service", "shutdowns"),
-		mx:        &sync.Mutex{},
+		store:    store,
+		provider: provider,
+		clock:    clock,
+		log:      log.With("component", "service").With("service", "shutdowns"),
+		mx:       &sync.Mutex{},
 	}
 }
 
@@ -110,7 +104,7 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 }
 
 func (s *Shutdowns) handleEmergencyMode(ctx context.Context) error {
-	state, err := s.emergency.GetEmergencyState()
+	state, err := s.store.GetEmergencyState()
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to get emergency state", "error", err)
 	}
@@ -125,7 +119,7 @@ func (s *Shutdowns) handleEmergencyMode(ctx context.Context) error {
 		Active:    true,
 		StartedAt: s.clock.Now(),
 	}
-	if err := s.emergency.SetEmergencyState(newState); err != nil {
+	if err := s.store.SetEmergencyState(newState); err != nil {
 		return fmt.Errorf("set emergency state: %w", err)
 	}
 
@@ -133,7 +127,7 @@ func (s *Shutdowns) handleEmergencyMode(ctx context.Context) error {
 }
 
 func (s *Shutdowns) handleEmergencyEnd(ctx context.Context) error {
-	state, err := s.emergency.GetEmergencyState()
+	state, err := s.store.GetEmergencyState()
 	if err != nil {
 		return fmt.Errorf("get emergency state: %w", err)
 	}
@@ -144,12 +138,9 @@ func (s *Shutdowns) handleEmergencyEnd(ctx context.Context) error {
 
 	s.log.InfoContext(ctx, "exiting emergency mode")
 
-	if err := s.emergency.SetEmergencyState(dal.EmergencyState{Active: false}); err != nil {
+	// Per-user Emergency flags will be reset when normal notifications are sent
+	if err := s.store.SetEmergencyState(dal.EmergencyState{Active: false}); err != nil {
 		return fmt.Errorf("clear emergency state: %w", err)
-	}
-
-	if err := s.emergency.ClearAllEmergencyNotifications(); err != nil {
-		return fmt.Errorf("clear emergency notifications: %w", err)
 	}
 
 	return nil

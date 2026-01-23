@@ -70,14 +70,14 @@ func run(ctx context.Context) int {
 	}
 
 	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
-	shutdownsSvc := service.NewShutdowns(store, store, provider, c, log)
+	shutdownsSvc := service.NewShutdowns(store, provider, c, log)
 	subscriptionsSvc := service.NewSubscription(store, c, log)
 	sender := tc.NewClient(
 		http.DefaultClient,
 		conf.TelegramToken,
 		tc.WithMiddlewares(telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle),
 	)
-	notificationsSvc := service.NewNotifications(store, store, store, store, sender, c, conf.NotificationsStateTTL, log)
+	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log)
 	alertsSvc := service.NewAlerts(store, store, store, store, sender, c, conf.AlertsTTL, log)
 	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, store, conf.GroupsCount, log)
 

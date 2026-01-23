@@ -14,7 +14,7 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
 
-//go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore,NotificationsEmergencyStore
+//go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
@@ -33,17 +33,10 @@ type (
 		CleanupNotificationStates(olderThan time.Duration) error
 	}
 
-	NotificationsEmergencyStore interface {
-		GetEmergencyState() (dal.EmergencyState, error)
-		GetEmergencyNotification(chatID int64) (time.Time, bool, error)
-		SetEmergencyNotification(chatID int64, sentAt time.Time) error
-	}
-
 	Notifications struct {
 		shutdowns     ShutdownsReaderStore
 		subscriptions SubscriptionsReaderStore
 		notifications NotificationsStore
-		emergency     NotificationsEmergencyStore
 		telegram      TelegramClient
 		clock         Clock
 
@@ -57,7 +50,6 @@ func NewNotifications(
 	shutdowns ShutdownsReaderStore,
 	subscriptions SubscriptionsReaderStore,
 	notifications NotificationsStore,
-	emergency NotificationsEmergencyStore,
 	telegram TelegramClient,
 	clock Clock,
 	notificationsTTL time.Duration,
@@ -68,7 +60,6 @@ func NewNotifications(
 		shutdowns:        shutdowns,
 		subscriptions:    subscriptions,
 		notifications:    notifications,
-		emergency:        emergency,
 		telegram:         telegram,
 		clock:            clock,
 
@@ -82,23 +73,23 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 	defer s.mx.Unlock()
 	s.log.InfoContext(ctx, "Notifying about shoutdown updates")
 
-	emergencyState, err := s.emergency.GetEmergencyState()
+	emergencyState, err := s.shutdowns.GetEmergencyState()
 	if err != nil {
 		s.log.ErrorContext(ctx, "failed to get emergency state", "error", err)
 	}
 
+	now := s.clock.Now()
+	today := dal.DateByTime(now)
+	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
+
 	if emergencyState.Active {
-		return s.notifyEmergency(ctx)
+		return s.notifyEmergency(ctx, today)
 	}
 
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
 		return fmt.Errorf("get all subscriptions: %w", err)
 	}
-
-	now := s.clock.Now()
-	today := dal.DateByTime(now)
-	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
 
 	for _, sub := range subs {
 		s.processSubscriptionNotification(ctx, sub, today, tomorrow)
@@ -107,7 +98,7 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 	return nil
 }
 
-func (s *Notifications) notifyEmergency(ctx context.Context) error {
+func (s *Notifications) notifyEmergency(ctx context.Context, today dal.Date) error {
 	s.log.InfoContext(ctx, "processing emergency notifications")
 
 	subs, err := s.subscriptions.GetAllSubscriptions()
@@ -116,13 +107,13 @@ func (s *Notifications) notifyEmergency(ctx context.Context) error {
 	}
 
 	for _, sub := range subs {
-		_, notified, err := s.emergency.GetEmergencyNotification(sub.ChatID)
+		state, _, err := s.notifications.GetNotificationState(sub.ChatID, today)
 		if err != nil {
-			s.log.ErrorContext(ctx, "failed to check emergency notification", "chatID", sub.ChatID, "error", err)
+			s.log.ErrorContext(ctx, "failed to get emergency notification state", "chatID", sub.ChatID, "error", err)
 			continue
 		}
 
-		if notified {
+		if state.Emergency {
 			continue
 		}
 
@@ -132,8 +123,13 @@ func (s *Notifications) notifyEmergency(ctx context.Context) error {
 			continue
 		}
 
-		if err := s.emergency.SetEmergencyNotification(sub.ChatID, s.clock.Now()); err != nil {
-			s.log.ErrorContext(ctx, "failed to mark emergency notification", "chatID", sub.ChatID, "error", err)
+		state.Emergency = true
+		// clear hashes so when emergency end we'll send latest schedule
+		for g := range state.Hashes {
+			state.Hashes[g] = ""
+		}
+		if err := s.notifications.PutNotificationState(state); err != nil {
+			s.log.ErrorContext(ctx, "failed to save emergency notification state", "chatID", sub.ChatID, "error", err)
 		}
 
 		s.log.InfoContext(ctx, "sent emergency notification", "chatID", sub.ChatID)
@@ -300,6 +296,7 @@ func (s *Notifications) updateNotificationStates(
 			todayState.Hashes[groupNum] = newHash
 		}
 		todayState.SentAt = now
+		todayState.Emergency = false
 
 		if err := s.notifications.PutNotificationState(todayState); err != nil {
 			log.ErrorContext(ctx, "failed to update today's notification state", "error", err)

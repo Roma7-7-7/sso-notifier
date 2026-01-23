@@ -14,6 +14,8 @@ const (
 	ON    Status = "Y"
 	OFF   Status = "N"
 	MAYBE Status = "M"
+
+	emergencyStateKey = "_emergency"
 )
 
 type (
@@ -39,6 +41,11 @@ type (
 	ShutdownGroup struct {
 		Number int      `json:"number"`
 		Items  []Status `json:"items"`
+	}
+
+	EmergencyState struct {
+		Active    bool      `json:"active"`
+		StartedAt time.Time `json:"started_at"`
 	}
 )
 
@@ -86,5 +93,41 @@ func (s *BoltDB) PutShutdowns(d Date, t Shutdowns) error {
 			return fmt.Errorf("marshal shutdowns table: %w", err)
 		}
 		return tx.Bucket([]byte(shutdownsBucket)).Put([]byte(d.ToKey()), data)
+	})
+}
+
+func (s *BoltDB) GetEmergencyState() (EmergencyState, error) {
+	var state EmergencyState
+
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(shutdownsBucket))
+		if b == nil {
+			return nil
+		}
+
+		data := b.Get([]byte(emergencyStateKey))
+		if data == nil {
+			return nil
+		}
+
+		return json.Unmarshal(data, &state)
+	})
+
+	return state, err
+}
+
+func (s *BoltDB) SetEmergencyState(state EmergencyState) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(shutdownsBucket))
+		if b == nil {
+			return fmt.Errorf("bucket %s not found", shutdownsBucket)
+		}
+
+		data, err := json.Marshal(&state)
+		if err != nil {
+			return fmt.Errorf("marshal emergency state: %w", err)
+		}
+
+		return b.Put([]byte(emergencyStateKey), data)
 	})
 }
