@@ -36,6 +36,10 @@ func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool
 		return dal.Shutdowns{}, false, fmt.Errorf("load shutdowns page: %w", err)
 	}
 
+	if err := CheckScheduleAvailability(html); err != nil {
+		return dal.Shutdowns{}, false, fmt.Errorf("check schedule availability: %w", err)
+	}
+
 	res, err := parseShutdownsPage(html)
 	if err != nil {
 		return dal.Shutdowns{}, false, fmt.Errorf("parse shutdowns page: %w", err)
@@ -47,6 +51,27 @@ func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool
 	}
 
 	return res, nextDayAvailable, nil
+}
+
+// CheckScheduleAvailability checks if the schedule is available in the HTML.
+// Returns nil if schedule is available (div#gsv present),
+// ErrEmergencyMode if emergency article is present,
+// ErrNoScheduleAvailable otherwise.
+func CheckScheduleAvailability(html []byte) error {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(html))
+	if err != nil {
+		return fmt.Errorf("parse HTML: %w", err)
+	}
+
+	if doc.Find("div#gsv").Length() > 0 {
+		return nil
+	}
+
+	if doc.Find("article.wrap_article_v2_emergency").Length() > 0 {
+		return ErrEmergencyMode
+	}
+
+	return ErrNoScheduleAvailable
 }
 
 // ShutdownsNext fetches tomorrow's shutdown schedule

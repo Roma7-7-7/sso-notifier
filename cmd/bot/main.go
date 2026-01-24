@@ -78,8 +78,8 @@ func run(ctx context.Context) int {
 		tc.WithMiddlewares(telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle),
 	)
 	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log)
-	alertsSvc := service.NewAlerts(store, store, store, sender, c, conf.AlertsTTL, log)
-	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, conf.GroupsCount, log)
+	alertsSvc := service.NewAlerts(store, store, store, store, sender, c, conf.AlertsTTL, log)
+	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, store, conf.GroupsCount, log)
 
 	bot, err := telegram.NewBot(conf, handler, log)
 	if err != nil {

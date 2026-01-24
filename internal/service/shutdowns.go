@@ -16,11 +16,13 @@ import (
 
 type ShutdownsReaderStore interface {
 	GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error)
+	GetEmergencyState() (dal.EmergencyState, error)
 }
 
 type ShutdownsStore interface {
 	ShutdownsReaderStore
 	PutShutdowns(d dal.Date, s dal.Shutdowns) error
+	SetEmergencyState(state dal.EmergencyState) error
 }
 
 type ShutdownsProvider interface {
@@ -59,10 +61,17 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 	today := dal.DateByTime(now)
 	todayTable, nextDayAvailable, err := s.provider.Shutdowns(ctx)
 	if err != nil {
+		if errors.Is(err, providers.ErrEmergencyMode) {
+			return s.handleEmergencyMode(ctx)
+		}
 		if !errors.Is(err, providers.ErrCheckNextDayAvailability) {
 			return fmt.Errorf("get shutdowns for today: %w", err)
 		}
 		s.log.WarnContext(ctx, "failed to check next day availability", "error", err)
+	}
+
+	if err := s.handleEmergencyEnd(ctx); err != nil {
+		s.log.ErrorContext(ctx, "failed to handle emergency end", "error", err)
 	}
 
 	if err = s.store.PutShutdowns(today, todayTable); err != nil {
@@ -90,6 +99,49 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 		return nil
 	}
 	s.log.InfoContext(ctx, "refreshed tomorrow's shutdowns", "date", tomorrow.ToKey())
+
+	return nil
+}
+
+func (s *Shutdowns) handleEmergencyMode(ctx context.Context) error {
+	state, err := s.store.GetEmergencyState()
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to get emergency state", "error", err)
+	}
+
+	if state.Active {
+		s.log.DebugContext(ctx, "already in emergency mode")
+		return nil
+	}
+
+	s.log.WarnContext(ctx, "entering emergency mode")
+	newState := dal.EmergencyState{
+		Active:    true,
+		StartedAt: s.clock.Now(),
+	}
+	if err := s.store.SetEmergencyState(newState); err != nil {
+		return fmt.Errorf("set emergency state: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Shutdowns) handleEmergencyEnd(ctx context.Context) error {
+	state, err := s.store.GetEmergencyState()
+	if err != nil {
+		return fmt.Errorf("get emergency state: %w", err)
+	}
+
+	if !state.Active {
+		return nil
+	}
+
+	s.log.InfoContext(ctx, "exiting emergency mode")
+
+	// Per-user Emergency flags will be reset when normal notifications are sent
+	if err := s.store.SetEmergencyState(dal.EmergencyState{Active: false}); err != nil {
+		return fmt.Errorf("clear emergency state: %w", err)
+	}
 
 	return nil
 }

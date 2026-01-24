@@ -21,6 +21,8 @@ import (
 
 //go:generate mockgen -package mocks -destination mocks/notifications.go . Notifications
 
+//go:generate mockgen -package mocks -destination mocks/emergency.go . EmergencyStore
+
 const genericErrorMsg = "Щось пішло не так. Будь ласка, спробуйте пізніше."
 
 type Subscriptions interface {
@@ -37,19 +39,25 @@ type Notifications interface {
 	NotifyPowerSupplySchedule(ctx context.Context, chatID int64) error
 }
 
+type EmergencyStore interface {
+	GetEmergencyState() (dal.EmergencyState, error)
+}
+
 type Handler struct {
 	subscriptions Subscriptions
 	notifications Notifications
+	emergency     EmergencyStore
 
 	markups *markups
 
 	log *slog.Logger
 }
 
-func NewHandler(subscriptions Subscriptions, notifications Notifications, groupsCount int, log *slog.Logger) *Handler {
+func NewHandler(subscriptions Subscriptions, notifications Notifications, emergency EmergencyStore, groupsCount int, log *slog.Logger) *Handler {
 	return &Handler{
 		subscriptions: subscriptions,
 		notifications: notifications,
+		emergency:     emergency,
 		markups:       newMarkups(groupsCount),
 		log:           log,
 	}
@@ -202,6 +210,11 @@ func (h *Handler) Settings(c tb.Context) error {
 func (h *Handler) GetSchedule(c tb.Context) error {
 	chatID := c.Sender().ID
 	h.log.Debug("schedule handler called", "chatID", chatID)
+
+	emergencyState, _ := h.emergency.GetEmergencyState()
+	if emergencyState.Active {
+		return h.sendOrDelete(c, "⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️", nil)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:mnd // 5 seconds timeout
 	defer cancel()

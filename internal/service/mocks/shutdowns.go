@@ -41,6 +41,21 @@ func (m *MockShutdownsStore) EXPECT() *MockShutdownsStoreMockRecorder {
 	return m.recorder
 }
 
+// GetEmergencyState mocks base method.
+func (m *MockShutdownsStore) GetEmergencyState() (dal.EmergencyState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEmergencyState")
+	ret0, _ := ret[0].(dal.EmergencyState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetEmergencyState indicates an expected call of GetEmergencyState.
+func (mr *MockShutdownsStoreMockRecorder) GetEmergencyState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEmergencyState", reflect.TypeOf((*MockShutdownsStore)(nil).GetEmergencyState))
+}
+
 // GetShutdowns mocks base method.
 func (m *MockShutdownsStore) GetShutdowns(d dal.Date) (dal.Shutdowns, bool, error) {
 	m.ctrl.T.Helper()
@@ -69,6 +84,20 @@ func (m *MockShutdownsStore) PutShutdowns(d dal.Date, s dal.Shutdowns) error {
 func (mr *MockShutdownsStoreMockRecorder) PutShutdowns(d, s any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutShutdowns", reflect.TypeOf((*MockShutdownsStore)(nil).PutShutdowns), d, s)
+}
+
+// SetEmergencyState mocks base method.
+func (m *MockShutdownsStore) SetEmergencyState(state dal.EmergencyState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetEmergencyState", state)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetEmergencyState indicates an expected call of SetEmergencyState.
+func (mr *MockShutdownsStoreMockRecorder) SetEmergencyState(state any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetEmergencyState", reflect.TypeOf((*MockShutdownsStore)(nil).SetEmergencyState), state)
 }
 
 // MockShutdownsProvider is a mock of ShutdownsProvider interface.

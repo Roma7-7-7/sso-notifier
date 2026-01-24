@@ -54,10 +54,17 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 		"5": {},
 	}
 
+	defaultEmergency := func(ctrl *gomock.Controller) service.AlertsEmergencyStore {
+		res := mocks.NewMockAlertsEmergencyStore(ctrl)
+		res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil).AnyTimes()
+		return res
+	}
+
 	type fields struct {
 		shutdowns     func(*gomock.Controller) service.ShutdownsStore
 		subscriptions func(*gomock.Controller) service.SubscriptionsStore
 		store         func(*gomock.Controller) service.AlertsStore
+		emergency     func(*gomock.Controller) service.AlertsEmergencyStore
 		telegram      func(*gomock.Controller) service.TelegramClient
 		clock         func() service.Clock
 	}
@@ -105,6 +112,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 🔴 Відключення електропостачання об 12:00`).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -145,6 +153,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 🟢 Відновлення електропостачання об 12:00`).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -196,6 +205,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 🔴 Відключення електропостачання об 12:00`).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -241,6 +251,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 🔴 Відключення електропостачання об 12:30`).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 12, 20, 0, 0, time.UTC))
 				},
@@ -281,6 +292,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 🔴 Відключення електропостачання об 12:30`).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 12, 20, 0, 0, time.UTC))
 				},
@@ -307,6 +319,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 12, 26, 0, 0, time.UTC))
 				},
@@ -332,6 +345,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 5, 26, 0, 0, time.UTC))
 				},
@@ -357,6 +371,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 23, 26, 0, 0, time.UTC))
 				},
@@ -387,6 +402,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(nil)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -416,6 +432,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res.EXPECT().SendMessage(gomock.Any(), chatIDStr, gomock.Any()).Return(assert.AnError)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -444,6 +461,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -471,6 +489,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -497,6 +516,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
@@ -523,11 +543,45 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 					res := mocks.NewMockTelegramClient(ctrl)
 					return res
 				},
+				emergency: defaultEmergency,
 				clock: func() service.Clock {
 					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
 				},
 			},
 			wantErr: testutil.AssertErrorIsAndContains(assert.AnError, "get shutdowns: "),
+		},
+		{
+			name: "skip_alerts_during_emergency_mode",
+			fields: fields{
+				shutdowns: func(ctrl *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(ctrl)
+					return res
+				},
+				subscriptions: func(ctrl *gomock.Controller) service.SubscriptionsStore {
+					res := mocks.NewMockSubscriptionsStore(ctrl)
+					return res
+				},
+				store: func(ctrl *gomock.Controller) service.AlertsStore {
+					res := mocks.NewMockAlertsStore(ctrl)
+					return res
+				},
+				telegram: func(ctrl *gomock.Controller) service.TelegramClient {
+					res := mocks.NewMockTelegramClient(ctrl)
+					return res
+				},
+				emergency: func(ctrl *gomock.Controller) service.AlertsEmergencyStore {
+					res := mocks.NewMockAlertsEmergencyStore(ctrl)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{
+						Active:    true,
+						StartedAt: time.Date(2025, time.November, 20, 10, 0, 0, 0, time.UTC),
+					}, nil)
+					return res
+				},
+				clock: func() service.Clock {
+					return clock.NewMock(time.Date(2025, time.November, 20, 11, 50, 0, 0, time.UTC))
+				},
+			},
+			wantErr: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -539,6 +593,7 @@ func TestAlerts_NotifyPowerSupplyChanges(t *testing.T) {
 				tt.fields.shutdowns(ctrl),
 				tt.fields.subscriptions(ctrl),
 				tt.fields.store(ctrl),
+				tt.fields.emergency(ctrl),
 				tt.fields.telegram(ctrl),
 				tt.fields.clock(),
 				time.Hour,

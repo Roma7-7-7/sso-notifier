@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/testutil"
@@ -16,6 +17,9 @@ var chernivtsiWithoutNextDay []byte
 
 //go:embed testdata/chernivtsi_with_next_day.html
 var chernivtsiWithNextDay []byte
+
+//go:embed testdata/chernivtsi_emergency.html
+var chernivtsiNoSchedule []byte
 
 func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 	type fields struct {
@@ -110,6 +114,56 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 
 			assert.Equalf(t, tt.want, got, "ChernivtsiProvider_Shutdowns()")
 			assert.Equalf(t, tt.wantHasNextPage, gotHasNextPage, "ChernivtsiProvider_Shutdowns()")
+		})
+	}
+}
+
+func TestChernivtsiProvider_Shutdowns_Emergency(t *testing.T) {
+	p := &ChernivtsiProvider{
+		loadPage: func(_ context.Context, _ string) ([]byte, error) {
+			return chernivtsiNoSchedule, nil
+		},
+	}
+
+	_, _, err := p.Shutdowns(t.Context())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrEmergencyMode, "expected ErrEmergencyMode, got %v", err)
+	assert.ErrorContains(t, err, "check schedule availability:")
+}
+
+func TestCheckScheduleAvailability(t *testing.T) {
+	tests := []struct {
+		name    string
+		html    []byte
+		wantErr error
+	}{
+		{
+			name:    "schedule_available",
+			html:    chernivtsiWithoutNextDay,
+			wantErr: nil,
+		},
+		{
+			name:    "emergency_mode",
+			html:    chernivtsiNoSchedule,
+			wantErr: ErrEmergencyMode,
+		},
+		{
+			name:    "no_schedule_no_emergency",
+			html:    []byte("<html><body><p>Some content</p></body></html>"),
+			wantErr: ErrNoScheduleAvailable,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckScheduleAvailability(tt.html)
+
+			if tt.wantErr == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, tt.wantErr, "expected %v, got %v", tt.wantErr, err)
+			}
 		})
 	}
 }

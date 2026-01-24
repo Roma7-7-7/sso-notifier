@@ -38,6 +38,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					return res
 				},
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
@@ -54,6 +55,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					res.EXPECT().PutShutdowns(tomorrowDate, defaultTomorrowShutdowns).Return(nil)
 					return res
 				},
@@ -72,6 +74,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					res.EXPECT().PutShutdowns(tomorrowDate, defaultTomorrowShutdowns).Return(assert.AnError)
 					return res
 				},
@@ -90,6 +93,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					return res
 				},
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
@@ -106,6 +110,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 			fields: fields{
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(assert.AnError)
 					return res
 				},
@@ -142,6 +147,7 @@ func TestShutdowns_Refresh(t *testing.T) {
 				store: func(c *gomock.Controller) service.ShutdownsStore {
 					res := mocks.NewMockShutdownsStore(c)
 					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
 					return res
 				},
 				provider: func(c *gomock.Controller) service.ShutdownsProvider {
@@ -151,6 +157,76 @@ func TestShutdowns_Refresh(t *testing.T) {
 				},
 			},
 			wantErr: assert.NoError,
+		},
+		{
+			name: "emergency_mode_enters",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
+					res.EXPECT().SetEmergencyState(dal.EmergencyState{Active: true, StartedAt: now}).Return(nil)
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					res.EXPECT().Shutdowns(gomock.Any()).Return(dal.Shutdowns{}, false, providers.ErrEmergencyMode)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "emergency_mode_already_active",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{Active: true, StartedAt: now.Add(-time.Hour)}, nil)
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					res.EXPECT().Shutdowns(gomock.Any()).Return(dal.Shutdowns{}, false, providers.ErrEmergencyMode)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "emergency_mode_ends",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{Active: true, StartedAt: now.Add(-time.Hour)}, nil)
+					res.EXPECT().SetEmergencyState(dal.EmergencyState{Active: false}).Return(nil)
+					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, false, nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "error_set_emergency_state",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
+					res.EXPECT().SetEmergencyState(dal.EmergencyState{Active: true, StartedAt: now}).Return(assert.AnError)
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					res.EXPECT().Shutdowns(gomock.Any()).Return(dal.Shutdowns{}, false, providers.ErrEmergencyMode)
+					return res
+				},
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, i...) && assert.ErrorIs(t, err, assert.AnError) && assert.ErrorContains(t, err, "set emergency state: ")
+			},
 		},
 	}
 	for _, tt := range tests {
