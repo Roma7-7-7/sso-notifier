@@ -99,7 +99,7 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 }
 
 func (s *Notifications) notifyEmergency(ctx context.Context, today dal.Date) error {
-	s.log.InfoContext(ctx, "processing emergency notifications")
+	s.log.DebugContext(ctx, "processing emergency notifications")
 
 	subs, err := s.subscriptions.GetAllSubscriptions()
 	if err != nil {
@@ -133,7 +133,7 @@ func (s *Notifications) notifyEmergency(ctx context.Context, today dal.Date) err
 			s.log.ErrorContext(ctx, "failed to save emergency notification state", "chatID", sub.ChatID, "error", err)
 		}
 
-		s.log.InfoContext(ctx, "sent emergency notification", "chatID", sub.ChatID)
+		s.log.DebugContext(ctx, "sent emergency notification", "chatID", sub.ChatID)
 	}
 
 	return nil
