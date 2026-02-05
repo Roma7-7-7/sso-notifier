@@ -23,7 +23,7 @@ var chernivtsiNoSchedule []byte
 
 func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 	type fields struct {
-		loadPage func(context.Context, string) ([]byte, error)
+		loadPage func(context.Context, string, string) ([]byte, error)
 	}
 	tests := []struct {
 		name            string
@@ -35,7 +35,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 		{
 			name: "success_no_next_page",
 			fields: fields{
-				loadPage: func(_ context.Context, _ string) ([]byte, error) {
+				loadPage: func(_ context.Context, _, _ string) ([]byte, error) {
 					return chernivtsiWithoutNextDay, nil
 				},
 			},
@@ -59,7 +59,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 		{
 			name: "success_has_next_page",
 			fields: fields{
-				loadPage: func(_ context.Context, _ string) ([]byte, error) {
+				loadPage: func(_ context.Context, _, _ string) ([]byte, error) {
 					return chernivtsiWithNextDay, nil
 				},
 			},
@@ -83,7 +83,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 		{
 			name: "error_not_html",
 			fields: fields{
-				loadPage: func(_ context.Context, _ string) ([]byte, error) {
+				loadPage: func(_ context.Context, _, _ string) ([]byte, error) {
 					return []byte("random text"), nil
 				},
 			},
@@ -92,7 +92,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 		{
 			name: "error_load_page",
 			fields: fields{
-				loadPage: func(_ context.Context, _ string) ([]byte, error) {
+				loadPage: func(_ context.Context, _, _ string) ([]byte, error) {
 					return nil, assert.AnError
 				},
 			},
@@ -120,7 +120,7 @@ func TestChernivtsiProvider_Shutdowns(t *testing.T) {
 
 func TestChernivtsiProvider_Shutdowns_Emergency(t *testing.T) {
 	p := &ChernivtsiProvider{
-		loadPage: func(_ context.Context, _ string) ([]byte, error) {
+		loadPage: func(_ context.Context, _, _ string) ([]byte, error) {
 			return chernivtsiNoSchedule, nil
 		},
 	}

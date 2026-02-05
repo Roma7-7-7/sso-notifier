@@ -17,21 +17,23 @@ import (
 var ErrCheckNextDayAvailability = errors.New("check next day availability")
 
 type ChernivtsiProvider struct {
-	baseURL  string
-	loadPage func(context.Context, string) ([]byte, error)
+	baseURL    string
+	proxyToken string
+	loadPage   func(context.Context, string, string) ([]byte, error)
 }
 
-func NewChernivtsiProvider(baseURL string) *ChernivtsiProvider {
+func NewChernivtsiProvider(baseURL, proxyToken string) *ChernivtsiProvider {
 	return &ChernivtsiProvider{
-		baseURL:  baseURL,
-		loadPage: loadPage,
+		baseURL:    baseURL,
+		proxyToken: proxyToken,
+		loadPage:   loadPage,
 	}
 }
 
 // Shutdowns fetches today's shutdown schedule
 // Returns the schedule and a boolean indicating if tomorrow's schedule is available
 func (p *ChernivtsiProvider) Shutdowns(ctx context.Context) (dal.Shutdowns, bool, error) {
-	html, err := p.loadPage(ctx, p.baseURL)
+	html, err := p.loadPage(ctx, p.baseURL, p.proxyToken)
 	if err != nil {
 		return dal.Shutdowns{}, false, fmt.Errorf("load shutdowns page: %w", err)
 	}
@@ -78,7 +80,7 @@ func CheckScheduleAvailability(html []byte) error {
 // Should only be called if Shutdowns indicated next day is available
 func (p *ChernivtsiProvider) ShutdownsNext(ctx context.Context) (dal.Shutdowns, error) {
 	nextURL := p.baseURL + "?next"
-	html, err := p.loadPage(ctx, nextURL)
+	html, err := p.loadPage(ctx, nextURL, p.proxyToken)
 	if err != nil {
 		return dal.Shutdowns{}, fmt.Errorf("load shutdowns page: %w", err)
 	}
@@ -113,10 +115,13 @@ func hasNextDaySchedule(html []byte) (bool, error) {
 	return hasLink && hasBold, nil
 }
 
-func loadPage(ctx context.Context, url string) ([]byte, error) {
+func loadPage(ctx context.Context, url, proxyToken string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get shutdowns from page=%s: %w", url, err)
+	}
+	if proxyToken != "" {
+		req.Header.Set("X-Proxy-Token", proxyToken)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
