@@ -69,7 +69,7 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
-	provider := providers.NewChernivtsiProvider(conf.ScheduleURL)
+	provider := providers.NewChernivtsiProvider(conf.ScheduleURL, conf.ProxyToken)
 	shutdownsSvc := service.NewShutdowns(store, provider, c, log)
 	subscriptionsSvc := service.NewSubscription(store, c, log)
 	sender := tc.NewClient(
