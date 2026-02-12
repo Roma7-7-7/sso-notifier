@@ -94,12 +94,12 @@ func run(ctx context.Context) int {
 		if err != nil {
 			log.ErrorContext(ctx, "Failed to create calendar client (calendar sync disabled)", "error", err)
 		} else {
-			calSync := calendar.NewSyncService(calClient, store, c, calendar.SyncConfig{
+			calSync := calendar.NewSyncService(calendar.SyncConfig{
 				SyncOff:   conf.CalendarSyncOff,
 				SyncMaybe: conf.CalendarSyncMaybe,
 				SyncOn:    conf.CalendarSyncOn,
 				Group:     conf.CalendarGroup,
-			}, loc, log)
+			}, calClient, store, c, log)
 			sched.WithCalendarSync(calSync.Sync, conf.CalendarSyncInterval)
 			lookback := conf.CalendarCleanupLookback
 			sched.WithCalendarCleanup(func(ctx context.Context) error {

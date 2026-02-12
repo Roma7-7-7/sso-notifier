@@ -22,7 +22,7 @@ type Client struct {
 // Scope is calendar.events (create/read/delete). loc is used for time bounds (e.g. Europe/Kyiv).
 func NewClient(ctx context.Context, credentialsPath, calendarID string, loc *time.Location) (*Client, error) {
 	srv, err := calendar.NewService(ctx,
-		option.WithCredentialsFile(credentialsPath),
+		option.WithAuthCredentialsFile(option.ServiceAccount, credentialsPath),
 		option.WithScopes(calendar.CalendarEventsScope),
 	)
 	if err != nil {

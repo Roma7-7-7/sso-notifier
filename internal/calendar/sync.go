@@ -41,6 +41,8 @@ type ShutdownsReader interface {
 // Clock provides current time (e.g. for today/tomorrow and time window).
 type Clock interface {
 	Now() time.Time
+	Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time
+	Parse(pattern, value string) (time.Time, error)
 }
 
 // SyncService runs delete-then-recreate sync of power outage schedule to Google Calendar.
@@ -49,18 +51,16 @@ type SyncService struct {
 	store  ShutdownsReader
 	clock  Clock
 	conf   SyncConfig
-	loc    *time.Location
 	log    *slog.Logger
 }
 
 // NewSyncService creates a calendar sync service.
-func NewSyncService(client *Client, store ShutdownsReader, clock Clock, conf SyncConfig, loc *time.Location, log *slog.Logger) *SyncService {
+func NewSyncService(conf SyncConfig, client *Client, store ShutdownsReader, clock Clock, log *slog.Logger) *SyncService {
 	return &SyncService{
 		client: client,
 		store:  store,
 		clock:  clock,
 		conf:   conf,
-		loc:    loc,
 		log:    log.With("component", "calendar_sync"),
 	}
 }
@@ -76,12 +76,12 @@ func (s *SyncService) Sync(ctx context.Context) error {
 		return nil
 	}
 
-	now := s.clock.Now().In(s.loc)
+	now := s.clock.Now()
 	today := dal.DateByTime(now)
 	tomorrow := dal.TomorrowDateByTime(now)
 
-	timeMin := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
-	timeMax := time.Date(tomorrow.Year, tomorrow.Month, tomorrow.Day, 23, 59, 59, 0, s.loc)
+	timeMin := s.clock.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0)
+	timeMax := s.clock.Date(tomorrow.Year, tomorrow.Month, tomorrow.Day, 23, 59, 59, 0)
 
 	s.log.InfoContext(ctx, "Starting calendar sync", "timeMin", timeMin.Format(time.RFC3339), "timeMax", timeMax.Format(time.RFC3339))
 
@@ -107,10 +107,10 @@ func (s *SyncService) Sync(ctx context.Context) error {
 
 	var toCreate []eventPayload
 	if hasToday {
-		toCreate = append(toCreate, buildEventsFromSchedule(todayShutdowns, today, s.conf, s.loc)...)
+		toCreate = append(toCreate, buildEventsFromSchedule(todayShutdowns, today, s.conf, s.clock)...)
 	}
 	if hasTomorrow {
-		toCreate = append(toCreate, buildEventsFromSchedule(tomorrowShutdowns, tomorrow, s.conf, s.loc)...)
+		toCreate = append(toCreate, buildEventsFromSchedule(tomorrowShutdowns, tomorrow, s.conf, s.clock)...)
 	}
 
 	descBase := "SSO Notifier — power outage schedule"
@@ -131,8 +131,8 @@ func (s *SyncService) Sync(ctx context.Context) error {
 // CleanupStale deletes our events in the past lookbackDays (not including today).
 // Window: [today - lookbackDays at 00:00, yesterday at 23:59:59]. Run periodically (e.g. every 6h).
 func (s *SyncService) CleanupStale(ctx context.Context, lookbackDays int) error {
-	now := s.clock.Now().In(s.loc)
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
+	now := s.clock.Now()
+	todayStart := s.clock.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0)
 	yesterdayEnd := todayStart.Add(-time.Second) // 23:59:59 yesterday
 	timeMin := todayStart.AddDate(0, 0, -lookbackDays)
 
@@ -160,7 +160,7 @@ type eventPayload struct {
 }
 
 // buildEventsFromSchedule returns event payloads for one day's schedule: one group, merged consecutive same-status, filtered by conf.
-func buildEventsFromSchedule(shutdowns dal.Shutdowns, day dal.Date, conf SyncConfig, loc *time.Location) []eventPayload {
+func buildEventsFromSchedule(shutdowns dal.Shutdowns, day dal.Date, conf SyncConfig, clock Clock) []eventPayload {
 	groupKey := strconv.Itoa(conf.Group)
 	group, ok := shutdowns.Groups[groupKey]
 	if !ok {
@@ -173,8 +173,8 @@ func buildEventsFromSchedule(shutdowns dal.Shutdowns, day dal.Date, conf SyncCon
 			continue
 		}
 		summary, colorID := summaryAndColorForStatus(st)
-		startTime, errStart := parseTimeInDay(periods[i].From, day, loc)
-		endTime, errEnd := parseTimeInDay(periods[i].To, day, loc)
+		startTime, errStart := parseTimeInDay(periods[i].From, day, clock)
+		endTime, errEnd := parseTimeInDay(periods[i].To, day, clock)
 		if errStart != nil || errEnd != nil {
 			continue
 		}
@@ -202,7 +202,7 @@ func statusSyncEnabled(st dal.Status, conf SyncConfig) bool {
 	}
 }
 
-func summaryAndColorForStatus(st dal.Status) (summary, colorID string) {
+func summaryAndColorForStatus(st dal.Status) (string, string) {
 	switch st {
 	case dal.OFF:
 		return summaryOff, colorIDOff
@@ -241,14 +241,14 @@ func joinPeriods(periods []dal.Period, statuses []dal.Status) ([]dal.Period, []d
 
 // parseTimeInDay parses a "15:04" time string and returns that time on the given day in loc.
 // "24:00" is treated as midnight at the start of the next day (end-of-day).
-func parseTimeInDay(s string, day dal.Date, loc *time.Location) (time.Time, error) {
+func parseTimeInDay(s string, day dal.Date, clock Clock) (time.Time, error) {
 	if s == "24:00" {
-		startOfDay := time.Date(day.Year, day.Month, day.Day, 0, 0, 0, 0, loc)
+		startOfDay := clock.Date(day.Year, day.Month, day.Day, 0, 0, 0, 0)
 		return startOfDay.Add(24 * time.Hour), nil //nolint:mnd // 24:00 = next day 00:00
 	}
-	t, err := time.ParseInLocation("15:04", s, loc)
+	t, err := clock.Parse("15:04", s)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, fmt.Errorf("parse %q: %w", s, err)
 	}
-	return time.Date(day.Year, day.Month, day.Day, t.Hour(), t.Minute(), 0, 0, loc), nil
+	return clock.Date(day.Year, day.Month, day.Day, t.Hour(), t.Minute(), 0, 0), nil
 }

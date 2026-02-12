@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
 func TestJoinPeriods(t *testing.T) {
@@ -84,7 +85,7 @@ func TestJoinPeriods(t *testing.T) {
 }
 
 func TestBuildEventsFromSchedule(t *testing.T) {
-	loc := mustKyiv(t)
+	c := clock.NewWithLocation(mustKyiv(t))
 	day := dal.Date{Year: 2025, Month: time.February, Day: 12}
 
 	t.Run("empty groups", func(t *testing.T) {
@@ -94,7 +95,7 @@ func TestBuildEventsFromSchedule(t *testing.T) {
 			Groups:  map[string]dal.ShutdownGroup{},
 		}
 		conf := SyncConfig{SyncOff: true, Group: 4}
-		got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+		got := buildEventsFromSchedule(shutdowns, day, conf, c)
 		assert.Empty(t, got)
 	})
 
@@ -105,7 +106,7 @@ func TestBuildEventsFromSchedule(t *testing.T) {
 			Groups:  map[string]dal.ShutdownGroup{"1": {Number: 1, Items: []dal.Status{dal.OFF}}},
 		}
 		conf := SyncConfig{SyncOff: true, Group: 4}
-		got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+		got := buildEventsFromSchedule(shutdowns, day, conf, c)
 		assert.Empty(t, got)
 	})
 
@@ -125,7 +126,7 @@ func TestBuildEventsFromSchedule(t *testing.T) {
 			},
 		}
 		conf := SyncConfig{SyncOff: true, SyncMaybe: false, SyncOn: false, Group: 4}
-		got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+		got := buildEventsFromSchedule(shutdowns, day, conf, c)
 		require.Len(t, got, 1)
 		assert.Equal(t, summaryOff, got[0].summary)
 		assert.Equal(t, colorIDOff, got[0].colorID)
@@ -151,7 +152,7 @@ func TestBuildEventsFromSchedule(t *testing.T) {
 			},
 		}
 		conf := SyncConfig{SyncOff: true, SyncMaybe: true, SyncOn: true, Group: 4}
-		got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+		got := buildEventsFromSchedule(shutdowns, day, conf, c)
 		require.Len(t, got, 3)
 		assert.Equal(t, summaryOff, got[0].summary)
 		assert.Equal(t, summaryMaybe, got[1].summary)
@@ -170,7 +171,7 @@ func TestBuildEventsFromSchedule(t *testing.T) {
 			},
 		}
 		conf := SyncConfig{SyncOff: true, Group: 4}
-		got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+		got := buildEventsFromSchedule(shutdowns, day, conf, c)
 		require.Len(t, got, 1)
 		_, err := time.Parse(time.RFC3339, got[0].startRFC3339)
 		require.NoError(t, err)
@@ -206,27 +207,26 @@ func TestStatusSyncEnabled(t *testing.T) {
 }
 
 func TestParseTimeInDay(t *testing.T) {
-	loc := mustKyiv(t)
+	c := clock.NewWithLocation(mustKyiv(t))
 	day := dal.Date{Year: 2025, Month: time.June, Day: 15}
 
-	got, err := parseTimeInDay("14:30", day, loc)
+	got, err := parseTimeInDay("14:30", day, c)
 	require.NoError(t, err)
 	assert.Equal(t, 2025, got.Year())
 	assert.Equal(t, time.June, got.Month())
 	assert.Equal(t, 15, got.Day())
 	assert.Equal(t, 14, got.Hour())
 	assert.Equal(t, 30, got.Minute())
-	assert.Equal(t, loc, got.Location())
+	assert.Equal(t, mustKyiv(t), got.Location())
 
-	_, err = parseTimeInDay("25:00", day, loc)
+	_, err = parseTimeInDay("25:00", day, c)
 	assert.Error(t, err)
 }
 
 func TestParseTimeInDay_24_00(t *testing.T) {
-	loc := mustKyiv(t)
 	day := dal.Date{Year: 2025, Month: time.June, Day: 15}
 
-	got, err := parseTimeInDay("24:00", day, loc)
+	got, err := parseTimeInDay("24:00", day, clock.NewWithLocation(mustKyiv(t)))
 	require.NoError(t, err)
 	// 24:00 = midnight next day
 	assert.Equal(t, 2025, got.Year())
@@ -237,7 +237,6 @@ func TestParseTimeInDay_24_00(t *testing.T) {
 }
 
 func TestBuildEventsFromSchedule_LastInterval24_00(t *testing.T) {
-	loc := mustKyiv(t)
 	day := dal.Date{Year: 2025, Month: time.February, Day: 12}
 	// Day that ends with OFF 23:30–24:00
 	shutdowns := dal.Shutdowns{
@@ -251,7 +250,7 @@ func TestBuildEventsFromSchedule_LastInterval24_00(t *testing.T) {
 		},
 	}
 	conf := SyncConfig{SyncOff: true, SyncOn: true, Group: 4}
-	got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+	got := buildEventsFromSchedule(shutdowns, day, conf, clock.NewWithLocation(mustKyiv(t)))
 	require.Len(t, got, 2)
 	// First event: ON 23:00–23:30
 	assert.Equal(t, summaryOn, got[0].summary)
