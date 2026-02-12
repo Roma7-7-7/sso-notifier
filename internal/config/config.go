@@ -34,6 +34,8 @@ type Config struct {
 	CalendarSyncMaybe       bool          `envconfig:"CALENDAR_SYNC_MAYBE" default:"false"`
 	CalendarSyncOn          bool          `envconfig:"CALENDAR_SYNC_ON" default:"false"`
 	CalendarGroup           int           `envconfig:"CALENDAR_GROUP" default:"4"`
+	CalendarCleanupInterval time.Duration `envconfig:"CALENDAR_CLEANUP_INTERVAL" default:"6h"`
+	CalendarCleanupLookback int           `envconfig:"CALENDAR_CLEANUP_LOOKBACK_DAYS" default:"7"` // delete our events older than today, up to this many days back
 }
 
 // CalendarEnabled returns true when calendar sync should run (both email and credentials path set).

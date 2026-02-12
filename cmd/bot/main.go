@@ -101,6 +101,10 @@ func run(ctx context.Context) int {
 				Group:     conf.CalendarGroup,
 			}, loc, log)
 			sched.WithCalendarSync(calSync.Sync, conf.CalendarSyncInterval)
+			lookback := conf.CalendarCleanupLookback
+			sched.WithCalendarCleanup(func(ctx context.Context) error {
+				return calSync.CleanupStale(ctx, lookback)
+			}, conf.CalendarCleanupInterval)
 		}
 	}
 

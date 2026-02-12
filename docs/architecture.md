@@ -14,13 +14,14 @@ External Provider Layer (HTML Scraping)
 
 ## Concurrency Model
 
-Five concurrent goroutines (calendar sync runs only when configured):
+Six concurrent goroutines (calendar jobs run only when configured):
 
 1. **Main Thread**: Telegram bot event loop
 2. **Refresh Thread**: Fetches schedule (configurable, default: 5 minutes)
 3. **Notification Thread**: Checks for schedule updates (configurable, default: 5 minutes)
 4. **Alerts Thread**: Checks for upcoming outages (configurable, default: 1 minute)
 5. **Calendar Sync Thread**: Syncs power outage schedule (today + tomorrow) to Google Calendar at configurable interval (default: 15m). Started only when `CALENDAR_EMAIL` and `CALENDAR_CREDENTIALS_PATH` are set. Personal-only feature; not exposed to bot users.
+6. **Calendar Cleanup Thread**: Deletes our calendar events from the past week (not including today) at configurable interval (default: 6h). Same gating as calendar sync.
 
 ## Code Structure
 

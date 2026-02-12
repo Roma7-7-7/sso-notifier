@@ -23,9 +23,11 @@ type Scheduler struct {
 	notifications *Notifications
 	alerts        *Alerts
 
-	calendarSync         processFn
-	calendarSyncInterval time.Duration
-	log                  *slog.Logger
+	calendarSync            processFn
+	calendarSyncInterval    time.Duration
+	calendarCleanup         processFn
+	calendarCleanupInterval time.Duration
+	log                     *slog.Logger
 }
 
 func NewScheduler(
@@ -53,6 +55,13 @@ func (s *Scheduler) WithCalendarSync(fn processFn, interval time.Duration) *Sche
 	return s
 }
 
+// WithCalendarCleanup adds a calendar stale-cleanup job (e.g. delete our events from last week). If fn is nil, no goroutine is started.
+func (s *Scheduler) WithCalendarCleanup(fn processFn, interval time.Duration) *Scheduler {
+	s.calendarCleanup = fn
+	s.calendarCleanupInterval = interval
+	return s
+}
+
 func (s *Scheduler) Start(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	wg.Go(func() {
@@ -70,6 +79,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	if s.calendarSync != nil && s.calendarSyncInterval > 0 {
 		wg.Go(func() {
 			s.run(ctx, s.calendarSyncInterval, "calendar_sync", s.calendarSync)
+		})
+	}
+	if s.calendarCleanup != nil && s.calendarCleanupInterval > 0 {
+		wg.Go(func() {
+			s.run(ctx, s.calendarCleanupInterval, "calendar_cleanup", s.calendarCleanup)
 		})
 	}
 

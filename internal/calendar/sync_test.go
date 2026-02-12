@@ -222,6 +222,47 @@ func TestParseTimeInDay(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestParseTimeInDay_24_00(t *testing.T) {
+	loc := mustKyiv(t)
+	day := dal.Date{Year: 2025, Month: time.June, Day: 15}
+
+	got, err := parseTimeInDay("24:00", day, loc)
+	require.NoError(t, err)
+	// 24:00 = midnight next day
+	assert.Equal(t, 2025, got.Year())
+	assert.Equal(t, time.June, got.Month())
+	assert.Equal(t, 16, got.Day())
+	assert.Equal(t, 0, got.Hour())
+	assert.Equal(t, 0, got.Minute())
+}
+
+func TestBuildEventsFromSchedule_LastInterval24_00(t *testing.T) {
+	loc := mustKyiv(t)
+	day := dal.Date{Year: 2025, Month: time.February, Day: 12}
+	// Day that ends with OFF 23:30–24:00
+	shutdowns := dal.Shutdowns{
+		Date: "12 лютого",
+		Periods: []dal.Period{
+			{From: "23:00", To: "23:30"},
+			{From: "23:30", To: "24:00"},
+		},
+		Groups: map[string]dal.ShutdownGroup{
+			"4": {Number: 4, Items: []dal.Status{dal.ON, dal.OFF}},
+		},
+	}
+	conf := SyncConfig{SyncOff: true, SyncOn: true, Group: 4}
+	got := buildEventsFromSchedule(shutdowns, day, conf, loc)
+	require.Len(t, got, 2)
+	// First event: ON 23:00–23:30
+	assert.Equal(t, summaryOn, got[0].summary)
+	assert.Contains(t, got[0].endRFC3339, "T23:30:")
+	// Second event: OFF 23:30–24:00 (last interval; 24:00 must be included)
+	assert.Equal(t, summaryOff, got[1].summary)
+	assert.Contains(t, got[1].startRFC3339, "T23:30:")
+	assert.Contains(t, got[1].endRFC3339, "T00:00:00") // next day 00:00
+	assert.Contains(t, got[1].endRFC3339, "2025-02-13")
+}
+
 func mustKyiv(t *testing.T) *time.Location {
 	t.Helper()
 	loc, err := time.LoadLocation("Europe/Kyiv")

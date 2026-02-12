@@ -128,6 +128,29 @@ func (s *SyncService) Sync(ctx context.Context) error {
 	return nil
 }
 
+// CleanupStale deletes our events in the past lookbackDays (not including today).
+// Window: [today - lookbackDays at 00:00, yesterday at 23:59:59]. Run periodically (e.g. every 6h).
+func (s *SyncService) CleanupStale(ctx context.Context, lookbackDays int) error {
+	now := s.clock.Now().In(s.loc)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
+	yesterdayEnd := todayStart.Add(-time.Second) // 23:59:59 yesterday
+	timeMin := todayStart.AddDate(0, 0, -lookbackDays)
+
+	s.log.InfoContext(ctx, "Starting calendar stale cleanup", "timeMin", timeMin.Format(time.RFC3339), "timeMax", yesterdayEnd.Format(time.RFC3339))
+
+	ids, err := s.client.ListOurEvents(ctx, timeMin, yesterdayEnd)
+	if err != nil {
+		return fmt.Errorf("calendar cleanup failed: list: %w", err)
+	}
+	for _, id := range ids {
+		if err := s.client.DeleteEvent(ctx, id); err != nil {
+			return fmt.Errorf("calendar cleanup failed: delete %s: %w", id, err)
+		}
+	}
+	s.log.InfoContext(ctx, "Calendar stale cleanup completed", "deleted", len(ids))
+	return nil
+}
+
 type eventPayload struct {
 	summary      string
 	startRFC3339 string
@@ -217,7 +240,12 @@ func joinPeriods(periods []dal.Period, statuses []dal.Status) ([]dal.Period, []d
 }
 
 // parseTimeInDay parses a "15:04" time string and returns that time on the given day in loc.
+// "24:00" is treated as midnight at the start of the next day (end-of-day).
 func parseTimeInDay(s string, day dal.Date, loc *time.Location) (time.Time, error) {
+	if s == "24:00" {
+		startOfDay := time.Date(day.Year, day.Month, day.Day, 0, 0, 0, 0, loc)
+		return startOfDay.Add(24 * time.Hour), nil //nolint:mnd // 24:00 = next day 00:00
+	}
 	t, err := time.ParseInLocation("15:04", s, loc)
 	if err != nil {
 		return time.Time{}, err
