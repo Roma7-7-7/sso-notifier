@@ -26,10 +26,11 @@ const (
 
 // SyncConfig holds which statuses to sync and which group to use.
 type SyncConfig struct {
-	SyncOff   bool
-	SyncMaybe bool
-	SyncOn    bool
-	Group     int // 1–12
+	CalendarID string
+	SyncOff    bool
+	SyncMaybe  bool
+	SyncOn     bool
+	Group      int // 1–12
 }
 
 // ShutdownsReader provides schedule and emergency state for calendar sync.
@@ -38,16 +39,27 @@ type ShutdownsReader interface {
 	GetEmergencyState() (dal.EmergencyState, error)
 }
 
+type EventParams struct {
+	ColorID     string
+	Description string
+}
+
+type Calendar interface {
+	ListOurEvents(ctx context.Context, calendarID string, timeMin, timeMax time.Time) ([]string, error)
+	InsertEvent(ctx context.Context, calendarID, summary string, start, end time.Time, params EventParams) (string, error)
+	DeleteEvent(ctx context.Context, calendarID, eventID string) error
+}
+
 // Clock provides current time (e.g. for today/tomorrow and time window).
 type Clock interface {
 	Now() time.Time
-	Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time
+	Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time //nolint:revive // it's ok
 	Parse(pattern, value string) (time.Time, error)
 }
 
 // SyncService runs delete-then-recreate sync of power outage schedule to Google Calendar.
 type SyncService struct {
-	client *Client
+	client Calendar
 	store  ShutdownsReader
 	clock  Clock
 	conf   SyncConfig
@@ -55,7 +67,7 @@ type SyncService struct {
 }
 
 // NewSyncService creates a calendar sync service.
-func NewSyncService(conf SyncConfig, client *Client, store ShutdownsReader, clock Clock, log *slog.Logger) *SyncService {
+func NewSyncService(conf SyncConfig, client Calendar, store ShutdownsReader, clock Clock, log *slog.Logger) *SyncService {
 	return &SyncService{
 		client: client,
 		store:  store,
@@ -81,20 +93,9 @@ func (s *SyncService) Sync(ctx context.Context) error {
 	tomorrow := dal.TomorrowDateByTime(now)
 
 	timeMin := s.clock.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0)
-	timeMax := s.clock.Date(tomorrow.Year, tomorrow.Month, tomorrow.Day, 23, 59, 59, 0)
+	timeMax := s.clock.Date(tomorrow.Year, tomorrow.Month, tomorrow.Day, 23, 59, 59, 0) //nolint:mnd // it's ok
 
 	s.log.InfoContext(ctx, "Starting calendar sync", "timeMin", timeMin.Format(time.RFC3339), "timeMax", timeMax.Format(time.RFC3339))
-
-	ids, err := s.client.ListOurEvents(ctx, timeMin, timeMax)
-	if err != nil {
-		return fmt.Errorf("calendar sync failed: list: %w", err)
-	}
-	for _, id := range ids {
-		if err := s.client.DeleteEvent(ctx, id); err != nil {
-			return fmt.Errorf("calendar sync failed: delete %s: %w", id, err)
-		}
-	}
-	s.log.DebugContext(ctx, "Deleted our events", "count", len(ids))
 
 	todayShutdowns, hasToday, err := s.store.GetShutdowns(today)
 	if err != nil {
@@ -104,6 +105,21 @@ func (s *SyncService) Sync(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get shutdowns tomorrow: %w", err)
 	}
+	if !hasToday && !hasTomorrow {
+		s.log.WarnContext(ctx, "Skipping calendar sync: no today or tomorrow schedule")
+		return nil
+	}
+
+	ids, err := s.client.ListOurEvents(ctx, s.conf.CalendarID, timeMin, timeMax)
+	if err != nil {
+		return fmt.Errorf("calendar sync failed: list: %w", err)
+	}
+	for _, id := range ids {
+		if err := s.client.DeleteEvent(ctx, s.conf.CalendarID, id); err != nil {
+			return fmt.Errorf("calendar sync failed: delete %s: %w", id, err)
+		}
+	}
+	s.log.DebugContext(ctx, "Deleted our events", "count", len(ids))
 
 	var toCreate []eventPayload
 	if hasToday {
@@ -119,7 +135,10 @@ func (s *SyncService) Sync(ctx context.Context) error {
 		if ev.dateLabel != "" {
 			desc = descBase + " — " + ev.dateLabel
 		}
-		_, err := s.client.InsertEvent(ctx, ev.summary, ev.startRFC3339, ev.endRFC3339, ev.colorID, desc)
+		_, err := s.client.InsertEvent(ctx, s.conf.CalendarID, ev.summary, ev.start, ev.end, EventParams{
+			ColorID:     ev.colorID,
+			Description: desc,
+		})
 		if err != nil {
 			return fmt.Errorf("calendar sync failed: insert: %w", err)
 		}
@@ -138,12 +157,12 @@ func (s *SyncService) CleanupStale(ctx context.Context, lookbackDays int) error 
 
 	s.log.InfoContext(ctx, "Starting calendar stale cleanup", "timeMin", timeMin.Format(time.RFC3339), "timeMax", yesterdayEnd.Format(time.RFC3339))
 
-	ids, err := s.client.ListOurEvents(ctx, timeMin, yesterdayEnd)
+	ids, err := s.client.ListOurEvents(ctx, s.conf.CalendarID, timeMin, yesterdayEnd)
 	if err != nil {
 		return fmt.Errorf("calendar cleanup failed: list: %w", err)
 	}
 	for _, id := range ids {
-		if err := s.client.DeleteEvent(ctx, id); err != nil {
+		if err := s.client.DeleteEvent(ctx, s.conf.CalendarID, id); err != nil {
 			return fmt.Errorf("calendar cleanup failed: delete %s: %w", id, err)
 		}
 	}
@@ -152,11 +171,11 @@ func (s *SyncService) CleanupStale(ctx context.Context, lookbackDays int) error 
 }
 
 type eventPayload struct {
-	summary      string
-	startRFC3339 string
-	endRFC3339   string
-	colorID      string
-	dateLabel    string
+	summary   string
+	start     time.Time
+	end       time.Time
+	colorID   string
+	dateLabel string
 }
 
 // buildEventsFromSchedule returns event payloads for one day's schedule: one group, merged consecutive same-status, filtered by conf.
@@ -179,11 +198,11 @@ func buildEventsFromSchedule(shutdowns dal.Shutdowns, day dal.Date, conf SyncCon
 			continue
 		}
 		out = append(out, eventPayload{
-			summary:      summary,
-			startRFC3339: startTime.Format(time.RFC3339),
-			endRFC3339:   endTime.Format(time.RFC3339),
-			colorID:      colorID,
-			dateLabel:    shutdowns.Date,
+			summary:   summary,
+			start:     startTime,
+			end:       endTime,
+			colorID:   colorID,
+			dateLabel: shutdowns.Date,
 		})
 	}
 	return out

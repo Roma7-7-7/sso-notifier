@@ -22,7 +22,7 @@ func (c *Clock) Now() time.Time {
 	return now
 }
 
-func (c *Clock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time {
+func (c *Clock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive // it's ok
 	return time.Date(year, month, day, hour, min, sec, nsec, c.loc)
 }
 
@@ -31,7 +31,7 @@ func (c *Clock) Timezone() string {
 }
 
 func (c *Clock) Parse(pattern, value string) (time.Time, error) {
-	return time.ParseInLocation(pattern, value, c.loc)
+	return time.ParseInLocation(pattern, value, c.loc) //nolint:wrapcheck // it's ok
 }
 
 type Mock struct {
