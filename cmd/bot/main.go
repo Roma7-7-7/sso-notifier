@@ -15,6 +15,7 @@ import (
 
 	tc "github.com/Roma7-7-7/telegram"
 
+	"github.com/Roma7-7-7/sso-notifier/internal/calendar"
 	"github.com/Roma7-7-7/sso-notifier/internal/config"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
@@ -87,11 +88,27 @@ func run(ctx context.Context) int {
 		return 1
 	}
 
+	sched := service.NewScheduler(conf, shutdownsSvc, notificationsSvc, alertsSvc, log)
+	if conf.CalendarEnabled() {
+		calClient, err := calendar.NewClient(ctx, conf.CalendarCredentialsPath, conf.CalendarEmail, loc)
+		if err != nil {
+			log.ErrorContext(ctx, "Failed to create calendar client (calendar sync disabled)", "error", err)
+		} else {
+			calSync := calendar.NewSyncService(calClient, store, c, calendar.SyncConfig{
+				SyncOff:   conf.CalendarSyncOff,
+				SyncMaybe: conf.CalendarSyncMaybe,
+				SyncOn:    conf.CalendarSyncOn,
+				Group:     conf.CalendarGroup,
+			}, loc, log)
+			sched.WithCalendarSync(calSync.Sync, conf.CalendarSyncInterval)
+		}
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		service.NewScheduler(conf, shutdownsSvc, notificationsSvc, alertsSvc, log).Start(ctx)
+		sched.Start(ctx)
 	}()
 
 	log.InfoContext(ctx, "Starting bot")

@@ -23,7 +23,9 @@ type Scheduler struct {
 	notifications *Notifications
 	alerts        *Alerts
 
-	log *slog.Logger
+	calendarSync         processFn
+	calendarSyncInterval time.Duration
+	log                  *slog.Logger
 }
 
 func NewScheduler(
@@ -44,6 +46,13 @@ func NewScheduler(
 	}
 }
 
+// WithCalendarSync adds a calendar sync job that runs at the given interval. If fn is nil, no calendar goroutine is started.
+func (s *Scheduler) WithCalendarSync(fn processFn, interval time.Duration) *Scheduler {
+	s.calendarSync = fn
+	s.calendarSyncInterval = interval
+	return s
+}
+
 func (s *Scheduler) Start(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	wg.Go(func() {
@@ -58,6 +67,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	wg.Go(func() {
 		s.run(ctx, s.conf.CleanupInterval, "cleanup", s.runCleanups)
 	})
+	if s.calendarSync != nil && s.calendarSyncInterval > 0 {
+		wg.Go(func() {
+			s.run(ctx, s.calendarSyncInterval, "calendar_sync", s.calendarSync)
+		})
+	}
 
 	wg.Wait()
 }
