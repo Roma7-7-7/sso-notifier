@@ -122,7 +122,7 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 		return nil
 	}
 
-	ids, err := s.cleanupEvents(ctx, err, timeMin, timeMax)
+	ids, err := s.cleanupEvents(ctx, timeMin, timeMax)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 	return nil
 }
 
-func (s *CalendarService) cleanupEvents(ctx context.Context, err error, timeMin time.Time, timeMax time.Time) ([]string, error) {
+func (s *CalendarService) cleanupEvents(ctx context.Context, timeMin time.Time, timeMax time.Time) ([]string, error) {
 	ids, err := s.calendar.ListOurEvents(ctx, s.conf.CalendarID, timeMin, timeMax)
 	if err != nil {
 		return nil, fmt.Errorf("calendar sync failed: list: %w", err)

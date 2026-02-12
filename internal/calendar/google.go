@@ -9,7 +9,10 @@ import (
 	"google.golang.org/api/option"
 )
 
-const extendedPropertySource = "sso-notifier"
+const (
+	extendedPropertySource = "sso-notifier"
+	reminderMinutes        = 15
+)
 
 // Google wraps the Calendar API for listing, deleting, and inserting events.
 type Google struct {
@@ -84,6 +87,10 @@ func (c *Google) InsertEvent(ctx context.Context, calendarID, summary string, st
 			Private: map[string]string{"source": extendedPropertySource},
 		},
 		Description: params.Description,
+		Reminders: &calendar.EventReminders{
+			Overrides:       []*calendar.EventReminder{{Method: "popup", Minutes: reminderMinutes}},
+			ForceSendFields: []string{"UseDefault", "Overrides"},
+		},
 	}
 
 	created, err := c.svc.Events.Insert(calendarID, ev).Context(ctx).Do()
