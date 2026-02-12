@@ -122,14 +122,9 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 		return nil
 	}
 
-	ids, err := s.calendar.ListOurEvents(ctx, s.conf.CalendarID, timeMin, timeMax)
+	ids, err := s.cleanupEvents(ctx, err, timeMin, timeMax)
 	if err != nil {
-		return fmt.Errorf("calendar sync failed: list: %w", err)
-	}
-	for _, id := range ids {
-		if err := s.calendar.DeleteEvent(ctx, s.conf.CalendarID, id); err != nil {
-			return fmt.Errorf("calendar sync failed: delete %s: %w", id, err)
-		}
+		return err
 	}
 	s.log.DebugContext(ctx, "Deleted our events", "count", len(ids))
 
@@ -141,6 +136,31 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 		toCreate = append(toCreate, buildEventsFromSchedule(tomorrowShutdowns, tomorrow, s.conf, s.clock)...)
 	}
 
+	if err = s.createEvents(ctx, toCreate); err != nil {
+		return err
+	}
+
+	s.todayCache = newTodayHash
+	s.tomorrowCache = newTomorrowHash
+
+	s.log.InfoContext(ctx, "Calendar sync completed", "deleted", len(ids), "created", len(toCreate))
+	return nil
+}
+
+func (s *CalendarService) cleanupEvents(ctx context.Context, err error, timeMin time.Time, timeMax time.Time) ([]string, error) {
+	ids, err := s.calendar.ListOurEvents(ctx, s.conf.CalendarID, timeMin, timeMax)
+	if err != nil {
+		return nil, fmt.Errorf("calendar sync failed: list: %w", err)
+	}
+	for _, id := range ids {
+		if err := s.calendar.DeleteEvent(ctx, s.conf.CalendarID, id); err != nil {
+			return nil, fmt.Errorf("calendar sync failed: delete %s: %w", id, err)
+		}
+	}
+	return ids, nil
+}
+
+func (s *CalendarService) createEvents(ctx context.Context, toCreate []eventPayload) error {
 	descBase := "SSO Notifier — power outage schedule"
 	for _, ev := range toCreate {
 		desc := descBase
@@ -155,11 +175,6 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 			return fmt.Errorf("calendar sync failed: insert: %w", err)
 		}
 	}
-
-	s.todayCache = newTodayHash
-	s.tomorrowCache = newTomorrowHash
-
-	s.log.InfoContext(ctx, "Calendar sync completed", "deleted", len(ids), "created", len(toCreate))
 	return nil
 }
 

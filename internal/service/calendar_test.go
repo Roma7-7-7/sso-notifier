@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
@@ -570,8 +571,8 @@ func TestCalendarService_SyncEvents_skips_when_schedule_hash_unchanged(t *testin
 	svc := service.NewCalendarService(conf, cal, store, clock.NewMock(now), slog.New(slog.DiscardHandler))
 
 	err := svc.SyncEvents(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = svc.SyncEvents(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
