@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/calendar"
@@ -48,22 +50,37 @@ type CalendarService struct {
 	store    ShutdownsStore
 	clock    Clock
 	conf     CalendarConfig
-	log      *slog.Logger
+
+	todayCache    string
+	tomorrowCache string
+
+	mx  sync.Mutex
+	log *slog.Logger
 }
 
 // NewCalendarService creates a calendar sync service.
 func NewCalendarService(conf CalendarConfig, calendar Calendar, store ShutdownsStore, clock Clock, log *slog.Logger) *CalendarService {
+	todayCache := atomic.Value{}
+	tomorrowCache := atomic.Value{}
+
+	todayCache.Store("")
+	tomorrowCache.Store("")
+
 	return &CalendarService{
 		calendar: calendar,
 		store:    store,
 		clock:    clock,
 		conf:     conf,
+		mx:       sync.Mutex{},
 		log:      log.With("component", "calendar_sync"),
 	}
 }
 
 // SyncEvents performs full sync: skip if emergency, delete our events in [today, end of tomorrow], then create events from current schedule.
 func (s *CalendarService) SyncEvents(ctx context.Context) error {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
 	state, err := s.store.GetEmergencyState()
 	if err != nil {
 		return fmt.Errorf("get emergency state: %w", err)
@@ -90,8 +107,18 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get shutdowns tomorrow: %w", err)
 	}
+
+	groupNum := strconv.Itoa(s.conf.Group)
 	if !hasToday && !hasTomorrow {
 		s.log.WarnContext(ctx, "Skipping calendar sync: no today or tomorrow schedule")
+		return nil
+	}
+	todayGroup, todayOk := todayShutdowns.Groups[groupNum]
+	newTodayHash := shutdownGroupHash(todayGroup)
+	tomorrowGroup, tomorrowOk := tomorrowShutdowns.Groups[groupNum]
+	newTomorrowHash := shutdownGroupHash(tomorrowGroup)
+	if (todayOk && s.todayCache == newTodayHash) && (!tomorrowOk || s.tomorrowCache == newTomorrowHash) {
+		s.log.DebugContext(ctx, "Skipping calendar sync: today and tomorrow schedules not changed")
 		return nil
 	}
 
@@ -128,6 +155,10 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 			return fmt.Errorf("calendar sync failed: insert: %w", err)
 		}
 	}
+
+	s.todayCache = newTodayHash
+	s.tomorrowCache = newTomorrowHash
+
 	s.log.InfoContext(ctx, "Calendar sync completed", "deleted", len(ids), "created", len(toCreate))
 	return nil
 }
@@ -135,6 +166,9 @@ func (s *CalendarService) SyncEvents(ctx context.Context) error {
 // CleanupStaleEvents deletes our events in the past lookbackDays (not including today).
 // Window: [today - lookbackDays at 00:00, yesterday at 23:59:59]. Run periodically (e.g. every 6h).
 func (s *CalendarService) CleanupStaleEvents(ctx context.Context, lookbackDays int) error {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
 	now := s.clock.Now()
 	todayStart := s.clock.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0)
 	yesterdayEnd := todayStart.Add(-time.Second) // 23:59:59 yesterday

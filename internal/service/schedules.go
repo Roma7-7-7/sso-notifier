@@ -12,7 +12,7 @@ import (
 
 type Clock interface {
 	Now() time.Time
-	Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time //nolint:revive // it's ok
+	Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time //nolint:revive,predeclared // it's ok
 	Parse(pattern, value string) (time.Time, error)
 }
 

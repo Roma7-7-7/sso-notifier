@@ -426,7 +426,6 @@ func TestSyncService_SyncEvents(t *testing.T) {
 			fields: fields{
 				calendar: func(c *gomock.Controller) service.Calendar {
 					res := mocks.NewMockCalendar(c)
-					res.EXPECT().ListOurEvents(gomock.Any(), "cal@test", timeMin, timeMax).Return([]string{}, nil)
 					return res
 				},
 				store: func(c *gomock.Controller) service.ShutdownsStore {
@@ -531,4 +530,48 @@ func TestCalendarService_CleanupStaleEvents(t *testing.T) {
 			tt.wantErr(t, svc.CleanupStaleEvents(context.Background(), lookbackDays), "CleanupStaleEvents(_, %d)", lookbackDays)
 		})
 	}
+}
+
+// TestCalendarService_SyncEvents_skips_when_schedule_hash_unchanged verifies that a second SyncEvents
+// call with the same schedule does not list/delete/insert calendar events (cache prevents recreation).
+func TestCalendarService_SyncEvents_skips_when_schedule_hash_unchanged(t *testing.T) {
+	now := time.Date(2025, time.February, 12, 10, 0, 0, 0, time.UTC)
+	today := dal.DateByTime(now)
+	tomorrow := dal.TomorrowDateByTime(now)
+	todayShutdowns := dal.Shutdowns{
+		Date:    "12 лютого",
+		Periods: []dal.Period{{From: "14:00", To: "14:30"}, {From: "14:30", To: "15:00"}},
+		Groups:  map[string]dal.ShutdownGroup{"4": {Number: 4, Items: []dal.Status{dal.OFF, dal.ON}}},
+	}
+	timeMin := time.Date(2025, time.February, 12, 0, 0, 0, 0, time.UTC)
+	timeMax := time.Date(2025, time.February, 13, 23, 59, 59, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cal := mocks.NewMockCalendar(ctrl)
+	cal.EXPECT().ListOurEvents(gomock.Any(), "cal@test", timeMin, timeMax).Return([]string{}, nil).Times(1)
+	cal.EXPECT().InsertEvent(gomock.Any(), "cal@test", summaryOff, gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("id-1", nil).Times(1)
+	cal.EXPECT().InsertEvent(gomock.Any(), "cal@test", summaryOn, gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("id-2", nil).Times(1)
+
+	store := mocks.NewMockShutdownsStore(ctrl)
+	store.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil).Times(2)
+	store.EXPECT().GetShutdowns(today).Return(todayShutdowns, true, nil).Times(2)
+	store.EXPECT().GetShutdowns(tomorrow).Return(dal.Shutdowns{}, false, nil).Times(2)
+
+	conf := service.CalendarConfig{
+		CalendarID: "cal@test",
+		SyncOff:    true,
+		SyncOn:     true,
+		Group:      4,
+	}
+	svc := service.NewCalendarService(conf, cal, store, clock.NewMock(now), slog.New(slog.DiscardHandler))
+
+	err := svc.SyncEvents(context.Background())
+	assert.NoError(t, err)
+
+	err = svc.SyncEvents(context.Background())
+	assert.NoError(t, err)
 }

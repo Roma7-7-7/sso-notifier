@@ -22,7 +22,7 @@ func (c *Clock) Now() time.Time {
 	return now
 }
 
-func (c *Clock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive // it's ok
+func (c *Clock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive,predeclared // it's ok
 	return time.Date(year, month, day, hour, min, sec, nsec, c.loc)
 }
 
@@ -56,12 +56,12 @@ func (m *Mock) Now() time.Time {
 	return m.value()
 }
 
-func (m *Mock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive // it's ok
+func (m *Mock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive,predeclared // it's ok
 	return time.Date(year, month, day, hour, min, sec, nsec, m.value().Location())
 }
 
 func (m *Mock) Parse(pattern, value string) (time.Time, error) {
-	return time.ParseInLocation(pattern, value, m.value().Location())
+	return time.ParseInLocation(pattern, value, m.value().Location()) //nolint:wrapcheck // it's ok
 }
 
 func (m *Mock) Set(t time.Time) {
