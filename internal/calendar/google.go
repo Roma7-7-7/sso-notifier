@@ -1,4 +1,4 @@
-package google
+package calendar
 
 import (
 	"context"
@@ -7,20 +7,18 @@ import (
 
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
-
-	dCalendar "github.com/Roma7-7-7/sso-notifier/internal/calendar"
 )
 
 const extendedPropertySource = "sso-notifier"
 
-// Client wraps the Calendar API for listing, deleting, and inserting events.
-type Client struct {
+// Google wraps the Calendar API for listing, deleting, and inserting events.
+type Google struct {
 	svc *calendar.Service
 }
 
-// NewClient builds a Calendar API client using a service account JSON key file.
+// NewGoogle builds a Calendar API client using a service account JSON key file.
 // Scope is calendar.events (create/read/delete). loc is used for time bounds (e.g. Europe/Kyiv).
-func NewClient(ctx context.Context, credentialsPath string) (*Client, error) {
+func NewGoogle(ctx context.Context, credentialsPath string) (*Google, error) {
 	srv, err := calendar.NewService(ctx,
 		option.WithAuthCredentialsFile(option.ServiceAccount, credentialsPath),
 		option.WithScopes(calendar.CalendarEventsScope),
@@ -29,7 +27,7 @@ func NewClient(ctx context.Context, credentialsPath string) (*Client, error) {
 		return nil, fmt.Errorf("create calendar service: %w", err)
 	}
 
-	return &Client{
+	return &Google{
 		svc: srv,
 	}, nil
 }
@@ -38,7 +36,7 @@ func NewClient(ctx context.Context, credentialsPath string) (*Client, error) {
 // private extended property source=sso-notifier. Lists events in range then
 // filters by ExtendedProperties.Private["source"] to avoid depending on
 // PrivateExtendedProperty query support in the generated client.
-func (c *Client) ListOurEvents(ctx context.Context, calendarID string, timeMin, timeMax time.Time) ([]string, error) {
+func (c *Google) ListOurEvents(ctx context.Context, calendarID string, timeMin, timeMax time.Time) ([]string, error) {
 	timeMinRFC := timeMin.Format(time.RFC3339)
 	timeMaxRFC := timeMax.Format(time.RFC3339)
 
@@ -70,7 +68,7 @@ func (c *Client) ListOurEvents(ctx context.Context, calendarID string, timeMin, 
 
 // InsertEvent creates an event with the given summary, start/end, colorId,
 // and private extended property source=sso-notifier. Description is optional.
-func (c *Client) InsertEvent(ctx context.Context, calendarID, summary string, start, end time.Time, params dCalendar.EventParams) (string, error) {
+func (c *Google) InsertEvent(ctx context.Context, calendarID, summary string, start, end time.Time, params EventParams) (string, error) {
 	ev := &calendar.Event{
 		Summary: summary,
 		Start: &calendar.EventDateTime{
@@ -96,7 +94,7 @@ func (c *Client) InsertEvent(ctx context.Context, calendarID, summary string, st
 }
 
 // DeleteEvent removes the event by ID.
-func (c *Client) DeleteEvent(ctx context.Context, calendarID, eventID string) error {
+func (c *Google) DeleteEvent(ctx context.Context, calendarID, eventID string) error {
 	err := c.svc.Events.Delete(calendarID, eventID).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("delete event %s: %w", eventID, err)

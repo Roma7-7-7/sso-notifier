@@ -56,6 +56,14 @@ func (m *Mock) Now() time.Time {
 	return m.value()
 }
 
+func (m *Mock) Date(year int, month time.Month, day, hour, min, sec, nsec int) time.Time { //nolint:revive // it's ok
+	return time.Date(year, month, day, hour, min, sec, nsec, m.value().Location())
+}
+
+func (m *Mock) Parse(pattern, value string) (time.Time, error) {
+	return time.ParseInLocation(pattern, value, m.value().Location())
+}
+
 func (m *Mock) Set(t time.Time) {
 	m.value = func() time.Time {
 		return t

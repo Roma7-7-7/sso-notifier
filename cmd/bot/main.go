@@ -19,7 +19,6 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/config"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
-	"github.com/Roma7-7-7/sso-notifier/internal/google"
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
@@ -91,21 +90,21 @@ func run(ctx context.Context) int {
 
 	sched := service.NewScheduler(conf, shutdownsSvc, notificationsSvc, alertsSvc, log)
 	if conf.CalendarEnabled() {
-		calClient, err := google.NewClient(ctx, conf.CalendarCredentialsPath)
+		cal, err := calendar.NewGoogle(ctx, conf.CalendarCredentialsPath)
 		if err != nil {
 			log.ErrorContext(ctx, "Failed to create calendar client (calendar sync disabled)", "error", err)
 		} else {
-			calSync := calendar.NewSyncService(calendar.SyncConfig{
+			calSync := service.NewCalendarService(service.CalendarConfig{
 				CalendarID: conf.CalendarEmail,
 				SyncOff:    conf.CalendarSyncOff,
 				SyncMaybe:  conf.CalendarSyncMaybe,
 				SyncOn:     conf.CalendarSyncOn,
 				Group:      conf.CalendarGroup,
-			}, calClient, store, c, log)
-			sched.WithCalendarSync(calSync.Sync, conf.CalendarSyncInterval)
+			}, cal, store, c, log)
+			sched.WithCalendarSync(calSync.SyncEvents, conf.CalendarSyncInterval)
 			lookback := conf.CalendarCleanupLookback
 			sched.WithCalendarCleanup(func(ctx context.Context) error {
-				return calSync.CleanupStale(ctx, lookback)
+				return calSync.CleanupStaleEvents(ctx, lookback)
 			}, conf.CalendarCleanupInterval)
 		}
 	}
