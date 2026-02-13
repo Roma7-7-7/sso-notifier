@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/calendar"
@@ -60,12 +59,6 @@ type CalendarService struct {
 
 // NewCalendarService creates a calendar sync service.
 func NewCalendarService(conf CalendarConfig, calendar Calendar, store ShutdownsStore, clock Clock, log *slog.Logger) *CalendarService {
-	todayCache := atomic.Value{}
-	tomorrowCache := atomic.Value{}
-
-	todayCache.Store("")
-	tomorrowCache.Store("")
-
 	return &CalendarService{
 		calendar: calendar,
 		store:    store,
