@@ -44,11 +44,13 @@ Data Access Layer (BoltDB)
 External Provider Layer (HTML Scraping)
 ```
 
-**Four concurrent goroutines:**
+**Six concurrent goroutines** (calendar sync/cleanup only when configured):
 1. Main Thread: Telegram bot event loop
 2. Refresh Thread: Fetches schedule (default: 5 minutes)
 3. Notification Thread: Checks for schedule updates (default: 5 minutes)
 4. Alerts Thread: Checks for upcoming outages (default: 1 minute)
+5. Calendar Sync: Syncs schedule to Google Calendar (default: 15m); gated by `CALENDAR_EMAIL` + `CALENDAR_CREDENTIALS_PATH`
+6. Calendar Cleanup: Deletes our calendar events from the past week, not including today (default: every 6h); same gating
 
 ## Rules for AI Assistants
 
@@ -127,6 +129,7 @@ make lint:changed
 | Subscriptions | `internal/service/subscriptions.go` |
 | Telegram bot | `internal/telegram/telegram.go` |
 | Message templates | `internal/service/messages.go` |
+| Calendar sync | `internal/calendar/` (client.go, sync.go) |
 
 ## Configuration
 
@@ -141,3 +144,12 @@ make lint:changed
 - `NOTIFY_INTERVAL` (5m): Notification check frequency
 - `NOTIFY_UPCOMING_INTERVAL` (1m): Upcoming alerts frequency
 - `SCHEDULE_URL` (https://oblenergo.cv.ua/shutdowns/): Schedule provider URL
+
+**Calendar (optional, personal-only):** Sync runs only when both are set:
+- `CALENDAR_EMAIL`: Target calendar ID (e.g. your@gmail.com)
+- `CALENDAR_CREDENTIALS_PATH` (data/gcloud.json): Path to Google service account JSON key
+- `CALENDAR_SYNC_INTERVAL` (15m): Sync frequency
+- `CALENDAR_GROUP` (4): Group number to sync (1–12)
+- `CALENDAR_SYNC_OFF` (true), `CALENDAR_SYNC_MAYBE` (false), `CALENDAR_SYNC_ON` (false): Which statuses to create events for
+- `CALENDAR_CLEANUP_INTERVAL` (6h): How often to delete stale calendar events (past week, not including today)
+- `CALENDAR_CLEANUP_LOOKBACK_DAYS` (7): Delete our events from the last N days before today

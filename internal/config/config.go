@@ -25,6 +25,22 @@ type Config struct {
 	AlertsTTL                time.Duration `envconfig:"ALERTS_TTL" default:"24h"`
 	CleanupInterval          time.Duration `envconfig:"CLEANUP_INTERVAL" default:"1h"`
 	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN"`
+
+	// Calendar (optional; sync runs only when CalendarEmail and CalendarCredentialsPath are set)
+	CalendarSyncInterval    time.Duration `envconfig:"CALENDAR_SYNC_INTERVAL" default:"15m"`
+	CalendarCredentialsPath string        `envconfig:"CALENDAR_CREDENTIALS_PATH" default:"data/gcloud.json"`
+	CalendarEmail           string        `envconfig:"CALENDAR_EMAIL" default:""`
+	CalendarSyncOff         bool          `envconfig:"CALENDAR_SYNC_OFF" default:"true"`
+	CalendarSyncMaybe       bool          `envconfig:"CALENDAR_SYNC_MAYBE" default:"false"`
+	CalendarSyncOn          bool          `envconfig:"CALENDAR_SYNC_ON" default:"false"`
+	CalendarGroup           int           `envconfig:"CALENDAR_GROUP" default:"4"`
+	CalendarCleanupInterval time.Duration `envconfig:"CALENDAR_CLEANUP_INTERVAL" default:"6h"`
+	CalendarCleanupLookback int           `envconfig:"CALENDAR_CLEANUP_LOOKBACK_DAYS" default:"7"` // delete our events older than today, up to this many days back
+}
+
+// CalendarEnabled returns true when calendar sync should run (both email and credentials path set).
+func (c *Config) CalendarEnabled() bool {
+	return c.CalendarEmail != "" && c.CalendarCredentialsPath != ""
 }
 
 func NewConfig(ctx context.Context) (*Config, error) {
