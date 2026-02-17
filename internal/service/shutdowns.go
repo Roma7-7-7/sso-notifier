@@ -74,10 +74,26 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 		s.log.ErrorContext(ctx, "failed to handle emergency end", "error", err)
 	}
 
-	if err = s.store.PutShutdowns(today, todayTable); err != nil {
-		return fmt.Errorf("put shutdowns for today: %w", err)
+	// Validate that scraped date matches expected date
+	storeTodaySchedule := true
+	if todayTable.Date != "" {
+		parsedDate, err := dal.ParseDate(todayTable.Date)
+		if err != nil {
+			s.log.WarnContext(ctx, "failed to parse date from schedule", "date", todayTable.Date, "error", err)
+		} else if !parsedDate.Equals(today) {
+			s.log.WarnContext(ctx, "scraped date doesn't match expected date, skipping storage",
+				"expected", today.ToKey(),
+				"scraped", parsedDate.ToKey())
+			storeTodaySchedule = false
+		}
 	}
-	s.log.InfoContext(ctx, "refreshed today's shutdowns", "date", today.ToKey())
+
+	if storeTodaySchedule {
+		if err = s.store.PutShutdowns(today, todayTable); err != nil {
+			return fmt.Errorf("put shutdowns for today: %w", err)
+		}
+		s.log.InfoContext(ctx, "refreshed today's shutdowns", "date", today.ToKey())
+	}
 
 	// Fetch tomorrow's schedule only if it's available
 	if !nextDayAvailable {
@@ -91,6 +107,19 @@ func (s *Shutdowns) Refresh(ctx context.Context) error {
 		// Log error but don't fail the entire refresh - today's data is already saved
 		s.log.ErrorContext(ctx, "failed to get tomorrow's shutdowns", "error", err)
 		return nil
+	}
+
+	// Validate that scraped date matches expected date
+	if tomorrowTable.Date != "" {
+		parsedDate, err := dal.ParseDate(tomorrowTable.Date)
+		if err != nil {
+			s.log.WarnContext(ctx, "failed to parse date from tomorrow's schedule", "date", tomorrowTable.Date, "error", err)
+		} else if !parsedDate.Equals(tomorrow) {
+			s.log.WarnContext(ctx, "scraped date doesn't match expected date for tomorrow, ignoring response",
+				"expected", tomorrow.ToKey(),
+				"scraped", parsedDate.ToKey())
+			return nil
+		}
 	}
 
 	if err = s.store.PutShutdowns(tomorrow, tomorrowTable); err != nil {

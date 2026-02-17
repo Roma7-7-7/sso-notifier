@@ -53,6 +53,10 @@ func (d Date) ToKey() string {
 	return fmt.Sprintf("%d-%02d-%02d", d.Year, d.Month, d.Day)
 }
 
+func (d Date) Equals(other Date) bool {
+	return d.Year == other.Year && d.Month == other.Month && d.Day == other.Day
+}
+
 func DateByTime(now time.Time) Date {
 	return Date{
 		Year:  now.Year(),
@@ -68,6 +72,20 @@ func TomorrowDateByTime(now time.Time) Date {
 		Month: tomorrow.Month(),
 		Day:   tomorrow.Day(),
 	}
+}
+
+// ParseDate parses date from "DD.MM.YYYY" format (e.g., "04.11.2025")
+func ParseDate(dateStr string) (Date, error) {
+	t, err := time.Parse("02.01.2006", dateStr)
+	if err != nil {
+		return Date{}, fmt.Errorf("parse date %s: %w", dateStr, err)
+	}
+
+	return Date{
+		Year:  t.Year(),
+		Month: t.Month(),
+		Day:   t.Day(),
+	}, nil
 }
 
 func (s *BoltDB) GetShutdowns(d Date) (Shutdowns, bool, error) {
