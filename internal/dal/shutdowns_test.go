@@ -156,3 +156,87 @@ func (s *EmergencyTestSuite) TestEmergencyState_Clear() {
 	s.Require().NoError(err)
 	s.False(state.Active)
 }
+
+func TestParseDate(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		want      dal.Date
+		wantError bool
+	}{
+		{
+			name:  "valid date",
+			input: "04.11.2025",
+			want: dal.Date{
+				Year:  2025,
+				Month: time.November,
+				Day:   4,
+			},
+			wantError: false,
+		},
+		{
+			name:  "valid date with single digit day",
+			input: "01.01.2026",
+			want: dal.Date{
+				Year:  2026,
+				Month: time.January,
+				Day:   1,
+			},
+			wantError: false,
+		},
+		{
+			name:  "valid date December",
+			input: "31.12.2024",
+			want: dal.Date{
+				Year:  2024,
+				Month: time.December,
+				Day:   31,
+			},
+			wantError: false,
+		},
+		{
+			name:      "invalid format - missing parts",
+			input:     "04.11",
+			wantError: true,
+		},
+		{
+			name:      "invalid format - wrong separator",
+			input:     "04-11-2025",
+			wantError: true,
+		},
+		{
+			name:      "invalid day",
+			input:     "abc.11.2025",
+			wantError: true,
+		},
+		{
+			name:      "invalid month",
+			input:     "04.abc.2025",
+			wantError: true,
+		},
+		{
+			name:      "invalid year",
+			input:     "04.11.abcd",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := dal.ParseDate(tt.input)
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("ParseDate(%q) expected error but got none", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ParseDate(%q) unexpected error: %v", tt.input, err)
+				return
+			}
+			if !got.Equals(tt.want) {
+				t.Errorf("ParseDate(%q) = %+v, want %+v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

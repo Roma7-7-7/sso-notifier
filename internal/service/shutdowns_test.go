@@ -228,6 +228,72 @@ func TestShutdowns_Refresh(t *testing.T) {
 				return assert.Error(t, err, i...) && assert.ErrorIs(t, err, assert.AnError) && assert.ErrorContains(t, err, "set emergency state: ")
 			},
 		},
+		{
+			name: "date_mismatch_today_skips_storage",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
+					// PutShutdowns should NOT be called for today when date doesn't match
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					tomorrowDate := now.AddDate(0, 0, 1)
+					wrongDateShutdowns := testutil.NewShutdowns().
+						WithDate(tomorrowDate.Format("02.01.2006")).
+						Build()
+					res.EXPECT().Shutdowns(gomock.Any()).Return(wrongDateShutdowns, false, nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "date_mismatch_tomorrow_skips_storage",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
+					res.EXPECT().PutShutdowns(todayDate, defaultTodayShutdowns).Return(nil)
+					// PutShutdowns should NOT be called for tomorrow when date doesn't match
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					res.EXPECT().Shutdowns(gomock.Any()).Return(defaultTodayShutdowns, true, nil)
+					wrongDateShutdowns := testutil.NewShutdowns().
+						WithDate(now.Format("02.01.2006")).
+						Build()
+					res.EXPECT().ShutdownsNext(gomock.Any()).Return(wrongDateShutdowns, nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "date_mismatch_today_but_tomorrow_valid",
+			fields: fields{
+				store: func(c *gomock.Controller) service.ShutdownsStore {
+					res := mocks.NewMockShutdownsStore(c)
+					res.EXPECT().GetEmergencyState().Return(dal.EmergencyState{}, nil)
+					// Today's storage is skipped due to mismatch
+					// But tomorrow's storage should proceed
+					res.EXPECT().PutShutdowns(tomorrowDate, defaultTomorrowShutdowns).Return(nil)
+					return res
+				},
+				provider: func(c *gomock.Controller) service.ShutdownsProvider {
+					res := mocks.NewMockShutdownsProvider(c)
+					wrongDateShutdowns := testutil.NewShutdowns().
+						WithDate(now.AddDate(0, 0, 1).Format("02.01.2006")).
+						Build()
+					res.EXPECT().Shutdowns(gomock.Any()).Return(wrongDateShutdowns, true, nil)
+					res.EXPECT().ShutdownsNext(gomock.Any()).Return(defaultTomorrowShutdowns, nil)
+					return res
+				},
+			},
+			wantErr: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
