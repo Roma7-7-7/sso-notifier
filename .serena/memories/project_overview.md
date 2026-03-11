@@ -4,7 +4,7 @@
 Telegram bot that monitors electricity power outage schedules in Chernivtsi, Ukraine. Scrapes HTML from oblenergo.cv.ua, detects schedule changes, and notifies subscribers via Telegram.
 
 ## Tech Stack
-- **Language**: Go 1.25.5
+- **Language**: Go 1.26.1
 - **Database**: BoltDB (go.etcd.io/bbolt)
 - **Telegram**: gopkg.in/telebot.v3
 - **HTML Scraping**: github.com/PuerkitoBio/goquery
