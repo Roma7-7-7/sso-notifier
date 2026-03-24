@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -61,36 +58,9 @@ func NewConfig(ctx context.Context) (*Config, error) {
 		return nil, errors.New("telegram token is required (set TELEGRAM_TOKEN environment variable)")
 	}
 
-	// In production without env token, try to fetch from SSM
-	res.TelegramToken, err = getSSMToken(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token from SSM (set TELEGRAM_TOKEN env var to skip SSM): %w", err)
-	}
-
 	if res.TelegramToken == "" {
 		return nil, errors.New("telegram token is required")
 	}
 
 	return res, nil
-}
-
-func getSSMToken(ctx context.Context) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return "", fmt.Errorf("load aws config: %w", err)
-	}
-	ssmClient := ssm.NewFromConfig(cfg)
-
-	param, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String("/sso-notifier-bot/prod/telegram-token"),
-		WithDecryption: aws.Bool(true),
-	})
-	if err != nil {
-		return "", fmt.Errorf("get SSM token: %w", err)
-	}
-	if param.Parameter.Value == nil {
-		return "", errors.New("SSM Token not found")
-	}
-
-	return *param.Parameter.Value, nil
 }
