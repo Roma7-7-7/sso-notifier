@@ -57,7 +57,7 @@ jobs:
         run: make ci-build VERSION=${{ steps.version.outputs.version }} BUILD_TIME=${{ steps.version.outputs.timestamp }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Release ${{ steps.version.outputs.tag }}
