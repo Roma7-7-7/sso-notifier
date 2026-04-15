@@ -1,0 +1,19 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Required
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      # Optional - app has defaults
+      DEV: ${DEV:-true}
+      DB_PATH: ${DB_PATH:-data/sso-notifier.db}
+      GROUPS_COUNT: ${GROUPS_COUNT:-12}
+      REFRESH_SHUTDOWNS_INTERVAL: ${REFRESH_SHUTDOWNS_INTERVAL:-5m}
+      NOTIFY_INTERVAL: ${NOTIFY_INTERVAL:-5m}
+      NOTIFY_UPCOMING_INTERVAL: ${NOTIFY_UPCOMING_INTERVAL:-1m}
+      SCHEDULE_URL: ${SCHEDULE_URL:-https://oblenergo.cv.ua/shutdowns/}
