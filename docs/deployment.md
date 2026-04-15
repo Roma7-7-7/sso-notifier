@@ -115,7 +115,3 @@ cp ./data/sso-notifier/sso-notifier.db ~/backups/
 # Or from inside the container
 docker exec sso-notifier cat /app/data/sso-notifier.db > ~/backups/sso-notifier.db
 ```
-
-## Legacy
-
-Previous systemd-based deployment scripts are preserved in the `deployment/` directory for reference.

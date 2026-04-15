@@ -270,54 +270,18 @@ The alerts system (`internal/service/alerts.go`):
 
 ## Production Deployment
 
-### AWS EC2 Automated Deployment
+Docker images are automatically built and pushed to GHCR on every push to `main`.
 
-The recommended deployment method uses automated CI/CD to AWS EC2 instances. See the **[Deployment Guide](deployment/README.md)** for complete instructions.
-
-**Quick Start:**
-1. Set up AWS SSM Parameter Store with your Telegram token
-2. Launch an EC2 instance with appropriate IAM role
-3. Run the setup script:
-   ```bash
-   curl -L https://raw.githubusercontent.com/Roma7-7-7/sso-notifier/main/deployment/setup-ec2.sh | sudo bash
-   ```
-
-This provides:
-- Automated releases on every push to `main`
-- Hourly deployment checks via cron
-- Zero-downtime updates with automatic rollback
-- Secure configuration via AWS Systems Manager
-- Systemd service management
-
-### Manual Production Deployment
-
-For production use without automated deployment, consider:
-
-1. **Systemd Service** - Run as a background service
-2. **Monitoring** - Log aggregation and alerting
-3. **Backup** - Regular backups of `data/sso-notifier.db`
-4. **Resource Limits** - Memory and CPU constraints
-5. **Error Handling** - Restart on failure
-
-Example systemd service:
-```ini
-[Unit]
-Description=SSO Notifier Bot
-After=network.target
-
-[Service]
-Type=simple
-User=ssobot
-WorkingDirectory=/opt/sso-notifier
-Environment="TELEGRAM_TOKEN=your_token_here"
-Environment="DEV=false"
-Environment="DB_PATH=/opt/sso-notifier/data/sso-notifier.db"
-ExecStart=/opt/sso-notifier/bin/sso-notifier
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+```bash
+docker pull ghcr.io/roma7-7-7/sso-notifier:latest
+docker run -d --restart unless-stopped \
+  --name sso-notifier \
+  -v ./data/sso-notifier:/app/data \
+  --env-file .env.sso-notifier \
+  ghcr.io/roma7-7-7/sso-notifier:latest
 ```
+
+See [docs/deployment.md](docs/deployment.md) for full details.
 
 ## Contributing
 
