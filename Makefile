@@ -1,8 +1,3 @@
-
-VERSION ?= dev
-BUILD_TIME ?= $(shell date -u +%Y%m%d-%H%M%S)
-LDFLAGS := -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)
-
 lint:
 	golangci-lint run ./...
 
@@ -20,13 +15,6 @@ build:
 	go mod download
 	CGO_ENABLED=0 go build -o ./bin/sso-notifier ./cmd/bot/main.go
 
-ci-build:
-	go mod download
-	mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier-amd64 ./cmd/bot/main.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o ./bin/sso-notifier-arm64 ./cmd/bot/main.go
-	echo "Version: $(VERSION)\nBuild Time: $(BUILD_TIME)" > ./bin/VERSION
-
 testserver:
 	go mod download
 	CGO_ENABLED=0 go build -o ./bin/testserver ./cmd/testserver/main.go
@@ -40,3 +28,16 @@ coverage:
 	@echo "Filtering excluded packages..."
 	@grep -v -E '(github\.com/Roma7-7-7/sso-notifier/cmd/|github\.com/Roma7-7-7/sso-notifier/internal/dal/migrations/|github\.com/Roma7-7-7/sso-notifier/internal/dal/testutil/|/mocks/)' coverage.out > coverage.filtered.out || true
 	@go tool cover -func=coverage.filtered.out | grep total | awk '{print "Total Coverage: " $$3}'
+
+# ==========================================
+# Docker
+# ==========================================
+
+docker-build: ## Build Docker image
+	docker-compose build
+
+docker-up: ## Build and run with Docker Compose
+	docker-compose up --build -d
+
+docker-down: ## Stop Docker Compose services
+	docker-compose down
