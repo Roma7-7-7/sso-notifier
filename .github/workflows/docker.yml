@@ -16,6 +16,10 @@ on:
 env:
   REGISTRY: ghcr.io
 
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Run Tests
