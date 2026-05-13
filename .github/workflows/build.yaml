@@ -20,7 +20,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.2'
+          go-version: "1.26.3"
 
       - name: Install dependencies
         run: |
@@ -35,13 +35,13 @@ jobs:
       - name: Check coverage badge matches actual coverage
         run: |
           ACTUAL_COVERAGE=$(go tool cover -func=coverage.filtered.out | grep total | awk '{print $3}' | sed 's/%//')
-          
+
           # Extract coverage from README badge (handles both with and without color suffix)
           BADGE_COVERAGE=$(grep -o 'coverage-[0-9.]*%25' README.md | head -1 | sed 's/coverage-//;s/%25.*//')
-          
+
           echo "Actual coverage: ${ACTUAL_COVERAGE}%"
           echo "Badge coverage: ${BADGE_COVERAGE}%"
-          
+
           # Compare coverage values (exact match required)
           if [ "$ACTUAL_COVERAGE" != "$BADGE_COVERAGE" ]; then
             echo "❌ Coverage mismatch!"
@@ -51,7 +51,7 @@ jobs:
             echo "  ./scripts/update-coverage-badge.sh"
             exit 1
           fi
-          
+
           echo "✅ Coverage badge is up to date!"
 
       - name: Run go vet
