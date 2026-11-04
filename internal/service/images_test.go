@@ -35,8 +35,8 @@ func TestScheduleImage(t *testing.T) {
 
 		day, err := img.Day()
 		require.NoError(t, err)
-		assert.Equal(t, "Група 4", day.Title)
-		assert.Equal(t, "5 листопада · без світла 5г · можливо 1г", day.Subtitle)
+		assert.Equal(t, "5 листопада: Група 4", day.Title)
+		assert.Equal(t, "без світла 5г · можливо 1г", day.Subtitle)
 		assert.Equal(t, render.Segment{FromMin: 1290, ToMin: 1440, Kind: render.KindOn}, day.Segments[len(day.Segments)-1])
 	})
 
@@ -52,7 +52,7 @@ func TestScheduleImage(t *testing.T) {
 
 		day, err := img.Day()
 		require.NoError(t, err)
-		assert.Equal(t, "5 листопада · без світла 1г 15хв · можливо 1г 30хв", day.Subtitle)
+		assert.Equal(t, "без світла 1г 15хв · можливо 1г 30хв", day.Subtitle)
 		assert.Equal(t, render.Segment{FromMin: 60, ToMin: 75, Kind: render.KindMaybe}, day.Segments[1])
 	})
 
@@ -136,7 +136,7 @@ func TestNotifications_NotifyPowerSupplySchedule_Image(t *testing.T) {
 		require.NoError(t, n.NotifyPowerSupplySchedule(t.Context(), chatID))
 
 		assert.Equal(t, []string{chatIDStr, chatIDStr}, photos.sent)
-		assert.Equal(t, [][]byte{[]byte("png:Група 1"), []byte("png:Група 3")}, photos.photos)
+		assert.Equal(t, [][]byte{[]byte("png:20 листопада: Група 1"), []byte("png:20 листопада: Група 3")}, photos.photos)
 	})
 
 	t.Run("render failure falls back to text and sends no photos", func(t *testing.T) {

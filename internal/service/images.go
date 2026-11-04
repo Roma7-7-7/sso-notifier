@@ -69,8 +69,8 @@ func (i ScheduleImage) Day() (render.Day, error) {
 		}
 	}
 	return render.Day{
-		Title:    "Група " + i.GroupNum,
-		Subtitle: fmt.Sprintf("%s · без світла %s · можливо %s", i.Date, formatDuration(offMin), formatDuration(maybeMin)),
+		Title:    i.Date + ": Група " + i.GroupNum,
+		Subtitle: fmt.Sprintf("без світла %s · можливо %s", formatDuration(offMin), formatDuration(maybeMin)),
 		Segments: segments,
 	}, nil
 }
