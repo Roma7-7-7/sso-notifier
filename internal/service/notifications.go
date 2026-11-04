@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
+	"github.com/Roma7-7-7/sso-notifier/internal/render"
 )
 
 //go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
@@ -22,6 +23,13 @@ type (
 	TelegramClient interface {
 		SendMessage(context.Context, string, string) error
 	}
+
+	PhotoSender interface {
+		SendPhoto(ctx context.Context, chatID string, photo []byte) error
+	}
+
+	// ImageRenderer draws a day schedule as PNG.
+	ImageRenderer func(render.Day) ([]byte, error)
 
 	NotificationsReaderStore interface {
 		GetNotificationState(chatID int64, date dal.Date) (dal.NotificationState, bool, error)
@@ -38,6 +46,8 @@ type (
 		subscriptions SubscriptionsReaderStore
 		notifications NotificationsStore
 		telegram      TelegramClient
+		photos        PhotoSender
+		renderImage   ImageRenderer
 		clock         Clock
 
 		notificationsTTL time.Duration
@@ -66,6 +76,13 @@ func NewNotifications(
 		log: log.With("component", "service").With("service", "notifications"),
 		mx:  &sync.Mutex{},
 	}
+}
+
+// WithImages enables the image message format. Without it (or if rendering/sending fails) the text message is sent.
+func (s *Notifications) WithImages(renderImage ImageRenderer, photos PhotoSender) *Notifications {
+	s.renderImage = renderImage
+	s.photos = photos
+	return s
 }
 
 func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) error {
@@ -154,6 +171,7 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 	today := dal.DateByTime(now)
 	tomorrow := dal.DateByTime(now.AddDate(0, 0, 1))
 	text := ""
+	var images []ScheduleImage
 	mb, err := s.prepareMessageBuilder(ctx, sub, today, tomorrow)
 	if err != nil {
 		if !errors.Is(err, ErrShutdownsNotAvailable) {
@@ -170,13 +188,55 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 			return fmt.Errorf("build message: %w", err)
 		}
 		text = msg.Text
+		images = msg.Images
 	}
 
-	err = s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), text)
-	if err != nil {
+	if err := s.deliver(ctx, chatID, text, images); err != nil {
 		return fmt.Errorf("send message: %w", err)
 	}
 
+	return nil
+}
+
+// deliver sends schedule as photos when images are requested, and as plain text otherwise or on any image failure,
+// so subscriber never ends up without the schedule. If a later photo fails, the earlier ones were already sent and
+// the text repeats them, which is preferable to a missing schedule.
+func (s *Notifications) deliver(ctx context.Context, chatID int64, text string, images []ScheduleImage) error {
+	chat := strconv.FormatInt(chatID, 10)
+	if len(images) == 0 || s.renderImage == nil || s.photos == nil {
+		return s.sendText(ctx, chat, text)
+	}
+
+	log := s.log.With("chatID", chatID)
+	photos := make([][]byte, 0, len(images))
+	for _, img := range images {
+		day, err := img.Day()
+		if err != nil {
+			log.WarnContext(ctx, "failed to build image data, falling back to text", "group", img.GroupNum, "date", img.Date, "error", err)
+			return s.sendText(ctx, chat, text)
+		}
+		photo, err := s.renderImage(day)
+		if err != nil {
+			log.WarnContext(ctx, "failed to render image, falling back to text", "group", img.GroupNum, "date", img.Date, "error", err)
+			return s.sendText(ctx, chat, text)
+		}
+		photos = append(photos, photo)
+	}
+
+	for i, photo := range photos {
+		if err := s.photos.SendPhoto(ctx, chat, photo); err != nil {
+			log.WarnContext(ctx, "failed to send image, falling back to text", "group", images[i].GroupNum, "date", images[i].Date, "error", err)
+			return s.sendText(ctx, chat, text)
+		}
+	}
+
+	return nil
+}
+
+func (s *Notifications) sendText(ctx context.Context, chat, text string) error {
+	if err := s.telegram.SendMessage(ctx, chat, text); err != nil {
+		return fmt.Errorf("telegram send message: %w", err)
+	}
 	return nil
 }
 
@@ -204,6 +264,9 @@ func (s *Notifications) prepareMessageBuilder(ctx context.Context, sub dal.Subsc
 		mb = NewLinearMessageBuilder(todayTable, true, s.clock.Now())
 	case dal.ShutdownsMessageFormatGrouped:
 		mb = NewGroupedMessageBuilder(todayTable, s.clock.Now())
+	case dal.ShutdownsMessageFormatImage:
+		// linear text is the fallback when the image can't be produced or sent
+		mb = NewLinearMessageBuilder(todayTable, true, s.clock.Now()).WithImages()
 	default:
 		s.log.WarnContext(ctx, "Unknown shutdown message format. Fallback to default linear without range", "format", sub.Settings[dal.SettingShutdownsMessageFormat])
 		mb = NewLinearMessageBuilder(todayTable, false, s.clock.Now())
@@ -260,7 +323,7 @@ func (s *Notifications) processSubscriptionNotification(
 		return
 	}
 
-	if err := s.telegram.SendMessage(ctx, strconv.FormatInt(chatID, 10), msg.Text); err != nil {
+	if err := s.deliver(ctx, chatID, msg.Text, msg.Images); err != nil {
 		log.ErrorContext(ctx, "failed to send message", "chatID", chatID, "error", err)
 		return
 	}

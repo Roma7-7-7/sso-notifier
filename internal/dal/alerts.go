@@ -27,6 +27,7 @@ const (
 	ShutdownsMessageFormatLinear          = "linear"
 	ShutdownsMessageFormatLinearWithRange = "linear_with_range"
 	ShutdownsMessageFormatGrouped         = "grouped"
+	ShutdownsMessageFormatImage           = "image"
 )
 
 // CountAlerts total number of alerts
