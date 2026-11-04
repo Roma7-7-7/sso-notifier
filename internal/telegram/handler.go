@@ -207,6 +207,9 @@ func (h *Handler) Settings(c tb.Context) error {
 	return h.sendOrDelete(c, message, markup)
 }
 
+// scheduleTimeout covers one photo per group per date (up to 12 groups x 2 dates), each with a send interval and upload.
+const scheduleTimeout = 2 * time.Minute
+
 func (h *Handler) GetSchedule(c tb.Context) error {
 	chatID := c.Sender().ID
 	h.log.Debug("schedule handler called", "chatID", chatID)
@@ -216,7 +219,7 @@ func (h *Handler) GetSchedule(c tb.Context) error {
 		return h.sendOrDelete(c, "⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️", nil)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) //nolint:mnd // image rendering and upload take longer than text
+	ctx, cancel := context.WithTimeout(context.Background(), scheduleTimeout)
 	defer cancel()
 	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
 	if err != nil {

@@ -22,6 +22,9 @@ import (
 // photoSendInterval keeps consecutive photos to one chat under Telegram's rate limit.
 const photoSendInterval = time.Second
 
+// textFallbackTimeout bounds the text sent after photo delivery ran out of time.
+const textFallbackTimeout = 10 * time.Second
+
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
 type (
@@ -236,7 +239,8 @@ func (s *Notifications) deliver(ctx context.Context, chatID int64, text string, 
 	for i, photo := range photos {
 		if i > 0 {
 			if err := sleep(ctx, s.photoInterval); err != nil {
-				return fmt.Errorf("wait between photos: %w", err)
+				log.WarnContext(ctx, "interrupted while waiting between photos, falling back to text", "error", err)
+				return s.sendTextDetached(ctx, chat, text)
 			}
 		}
 		if err := s.photos.SendPhoto(ctx, chat, photo); err != nil {
@@ -244,7 +248,7 @@ func (s *Notifications) deliver(ctx context.Context, chatID int64, text string, 
 				return fmt.Errorf("send photo: %w", err)
 			}
 			log.WarnContext(ctx, "failed to send image, falling back to text", "group", images[i].GroupNum, "date", images[i].Date, "error", err)
-			return s.sendText(ctx, chat, text)
+			return s.sendTextDetached(ctx, chat, text)
 		}
 	}
 
@@ -282,6 +286,13 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
+}
+
+// sendTextDetached sends the fallback text even if ctx already expired, since that is the usual reason photos failed.
+func (s *Notifications) sendTextDetached(ctx context.Context, chat, text string) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), textFallbackTimeout)
+	defer cancel()
+	return s.sendText(ctx, chat, text)
 }
 
 func (s *Notifications) sendText(ctx context.Context, chat, text string) error {
