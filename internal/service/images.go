@@ -17,11 +17,10 @@ type ScheduleImage struct {
 	Statuses []dal.Status
 }
 
-type dayWindows struct {
-	off, maybe []render.Segment
-}
-
 func (i ScheduleImage) segments() ([]render.Segment, error) {
+	if len(i.Statuses) != len(i.Periods) {
+		return nil, fmt.Errorf("statuses count %d does not match periods count %d", len(i.Statuses), len(i.Periods))
+	}
 	segments := make([]render.Segment, 0, len(i.Periods))
 	for idx, p := range i.Periods {
 		from, err := parseMinutes(p.From)
@@ -41,40 +40,39 @@ func (i ScheduleImage) segments() ([]render.Segment, error) {
 	return segments, nil
 }
 
+// cacheKey identifies images with identical content, so one render can serve many subscribers.
+func (i ScheduleImage) cacheKey() string {
+	var sb strings.Builder
+	sb.WriteString(i.Date + "|" + i.GroupNum)
+	for idx, p := range i.Periods {
+		if idx < len(i.Statuses) {
+			fmt.Fprintf(&sb, "|%s-%s=%s", p.From, p.To, i.Statuses[idx])
+		}
+	}
+	return sb.String()
+}
+
 // Day converts the schedule to renderer input.
 func (i ScheduleImage) Day() (render.Day, error) {
 	segments, err := i.segments()
 	if err != nil {
 		return render.Day{}, fmt.Errorf("build segments: %w", err)
 	}
-	w := splitWindows(segments)
-	return render.Day{
-		Title:    "Група " + i.GroupNum,
-		Subtitle: fmt.Sprintf("%s · без світла %s · можливо %s", i.Date, formatDuration(totalMinutes(w.off)), formatDuration(totalMinutes(w.maybe))),
-		Segments: segments,
-	}, nil
-}
-
-func splitWindows(segments []render.Segment) dayWindows {
-	var w dayWindows
+	var offMin, maybeMin int
 	for _, s := range segments {
 		switch s.Kind {
 		case render.KindOff:
-			w.off = append(w.off, s)
+			offMin += s.ToMin - s.FromMin
 		case render.KindMaybe:
-			w.maybe = append(w.maybe, s)
+			maybeMin += s.ToMin - s.FromMin
 		case render.KindOn:
 		}
 	}
-	return w
-}
-
-func totalMinutes(segments []render.Segment) int {
-	total := 0
-	for _, s := range segments {
-		total += s.ToMin - s.FromMin
-	}
-	return total
+	return render.Day{
+		Title:    "Група " + i.GroupNum,
+		Subtitle: fmt.Sprintf("%s · без світла %s · можливо %s", i.Date, formatDuration(offMin), formatDuration(maybeMin)),
+		Segments: segments,
+	}, nil
 }
 
 func kindForStatus(s dal.Status) (render.Kind, bool) {

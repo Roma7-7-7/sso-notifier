@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	tc "github.com/Roma7-7-7/telegram"
+
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/render"
 )
@@ -16,6 +18,9 @@ import (
 //go:generate mockgen -package mocks -destination mocks/telegram.go . TelegramClient
 
 //go:generate mockgen -package mocks -destination mocks/notifications.go . NotificationsStore
+
+// photoSendInterval keeps consecutive photos to one chat under Telegram's rate limit.
+const photoSendInterval = time.Second
 
 var ErrShutdownsNotAvailable = errors.New("shutdowns not available")
 
@@ -48,6 +53,7 @@ type (
 		telegram      TelegramClient
 		photos        PhotoSender
 		renderImage   ImageRenderer
+		photoInterval time.Duration
 		clock         Clock
 
 		notificationsTTL time.Duration
@@ -82,6 +88,7 @@ func NewNotifications(
 func (s *Notifications) WithImages(renderImage ImageRenderer, photos PhotoSender) *Notifications {
 	s.renderImage = renderImage
 	s.photos = photos
+	s.photoInterval = photoSendInterval
 	return s
 }
 
@@ -108,8 +115,9 @@ func (s *Notifications) NotifyPowerSupplyScheduleUpdates(ctx context.Context) er
 		return fmt.Errorf("get all subscriptions: %w", err)
 	}
 
+	cache := make(map[string][]byte)
 	for _, sub := range subs {
-		s.processSubscriptionNotification(ctx, sub, today, tomorrow)
+		s.processSubscriptionNotification(ctx, sub, today, tomorrow, cache)
 	}
 
 	return nil
@@ -191,46 +199,89 @@ func (s *Notifications) NotifyPowerSupplySchedule(ctx context.Context, chatID in
 		images = msg.Images
 	}
 
-	if err := s.deliver(ctx, chatID, text, images); err != nil {
+	if err := s.deliver(ctx, chatID, text, images, nil); err != nil {
 		return fmt.Errorf("send message: %w", err)
 	}
 
 	return nil
 }
 
-// deliver sends schedule as photos when images are requested, and as plain text otherwise or on any image failure,
-// so subscriber never ends up without the schedule. If a later photo fails, the earlier ones were already sent and
-// the text repeats them, which is preferable to a missing schedule.
-func (s *Notifications) deliver(ctx context.Context, chatID int64, text string, images []ScheduleImage) error {
+// deliver sends schedule as photos when images are requested, and as plain text otherwise or on image failure,
+// so subscriber never ends up without the schedule. Forbidden and rate-limit errors are returned as is: the text
+// would hit the same wall and would only duplicate photos already sent. If a later photo fails otherwise, the
+// earlier ones were already sent and the text repeats them, which is preferable to a missing schedule.
+// cache (may be nil) shares rendered images between subscribers.
+func (s *Notifications) deliver(ctx context.Context, chatID int64, text string, images []ScheduleImage, cache map[string][]byte) error {
 	chat := strconv.FormatInt(chatID, 10)
-	if len(images) == 0 || s.renderImage == nil || s.photos == nil {
+	if len(images) == 0 {
 		return s.sendText(ctx, chat, text)
 	}
 
 	log := s.log.With("chatID", chatID)
+	if s.renderImage == nil || s.photos == nil {
+		log.WarnContext(ctx, "image format requested but images are not configured, sending text")
+		return s.sendText(ctx, chat, text)
+	}
+
 	photos := make([][]byte, 0, len(images))
 	for _, img := range images {
-		day, err := img.Day()
+		photo, err := s.renderCached(img, cache)
 		if err != nil {
-			log.WarnContext(ctx, "failed to build image data, falling back to text", "group", img.GroupNum, "date", img.Date, "error", err)
-			return s.sendText(ctx, chat, text)
-		}
-		photo, err := s.renderImage(day)
-		if err != nil {
-			log.WarnContext(ctx, "failed to render image, falling back to text", "group", img.GroupNum, "date", img.Date, "error", err)
+			log.WarnContext(ctx, "failed to prepare image, falling back to text", "group", img.GroupNum, "date", img.Date, "error", err)
 			return s.sendText(ctx, chat, text)
 		}
 		photos = append(photos, photo)
 	}
 
 	for i, photo := range photos {
+		if i > 0 {
+			if err := sleep(ctx, s.photoInterval); err != nil {
+				return fmt.Errorf("wait between photos: %w", err)
+			}
+		}
 		if err := s.photos.SendPhoto(ctx, chat, photo); err != nil {
+			if errors.Is(err, tc.ErrForbidden) || errors.Is(err, tc.ErrTooManyRequests) {
+				return fmt.Errorf("send photo: %w", err)
+			}
 			log.WarnContext(ctx, "failed to send image, falling back to text", "group", images[i].GroupNum, "date", images[i].Date, "error", err)
 			return s.sendText(ctx, chat, text)
 		}
 	}
 
 	return nil
+}
+
+func (s *Notifications) renderCached(img ScheduleImage, cache map[string][]byte) ([]byte, error) {
+	key := img.cacheKey()
+	if photo, ok := cache[key]; ok {
+		return photo, nil
+	}
+	day, err := img.Day()
+	if err != nil {
+		return nil, fmt.Errorf("build image data: %w", err)
+	}
+	photo, err := s.renderImage(day)
+	if err != nil {
+		return nil, fmt.Errorf("render image: %w", err)
+	}
+	if cache != nil {
+		cache[key] = photo
+	}
+	return photo, nil
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context done: %w", ctx.Err())
+	case <-t.C:
+		return nil
+	}
 }
 
 func (s *Notifications) sendText(ctx context.Context, chat, text string) error {
@@ -287,6 +338,7 @@ func (s *Notifications) processSubscriptionNotification(
 	ctx context.Context,
 	sub dal.Subscription,
 	today, tomorrow dal.Date,
+	cache map[string][]byte,
 ) {
 	chatID := sub.ChatID
 	log := s.log.With("chatID", chatID)
@@ -323,7 +375,7 @@ func (s *Notifications) processSubscriptionNotification(
 		return
 	}
 
-	if err := s.deliver(ctx, chatID, msg.Text, msg.Images); err != nil {
+	if err := s.deliver(ctx, chatID, msg.Text, msg.Images, cache); err != nil {
 		log.ErrorContext(ctx, "failed to send message", "chatID", chatID, "error", err)
 		return
 	}

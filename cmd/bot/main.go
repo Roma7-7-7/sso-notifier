@@ -26,6 +26,8 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
 
+const photoUploadTimeout = 30 * time.Second
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if status := run(ctx); status > 0 {
@@ -80,7 +82,7 @@ func run(ctx context.Context) int {
 		tc.WithMiddlewares(telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle),
 	)
 	photoSender := telegram.NewPhotoClient(
-		http.DefaultClient,
+		&http.Client{Timeout: photoUploadTimeout},
 		conf.TelegramToken,
 		telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle,
 	)

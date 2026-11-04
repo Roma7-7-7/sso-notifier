@@ -3,14 +3,21 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 
 	tc "github.com/Roma7-7-7/telegram"
 )
 
-const defaultAPIBaseURL = "https://api.telegram.org"
+const (
+	defaultAPIBaseURL = "https://api.telegram.org"
+	maxErrorBodyBytes = 4 << 10
+)
 
 // PhotoClient sends photos via Bot API. The shared telegram client supports text only.
 // It maps errors and runs middlewares the same way, so blocked users are purged for photos as well.
@@ -75,6 +82,11 @@ func (c *PhotoClient) sendPhoto(ctx context.Context, chatID string, photo []byte
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// url.Error text contains the request URL, which embeds the bot token
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
 		return fmt.Errorf("do request: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // ignore
@@ -88,8 +100,24 @@ func (c *PhotoClient) sendPhoto(ctx context.Context, chatID string, photo []byte
 	case http.StatusForbidden:
 		return tc.ErrForbidden
 	case http.StatusTooManyRequests:
+		if retryAfter := parseAPIError(resp.Body).Parameters.RetryAfter; retryAfter > 0 {
+			return fmt.Errorf("%w: retry after %ds", tc.ErrTooManyRequests, retryAfter)
+		}
 		return tc.ErrTooManyRequests
 	default:
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, parseAPIError(resp.Body).Description)
 	}
+}
+
+type apiError struct {
+	Description string `json:"description"`
+	Parameters  struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+func parseAPIError(body io.Reader) apiError {
+	var e apiError
+	_ = json.NewDecoder(io.LimitReader(body, maxErrorBodyBytes)).Decode(&e)
+	return e
 }

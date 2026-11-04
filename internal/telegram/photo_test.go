@@ -70,3 +70,14 @@ func TestPhotoClient_SendPhoto(t *testing.T) {
 		require.Error(t, c.SendPhoto(t.Context(), "7", []byte("x")))
 	})
 }
+
+func TestPhotoClient_SendPhoto_ErrorDoesNotLeakToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	c := NewPhotoClient(srv.Client(), "SECRET")
+	c.baseURL = srv.URL
+	srv.Close()
+
+	err := c.SendPhoto(t.Context(), "7", []byte("x"))
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET")
+}
