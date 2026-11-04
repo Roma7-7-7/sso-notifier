@@ -92,6 +92,7 @@ const (
 	titleBaseline    = 50
 	subtitleBaseline = 82
 	legendTextGap    = 10
+	legendBaselineUp = 4
 )
 
 type fonts struct {
@@ -101,6 +102,7 @@ type fonts struct {
 //nolint:gochecknoglobals // fonts are parsed once
 var (
 	fontsOnce   sync.Once
+	renderMu    sync.Mutex // font faces keep internal glyph buffers and are not safe for concurrent use
 	loadedFonts fonts
 	errFonts    error
 )
@@ -129,7 +131,7 @@ func loadFonts() (fonts, error) {
 		}
 		loadedFonts = fonts{
 			title:    face(bold, titleSize),
-			subtitle: face(regular, 18),
+			subtitle: face(regular, subtitleSize),
 			hour:     face(bold, hourSize),
 			legend:   face(regular, legendFontSize),
 		}
@@ -148,6 +150,9 @@ func Render(d Day) ([]byte, error) {
 		return nil, fmt.Errorf("load fonts: %w", err)
 	}
 
+	renderMu.Lock()
+	defer renderMu.Unlock()
+
 	legendY := gridTop + rows*(cellH+gap) + legendGap
 	img := image.NewRGBA(image.Rect(0, 0, width, legendY+legendSize+bottomPad))
 	draw.Draw(img, img.Bounds(), image.NewUniform(colorBackground), image.Point{}, draw.Src)
@@ -164,8 +169,8 @@ func Render(d Day) ([]byte, error) {
 	x := 60
 	for _, kl := range kindLabels {
 		fillRect(img, x, legendY, legendSize, legendSize, kindColors[kl.kind])
-		drawText(img, f.legend, x+legendSize+legendTextGap, legendY+legendSize-4, kl.label, colorLegend, false)
-		x += 210 //nolint:mnd // legend column step
+		drawText(img, f.legend, x+legendSize+legendTextGap, legendY+legendSize-legendBaselineUp, kl.label, colorLegend, false)
+		x += 210
 	}
 
 	var buf bytes.Buffer

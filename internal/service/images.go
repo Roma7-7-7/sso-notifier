@@ -101,7 +101,7 @@ func parseMinutes(hhmm string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid minutes in %q: %w", hhmm, err)
 	}
-	return hours*60 + minutes, nil //nolint:mnd // minutes per hour
+	return hours*60 + minutes, nil
 }
 
 func formatDuration(minutes int) string {

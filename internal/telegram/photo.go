@@ -89,7 +89,7 @@ func (c *PhotoClient) sendPhoto(ctx context.Context, chatID string, photo []byte
 		}
 		return fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // ignore
+	defer resp.Body.Close()
 
 	//nolint:mnd // 1xx and 2xx status codes are ok
 	if resp.StatusCode < 300 {

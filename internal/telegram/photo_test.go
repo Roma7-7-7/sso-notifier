@@ -18,10 +18,14 @@ func TestPhotoClient_SendPhoto(t *testing.T) {
 		var gotPhoto []byte
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotPath = r.URL.Path
-			require.NoError(t, r.ParseMultipartForm(1<<20))
+			if !assert.NoError(t, r.ParseMultipartForm(1<<20)) {
+				return
+			}
 			gotChat = r.FormValue("chat_id")
 			f, _, err := r.FormFile("photo")
-			require.NoError(t, err)
+			if !assert.NoError(t, err) {
+				return
+			}
 			gotPhoto, _ = io.ReadAll(f)
 		}))
 		defer srv.Close()
