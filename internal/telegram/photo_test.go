@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	tc "github.com/Roma7-7-7/telegram"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	tc "github.com/Roma7-7-7/telegram"
 )
 
 func TestPhotoClient_SendPhoto(t *testing.T) {

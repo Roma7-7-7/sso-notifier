@@ -83,6 +83,17 @@ var (
 	}
 )
 
+const (
+	fontDPI          = 72
+	titleSize        = 28
+	subtitleSize     = 18
+	hourSize         = 26
+	legendFontSize   = 18
+	titleBaseline    = 50
+	subtitleBaseline = 82
+	legendTextGap    = 10
+)
+
 type fonts struct {
 	title, subtitle, hour, legend font.Face
 }
@@ -91,39 +102,39 @@ type fonts struct {
 var (
 	fontsOnce   sync.Once
 	loadedFonts fonts
-	fontsErr    error
+	errFonts    error
 )
 
 func loadFonts() (fonts, error) {
 	fontsOnce.Do(func() {
 		regular, err := opentype.Parse(goregular.TTF)
 		if err != nil {
-			fontsErr = fmt.Errorf("parse regular font: %w", err)
+			errFonts = fmt.Errorf("parse regular font: %w", err)
 			return
 		}
 		bold, err := opentype.Parse(gobold.TTF)
 		if err != nil {
-			fontsErr = fmt.Errorf("parse bold font: %w", err)
+			errFonts = fmt.Errorf("parse bold font: %w", err)
 			return
 		}
 		face := func(f *opentype.Font, size float64) font.Face {
-			if fontsErr != nil {
+			if errFonts != nil {
 				return nil
 			}
-			face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull})
+			face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: size, DPI: fontDPI, Hinting: font.HintingFull})
 			if err != nil {
-				fontsErr = fmt.Errorf("create font face: %w", err)
+				errFonts = fmt.Errorf("create font face: %w", err)
 			}
 			return face
 		}
 		loadedFonts = fonts{
-			title:    face(bold, 28),
+			title:    face(bold, titleSize),
 			subtitle: face(regular, 18),
-			hour:     face(bold, 26),
-			legend:   face(regular, 18),
+			hour:     face(bold, hourSize),
+			legend:   face(regular, legendFontSize),
 		}
 	})
-	return loadedFonts, fontsErr
+	return loadedFonts, errFonts
 }
 
 // Render returns PNG bytes. Every hour is a cell filled with segments clipped to that hour, proportional by minute,
@@ -141,8 +152,8 @@ func Render(d Day) ([]byte, error) {
 	img := image.NewRGBA(image.Rect(0, 0, width, legendY+legendSize+bottomPad))
 	draw.Draw(img, img.Bounds(), image.NewUniform(colorBackground), image.Point{}, draw.Src)
 
-	drawText(img, f.title, margin, 50, d.Title, colorText, false)
-	drawText(img, f.subtitle, margin, 82, d.Subtitle, colorMuted, false)
+	drawText(img, f.title, margin, titleBaseline, d.Title, colorText, false)
+	drawText(img, f.subtitle, margin, subtitleBaseline, d.Subtitle, colorMuted, false)
 
 	for h := range 24 {
 		x := margin + (h%cols)*(cellW+gap)
@@ -153,7 +164,7 @@ func Render(d Day) ([]byte, error) {
 	x := 60
 	for _, kl := range kindLabels {
 		fillRect(img, x, legendY, legendSize, legendSize, kindColors[kl.kind])
-		drawText(img, f.legend, x+legendSize+10, legendY+legendSize-4, kl.label, colorLegend, false)
+		drawText(img, f.legend, x+legendSize+legendTextGap, legendY+legendSize-4, kl.label, colorLegend, false)
 		x += 210 //nolint:mnd // legend column step
 	}
 
