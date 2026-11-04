@@ -151,6 +151,12 @@ Core notification logic with sophisticated time handling.
 
 **Message Templates** - See `internal/service/TEMPLATES.md` for detailed documentation.
 
+**Image message format (`image` setting)**
+- Opt-in per user via `/settings` → "Картинка". `internal/render` draws the full day of one group as a PNG hour grid; each hour cell is split proportionally by minute, so windows of any length (30m, 15m, ...) are exact.
+- One photo per updated group and date is sent by `telegram.PhotoClient` (`sendPhoto`; the shared telegram client is text-only). The photo is sent without a caption; users who want text pick a text format.
+- Fallback: if image data can't be built, rendering fails, or the upload fails, `Notifications.deliver` sends the linear-with-ranges text message instead. The notification hash is saved only after either variant is delivered. If a later photo fails after earlier ones were sent, the text repeats them.
+- Applies to schedule-change notifications and `/schedule`. 10-minute alerts stay text-only.
+
 ### `/internal/service/subscriptions.go`
 
 Subscription management service with multi-group subscription support.

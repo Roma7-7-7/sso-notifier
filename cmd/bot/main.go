@@ -20,10 +20,13 @@ import (
 	"github.com/Roma7-7-7/sso-notifier/internal/dal"
 	"github.com/Roma7-7-7/sso-notifier/internal/dal/migrations"
 	"github.com/Roma7-7-7/sso-notifier/internal/providers"
+	"github.com/Roma7-7-7/sso-notifier/internal/render"
 	"github.com/Roma7-7-7/sso-notifier/internal/service"
 	"github.com/Roma7-7-7/sso-notifier/internal/telegram"
 	"github.com/Roma7-7-7/sso-notifier/pkg/clock"
 )
+
+const photoUploadTimeout = 30 * time.Second
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -78,7 +81,13 @@ func run(ctx context.Context) int {
 		conf.TelegramToken,
 		tc.WithMiddlewares(telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle),
 	)
-	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log)
+	photoSender := telegram.NewPhotoClient(
+		&http.Client{Timeout: photoUploadTimeout},
+		conf.TelegramToken,
+		telegram.NewPurgeOnForbiddenMiddleware(subscriptionsSvc, log).Handle,
+	)
+	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log).
+		WithImages(render.Render, photoSender)
 	alertsSvc := service.NewAlerts(store, store, store, store, sender, c, conf.AlertsTTL, log)
 	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, store, conf.GroupsCount, log)
 

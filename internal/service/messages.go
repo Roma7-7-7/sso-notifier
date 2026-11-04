@@ -17,11 +17,13 @@ type (
 		Text                  string
 		TodayUpdatedGroups    map[string]string // groupNum -> newHash for today
 		TomorrowUpdatedGroups map[string]string // groupNum -> newHash for tomorrow (if applicable)
+		Images                []ScheduleImage   // filled only when the builder is created WithImages
 	}
 
 	MessageBuilder struct {
 		template         *template.Template
 		withPeriodRanges bool // If true, then linear template shows "🟢 11:30 - 13:00" instead of "🟢 11:30"
+		withImages       bool // If true, Build also returns per group full-day schedules for image rendering
 
 		shutdowns    dal.Shutdowns
 		nextDayTable *dal.Shutdowns // Optional next day shutdowns
@@ -39,6 +41,12 @@ func newMessageBuilder(template *template.Template, shutdowns dal.Shutdowns, now
 
 func (mb *MessageBuilder) WithNextDay(shutdowns dal.Shutdowns) *MessageBuilder {
 	mb.nextDayTable = &shutdowns
+	return mb
+}
+
+// WithImages makes Build return ScheduleImage for every updated group. Text is still built, to be used as a fallback.
+func (mb *MessageBuilder) WithImages() *MessageBuilder {
+	mb.withImages = true
 	return mb
 }
 
@@ -78,6 +86,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState 
 			Groups: todaySchedule.Groups,
 		})
 		result.TodayUpdatedGroups = todaySchedule.UpdatedGroups
+		result.Images = append(result.Images, todaySchedule.Images...)
 	}
 
 	if mb.nextDayTable != nil {
@@ -89,6 +98,7 @@ func (mb *MessageBuilder) Build(sub dal.Subscription, todayState, tomorrowState 
 				Groups: tomorrowSchedule.Groups,
 			})
 			result.TomorrowUpdatedGroups = tomorrowSchedule.UpdatedGroups
+			result.Images = append(result.Images, tomorrowSchedule.Images...)
 		}
 	}
 
@@ -124,6 +134,7 @@ type (
 	processDateScheduleResul struct {
 		Groups        []groupSchedule
 		UpdatedGroups map[string]string
+		Images        []ScheduleImage
 	}
 )
 
@@ -158,6 +169,16 @@ func (mb *MessageBuilder) processDateSchedule(
 		processed.LinearTimeline = buildLinearSchedule(cutPeriods, cutStatuses, mb.withPeriodRanges)
 		result.Groups = append(result.Groups, processed)
 		result.UpdatedGroups[groupNum] = newHash
+
+		if mb.withImages {
+			// images show the whole day, unlike text which is cut to the upcoming periods
+			result.Images = append(result.Images, ScheduleImage{
+				Date:     shutdowns.Date,
+				GroupNum: groupNum,
+				Periods:  joinedPeriods,
+				Statuses: joinedStatuses,
+			})
+		}
 	}
 
 	return result

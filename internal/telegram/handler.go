@@ -207,6 +207,9 @@ func (h *Handler) Settings(c tb.Context) error {
 	return h.sendOrDelete(c, message, markup)
 }
 
+// scheduleTimeout covers one photo per group per date (up to 12 groups x 2 dates), each with a send interval and upload.
+const scheduleTimeout = 2 * time.Minute
+
 func (h *Handler) GetSchedule(c tb.Context) error {
 	chatID := c.Sender().ID
 	h.log.Debug("schedule handler called", "chatID", chatID)
@@ -216,7 +219,7 @@ func (h *Handler) GetSchedule(c tb.Context) error {
 		return h.sendOrDelete(c, "⚠️⚠️⚠️\nЗапроваджено екстренні відключення по Чернівецькій області. \nГрафіки погодинних відключень тимчасово не діють.\n⚠️⚠️⚠️", nil)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:mnd // 5 seconds timeout
+	ctx, cancel := context.WithTimeout(context.Background(), scheduleTimeout)
 	defer cancel()
 	err := h.notifications.NotifyPowerSupplySchedule(ctx, chatID)
 	if err != nil {
@@ -295,7 +298,9 @@ func (h *Handler) SettingsNotificationsFormat(c tb.Context) error {
 		"🟢 12:00 - 14:30 | 🔴 14:30 - 18:00 | 🟢 18:00 - 21:00\n\n" +
 		"📌 Згрупований:\n" +
 		"  🟢 Заживлено: 12:00 - 14:30; 18:00 - 21:00;\n" +
-		"  🔴 Відключено: 14:30 - 18:00;"
+		"  🔴 Відключено: 14:30 - 18:00;\n\n" +
+		"📌 Картинка:\n" +
+		"Погодинна сітка доби (текстом, якщо картинку не вдалося створити)"
 
 	return h.sendOrDelete(c, message, markup)
 }
@@ -335,7 +340,9 @@ func (h *Handler) SetFormatHandler(format string) func(c tb.Context) error {
 			"🟢 12:00 - 14:30 | 🔴 14:30 - 18:00 | 🟢 18:00 - 21:00\n\n" +
 			"📌 Згрупований:\n" +
 			"  🟢 Заживлено: 12:00 - 14:30; 18:00 - 21:00;\n" +
-			"  🔴 Відключено: 14:30 - 18:00;"
+			"  🔴 Відключено: 14:30 - 18:00;\n\n" +
+			"📌 Картинка:\n" +
+			"Погодинна сітка доби (текстом, якщо картинку не вдалося створити)"
 
 		return h.sendOrDelete(c, message, markup)
 	}
@@ -434,6 +441,10 @@ func (h *Handler) Callback(c tb.Context) error {
 	case data == "set_format_grouped":
 		h.log.Debug("routing to SetFormatHandler for grouped")
 		return h.SetFormatHandler(dal.ShutdownsMessageFormatGrouped)(c)
+
+	case data == "set_format_image":
+		h.log.Debug("routing to SetFormatHandler for image")
+		return h.SetFormatHandler(dal.ShutdownsMessageFormatImage)(c)
 
 	case data == "toggle_notify_off":
 		h.log.Debug("routing to ToggleSettingHandler for notify_off")
@@ -643,6 +654,7 @@ func (m *markups) buildSettingsNotificationsFormatMarkup(settings map[dal.Settin
 	linearText := "Лінійний"
 	linearWithRangeText := "Лінійний (деталізований)"
 	groupedText := "Згрупований"
+	imageText := "Картинка"
 	switch format {
 	case "", dal.ShutdownsMessageFormatLinear:
 		linearText = "✅ " + linearText
@@ -650,6 +662,8 @@ func (m *markups) buildSettingsNotificationsFormatMarkup(settings map[dal.Settin
 		linearWithRangeText = "✅ " + linearWithRangeText
 	case dal.ShutdownsMessageFormatGrouped:
 		groupedText = "✅ " + groupedText
+	case dal.ShutdownsMessageFormatImage:
+		imageText = "✅ " + imageText
 	default:
 		// unsupported
 	}
@@ -657,12 +671,14 @@ func (m *markups) buildSettingsNotificationsFormatMarkup(settings map[dal.Settin
 	linearBtn := markup.Data(linearText, "set_format_linear")
 	linearWithRangeBtn := markup.Data(linearWithRangeText, "set_format_linear_with_range")
 	groupedBtn := markup.Data(groupedText, "set_format_grouped")
+	imageBtn := markup.Data(imageText, "set_format_image")
 	backBtn := markup.Data("◀️ Назад", "back_from_format")
 
 	markup.Inline(
 		markup.Row(linearBtn),
 		markup.Row(linearWithRangeBtn),
 		markup.Row(groupedBtn),
+		markup.Row(imageBtn),
 		markup.Row(backBtn),
 	)
 
