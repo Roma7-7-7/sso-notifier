@@ -76,9 +76,13 @@ SwiftBar → the plugin → Preferences, or in the file:
 | `SCHEDULE_API_URL` | `http://127.0.0.1:47653/api/schedule` | Must match `SCHEDULE_API_ADDR` |
 | `GROUP` | `4` | Your group number (1-12) |
 | `STALE_AFTER_MIN` | `20` | Show ⚠️ when data is older than this |
+| `STYLE` | `pill` | `pill` draws the title as an image on a dark rounded background (readable on any wallpaper); `text` uses plain colored text |
+
+In `pill` mode the title is a generated PNG (status dot + countdown; `!` marks stale data or an error, details are in the dropdown).
 
 The countdown is computed locally from the cached ranges on every refresh, so it stays accurate between scrapes.
-If the menu bar shows `⚠️ no data`, run `make schedule-api-start`.
+If the menu bar shows a red dot with `!` (`⚠️ no data` in `text` mode), open the dropdown for the reason; if the
+API is down, run `make schedule-api-start`.
 
 Security: the plugin only reads JSON and prints text; response fields are never used in `bash=`/`href=` parameters.
 Keep the API on loopback (or behind HTTPS if you ever move it off the laptop).
