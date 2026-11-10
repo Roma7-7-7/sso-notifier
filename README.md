@@ -114,6 +114,19 @@ Or set environment variables directly:
 TELEGRAM_TOKEN=your_token DEV=true ./bin/sso-notifier
 ```
 
+### macOS menu bar status (optional)
+
+A separate small service (`cmd/scheduleapi`) serves the current schedule as JSON, and a
+[SwiftBar](https://github.com/swiftbar/SwiftBar) plugin shows the current power status and time to the
+next change in the menu bar. It doesn't need the bot, a Telegram token or the database.
+
+```bash
+make schedule-api-start   # builds and runs detached on 127.0.0.1:47653
+```
+
+Then link `scripts/swiftbar/outage.1m.py` into your SwiftBar plugin folder. See
+[docs/schedule-api.md](docs/schedule-api.md) for the endpoint, configuration and setup steps.
+
 ## Bot Commands
 
 - `/start` - Show main menu and subscription status
