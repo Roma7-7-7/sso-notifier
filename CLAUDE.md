@@ -12,6 +12,7 @@ Telegram bot that monitors electricity power outage schedules in Chernivtsi, Ukr
 | Data Flow Examples | [docs/data-flows.md](docs/data-flows.md) |
 | Development Workflow | [docs/development.md](docs/development.md) |
 | Message Templates | [internal/service/TEMPLATES.md](internal/service/TEMPLATES.md) |
+| Schedule API + SwiftBar plugin | [docs/schedule-api.md](docs/schedule-api.md) |
 
 ## Core Concepts
 
