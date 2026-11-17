@@ -26,6 +26,7 @@ import (
 const genericErrorMsg = "Щось пішло не так. Будь ласка, спробуйте пізніше."
 
 type Subscriptions interface {
+	CountSubscriptions() (int, error)
 	IsSubscribed(chatID int64) (bool, error)
 	GetSubscribedGroups(chatID int64) ([]string, error)
 	ToggleGroupSubscription(chatID int64, number string) error
@@ -50,17 +51,35 @@ type Handler struct {
 
 	markups *markups
 
+	ownerChatID int64
+
 	log *slog.Logger
 }
 
-func NewHandler(subscriptions Subscriptions, notifications Notifications, emergency EmergencyStore, groupsCount int, log *slog.Logger) *Handler {
+func NewHandler(subscriptions Subscriptions, notifications Notifications, emergency EmergencyStore, groupsCount int, ownerChatID int64, log *slog.Logger) *Handler {
 	return &Handler{
 		subscriptions: subscriptions,
 		notifications: notifications,
 		emergency:     emergency,
 		markups:       newMarkups(groupsCount),
+		ownerChatID:   ownerChatID,
 		log:           log,
 	}
+}
+
+func (h *Handler) Status(c tb.Context) error {
+	// silently ignore everyone except the owner so the command stays hidden
+	if h.ownerChatID == 0 || c.Sender() == nil || c.Sender().ID != h.ownerChatID {
+		return nil
+	}
+
+	count, err := h.subscriptions.CountSubscriptions()
+	if err != nil {
+		h.log.Error("failed to count subscriptions", "error", err)
+		return h.sendOrDelete(c, genericErrorMsg, nil)
+	}
+
+	return h.sendOrDelete(c, fmt.Sprintf("Всього підписників: %d", count), nil)
 }
 
 func (h *Handler) Start(c tb.Context) error {

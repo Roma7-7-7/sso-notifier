@@ -145,6 +145,7 @@ make lint:changed
 - `NOTIFY_INTERVAL` (5m): Notification check frequency
 - `NOTIFY_UPCOMING_INTERVAL` (1m): Upcoming alerts frequency
 - `SCHEDULE_URL` (https://oblenergo.cv.ua/shutdowns/): Schedule provider URL
+- `OWNER_CHAT_ID` (0): Telegram chat ID allowed to use the hidden `/status` command (total subscribers); 0 disables it
 
 **Calendar (optional, personal-only):** Sync runs only when both are set:
 - `CALENDAR_EMAIL`: Target calendar ID (e.g. your@gmail.com)
