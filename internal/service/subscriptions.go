@@ -14,6 +14,7 @@ import (
 var ErrSubscriptionNotFound = errors.New("subscription not found")
 
 type SubscriptionsReaderStore interface {
+	CountSubscriptions() (int, error)
 	ExistsSubscription(chatID int64) (bool, error)
 	GetAllSubscriptions() ([]dal.Subscription, error)
 	GetSubscription(chatID int64) (dal.Subscription, bool, error)
@@ -48,6 +49,14 @@ func (s *Subscriptions) IsSubscribed(chatID int64) (bool, error) {
 		return false, fmt.Errorf("check if subscription exists: %w", err)
 	}
 	return exists, nil
+}
+
+func (s *Subscriptions) CountSubscriptions() (int, error) {
+	count, err := s.store.CountSubscriptions()
+	if err != nil {
+		return 0, fmt.Errorf("count subscriptions: %w", err)
+	}
+	return count, nil
 }
 
 func (s *Subscriptions) GetSubscriptions() ([]dal.Subscription, error) {

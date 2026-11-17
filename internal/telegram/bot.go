@@ -44,6 +44,7 @@ func (b *Bot) Start(ctx context.Context) error {
 	b.bot.Handle("/schedule", b.handler.GetSchedule)
 	b.bot.Handle("/settings", b.handler.Settings)
 	b.bot.Handle("/unsubscribe", b.handler.Unsubscribe)
+	b.bot.Handle("/status", b.handler.Status)
 
 	b.bot.Handle(tb.OnCallback, b.handler.Callback)
 

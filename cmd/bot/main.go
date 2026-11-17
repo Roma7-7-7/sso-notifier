@@ -89,7 +89,7 @@ func run(ctx context.Context) int {
 	notificationsSvc := service.NewNotifications(store, store, store, sender, c, conf.NotificationsStateTTL, log).
 		WithImages(render.Render, photoSender)
 	alertsSvc := service.NewAlerts(store, store, store, store, sender, c, conf.AlertsTTL, log)
-	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, store, conf.GroupsCount, log)
+	handler := telegram.NewHandler(subscriptionsSvc, notificationsSvc, store, conf.GroupsCount, conf.OwnerChatID, log)
 
 	bot, err := telegram.NewBot(conf, handler, log)
 	if err != nil {

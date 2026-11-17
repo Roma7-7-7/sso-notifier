@@ -40,6 +40,21 @@ func (m *MockSubscriptions) EXPECT() *MockSubscriptionsMockRecorder {
 	return m.recorder
 }
 
+// CountSubscriptions mocks base method.
+func (m *MockSubscriptions) CountSubscriptions() (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountSubscriptions")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountSubscriptions indicates an expected call of CountSubscriptions.
+func (mr *MockSubscriptionsMockRecorder) CountSubscriptions() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSubscriptions", reflect.TypeOf((*MockSubscriptions)(nil).CountSubscriptions))
+}
+
 // GetSettings mocks base method.
 func (m *MockSubscriptions) GetSettings(chatID int64) (map[dal.SettingKey]any, error) {
 	m.ctrl.T.Helper()

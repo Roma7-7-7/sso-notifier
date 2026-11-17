@@ -165,7 +165,7 @@ func TestHandler_Start(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.Start(tt.args.ctx(ctrl)), "Start")
 		})
 	}
@@ -231,7 +231,7 @@ func TestHandler_ManageGroups(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.ManageGroups(tt.args.c(ctrl)), "ManageGroups(_)")
 		})
 	}
@@ -382,7 +382,7 @@ func TestHandler_ToggleGroupHandler(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			fn := h.ToggleGroupHandler(tt.args.groupNumber)
 			tt.wantError(t, fn(tt.args.ctx(ctrl)), "ToggleGroupHandler")
 		})
@@ -470,7 +470,7 @@ func TestHandler_Settings(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.Settings(tt.args.c(ctrl)), "Settings(_)")
 		})
 	}
@@ -567,7 +567,7 @@ func TestHandler_ToggleSettingHandler(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			fn := h.ToggleSettingHandler(tt.args.settingKey)
 			tt.wantErr(t, fn(tt.args.ctx(ctrl)), "ToggleSettingHandler(_)")
 		})
@@ -692,6 +692,7 @@ func TestHandler_GetSchedule(t *testing.T) {
 				tt.fields.notifications(ctr),
 				tt.fields.emergency(ctr),
 				12,
+				0,
 				slog.New(slog.DiscardHandler),
 			)
 			tt.wantErr(t, h.GetSchedule(tt.args.c(ctr)), "GetSchedule(_)")
@@ -806,7 +807,7 @@ func TestHandler_SettingsAlerts(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.SettingsAlerts(tt.args.c(ctrl)), "SettingsAlerts(_)")
 		})
 	}
@@ -938,7 +939,7 @@ func TestHandler_SettingsNotificationsFormat(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			tt.wantErr(t, h.SettingsNotificationsFormat(tt.args.c(ctrl)), "SettingsNotificationsFormat(_)")
 		})
 	}
@@ -1079,7 +1080,7 @@ func TestHandler_SetFormatHandler(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, slog.New(slog.DiscardHandler))
+			h := telegram.NewHandler(tt.fields.subscriptions(ctrl), nil, nil, 12, 0, slog.New(slog.DiscardHandler))
 			fn := h.SetFormatHandler(tt.args.format)
 			tt.wantErr(t, fn(tt.args.ctx(ctrl)), "SetFormatHandler(_)")
 		})
@@ -1619,6 +1620,7 @@ func TestHandler_Callback(t *testing.T) {
 				nil,
 				nil,
 				12,
+				0,
 				slog.New(slog.DiscardHandler),
 			)
 			tt.wantErr(t, h.Callback(tt.args.c(ctrl)), "Callback(_)")
@@ -1690,9 +1692,86 @@ func TestHandler_Unsubscribe(t *testing.T) {
 				nil,
 				nil,
 				12,
+				0,
 				slog.New(slog.DiscardHandler),
 			)
 			tt.wantErr(t, h.Unsubscribe(tt.args.c(ctrl)), "Unsubscribe(_)")
+		})
+	}
+}
+
+func TestHandler_Status(t *testing.T) {
+	const ownerID = int64(999)
+
+	type args struct {
+		ownerChatID int64
+		sender      *tb.User
+	}
+	tests := []struct {
+		name          string
+		args          args
+		subscriptions func(*gomock.Controller) telegram.Subscriptions
+		ctx           func(*mocks.MockTelebotContext)
+		wantErr       assert.ErrorAssertionFunc
+	}{
+		{
+			name: "owner gets count",
+			args: args{ownerChatID: ownerID, sender: &tb.User{ID: ownerID}},
+			subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+				m := mocks.NewMockSubscriptions(ctrl)
+				m.EXPECT().CountSubscriptions().Return(42, nil)
+				return m
+			},
+			ctx: func(c *mocks.MockTelebotContext) {
+				c.EXPECT().Callback().Return(nil)
+				c.EXPECT().Send("Всього підписників: 42", gomock.Nil()).Return(nil)
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "count error sends generic message",
+			args: args{ownerChatID: ownerID, sender: &tb.User{ID: ownerID}},
+			subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+				m := mocks.NewMockSubscriptions(ctrl)
+				m.EXPECT().CountSubscriptions().Return(0, assert.AnError)
+				return m
+			},
+			ctx: func(c *mocks.MockTelebotContext) {
+				c.EXPECT().Callback().Return(nil)
+				c.EXPECT().Send("Щось пішло не так. Будь ласка, спробуйте пізніше.", gomock.Nil()).Return(nil)
+			},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "non-owner ignored",
+			args: args{ownerChatID: ownerID, sender: defaultUser},
+			subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+				return mocks.NewMockSubscriptions(ctrl)
+			},
+			ctx:     func(*mocks.MockTelebotContext) {},
+			wantErr: assert.NoError,
+		},
+		{
+			name: "disabled when owner not configured",
+			args: args{ownerChatID: 0, sender: &tb.User{ID: 0}},
+			subscriptions: func(ctrl *gomock.Controller) telegram.Subscriptions {
+				return mocks.NewMockSubscriptions(ctrl)
+			},
+			ctx:     func(*mocks.MockTelebotContext) {},
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			c := mocks.NewMockTelebotContext(ctrl)
+			c.EXPECT().Sender().Return(tt.args.sender).AnyTimes()
+			tt.ctx(c)
+
+			h := telegram.NewHandler(tt.subscriptions(ctrl), nil, nil, 12, tt.args.ownerChatID, slog.New(slog.DiscardHandler))
+			tt.wantErr(t, h.Status(c), "Status")
 		})
 	}
 }

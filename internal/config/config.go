@@ -22,6 +22,7 @@ type Config struct {
 	AlertsTTL                time.Duration `envconfig:"ALERTS_TTL" default:"24h"`
 	CleanupInterval          time.Duration `envconfig:"CLEANUP_INTERVAL" default:"1h"`
 	TelegramToken            string        `envconfig:"TELEGRAM_TOKEN"`
+	OwnerChatID              int64         `envconfig:"OWNER_CHAT_ID" default:"0"` // 0 disables the hidden /status command
 
 	// Calendar (optional; sync runs only when CalendarEmail and CalendarCredentialsPath are set)
 	CalendarSyncInterval    time.Duration `envconfig:"CALENDAR_SYNC_INTERVAL" default:"15m"`
